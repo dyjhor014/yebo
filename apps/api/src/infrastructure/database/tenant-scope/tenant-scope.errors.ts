@@ -37,3 +37,17 @@ export class InvalidTenantIdError extends Error {
     this.name = 'InvalidTenantIdError';
   }
 }
+
+/**
+ * Se intentó abrir una transacción interactiva desde el cliente por operación del tenant.
+ * Ese cliente envuelve cada operación en su propia transacción por lotes (sesión RLS), así que
+ * dentro de `$transaction` las operaciones quedarían fuera de la transacción del llamador.
+ */
+export class TenantTransactionMisuseError extends Error {
+  constructor() {
+    super(
+      'Usa TenantDbService.transaction() para transacciones de tenant; client.$transaction no está permitido',
+    );
+    this.name = 'TenantTransactionMisuseError';
+  }
+}

@@ -11,11 +11,13 @@ import type { Pool, PoolClient } from 'pg';
 import {
   MissingTenantContextError,
   TenantMismatchError,
+  TenantTransactionMisuseError,
 } from '../../../src/infrastructure/database/tenant-scope/tenant-scope.errors';
 import {
   setTransactionTenant,
   tenantFilterExtension,
   tenantSessionExtension,
+  withoutInteractiveTransactions,
   type TenantScopeOptions,
 } from '../../../src/infrastructure/database/tenant-scope/tenant-scope.extension';
 import { testDbUrl, testPool } from '../../support/db';
@@ -46,7 +48,7 @@ function newClient(role: 'app' | 'platform', max: number): PrismaClient {
 /** Igual que TenantDbService en producción: filtro (barrera 1) + sesión RLS (barrera 2). */
 function tenantDb(base: PrismaClient) {
   const filtered = base.$extends(tenantFilterExtension(options));
-  const client = filtered.$extends(tenantSessionExtension(options));
+  const client = withoutInteractiveTransactions(filtered.$extends(tenantSessionExtension(options)));
   const transaction = <T>(
     fn: (tx: Parameters<Parameters<typeof filtered.$transaction>[0]>[0]) => Promise<T>,
   ) =>
@@ -365,6 +367,15 @@ describe('PoC 1 · aislamiento multitenant (PostgreSQL real, rol yebo_app)', () 
       expect(outcome.visible.every((r) => r.tenantId === B)).toBe(true);
       expect(outcome.rawCount).toBe(outcome.visible.length);
       await platform.pocRoute.delete({ where: { id: outcome.created.id } });
+    });
+
+    it('el cliente por operación no permite $transaction (se usa db.transaction)', async () => {
+      const unsafe = db.client as unknown as { $transaction: (fn: () => Promise<void>) => Promise<void> };
+      await expect(
+        asTenant(A, async () => unsafe.$transaction(async () => undefined)),
+      ).rejects.toBeInstanceOf(TenantTransactionMisuseError);
+      // El resto del cliente sigue funcionando a través del proxy.
+      await expect(asTenant(A, () => db.client.pocRoute.count())).resolves.toBe(1);
     });
 
     it('sin contexto, la transacción no se abre', async () => {

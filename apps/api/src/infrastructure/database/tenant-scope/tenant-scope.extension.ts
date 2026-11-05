@@ -1,6 +1,10 @@
 import { Prisma } from '@prisma/client/extension';
 import { applyTenantScope } from './apply-tenant-scope';
-import { InvalidTenantIdError, MissingTenantContextError } from './tenant-scope.errors';
+import {
+  InvalidTenantIdError,
+  MissingTenantContextError,
+  TenantTransactionMisuseError,
+} from './tenant-scope.errors';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -53,7 +57,9 @@ interface RawBatchClient {
  * LOCAL A LA TRANSACCIÓN: no se filtra a otros requests que reutilicen la conexión del pool.
  * Las políticas RLS usan current_setting('app.tenant_id', true).
  *
- * No funciona dentro de transacciones interactivas: para ellas se usa `runTenantTransaction`.
+ * No funciona dentro de transacciones interactivas: para ellas se usa `TenantDbService.transaction()`,
+ * que fija el tenant con `setTransactionTenant` al inicio. Por eso el cliente que lleva esta extensión
+ * se expone sin `$transaction` (`withoutInteractiveTransactions`).
  */
 export function tenantSessionExtension(options: TenantScopeOptions) {
   return Prisma.defineExtension((client) => {
@@ -85,4 +91,22 @@ export async function setTransactionTenant(
   const tenantId = requireTenantId(options, '$transaction', 'interactive');
   await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
   return tenantId;
+}
+
+/**
+ * Devuelve el cliente por operación sin `$transaction`, en los tipos y en tiempo de ejecución.
+ * Una transacción interactiva abierta desde él ejecutaría cada operación de tenant en otra
+ * transacción por lotes (la de la extensión de sesión), fuera de la atomicidad del llamador.
+ */
+export function withoutInteractiveTransactions<T extends object>(client: T): Omit<T, '$transaction'> {
+  return new Proxy(client, {
+    get(target, property, receiver) {
+      if (property === '$transaction') {
+        return () => {
+          throw new TenantTransactionMisuseError();
+        };
+      }
+      return Reflect.get(target, property, receiver) as unknown;
+    },
+  });
 }

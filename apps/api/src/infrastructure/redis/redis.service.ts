@@ -19,7 +19,16 @@ export class RedisService implements OnModuleDestroy {
     });
   }
 
+  /**
+   * `quit()` es un comando más: si la conexión nunca se abrió (`wait`, por `lazyConnect`) la abriría
+   * solo para cerrarla, y si Redis no responde (`reconnecting`) esperaría a los reintentos y fallaría.
+   * Solo una conexión lista se cierra de forma ordenada; en cualquier otro estado se desconecta.
+   */
   async onModuleDestroy(): Promise<void> {
-    if (this.client.status !== 'end') await this.client.quit();
+    if (this.client.status === 'ready') {
+      await this.client.quit();
+    } else if (this.client.status !== 'end') {
+      this.client.disconnect();
+    }
   }
 }

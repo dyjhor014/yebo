@@ -77,6 +77,8 @@ async function inTenantTransaction<T>(
   fn: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
   const client = await pool.connect();
+  // Si el ROLLBACK falla, la conexión queda en un estado desconocido: se descarta en lugar de devolverla al pool.
+  let broken: Error | undefined;
   try {
     await client.query('BEGIN'); // READ COMMITTED
     await client.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
@@ -84,10 +86,14 @@ async function inTenantTransaction<T>(
     await client.query('COMMIT');
     return result;
   } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      broken = rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError));
+    }
+    throw error; // siempre el error original, nunca el del ROLLBACK
   } finally {
-    client.release();
+    client.release(broken);
   }
 }
 
@@ -108,9 +114,13 @@ async function resolveLeafResources(
     [tripId, selected.rows.map((r) => r.id)],
   );
   const parentsWithChildren = new Set(children.rows.map((c) => c.parent_id));
-  const leaves = [...selected.rows.filter((r) => !parentsWithChildren.has(r.id)), ...children.rows];
+  // Sin duplicados: pedir un camarote y una de sus camas no debe asignar la cama dos veces.
+  const leaves = new Map<string, { id: string; code: string }>();
+  for (const r of [...selected.rows.filter((r) => !parentsWithChildren.has(r.id)), ...children.rows]) {
+    leaves.set(r.id, { id: r.id, code: r.code });
+  }
   // Orden determinista: dos ventas que compiten por varios recursos esperan en el mismo orden (sin deadlocks).
-  return leaves.sort((a, b) => a.id.localeCompare(b.id));
+  return [...leaves.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 async function allocateResources(client: PoolClient, req: SaleRequest, status: string): Promise<string[]> {
@@ -126,12 +136,6 @@ async function allocateResources(client: PoolClient, req: SaleRequest, status: s
     );
   }
 
-  // Libera retenciones vencidas de estos recursos sin depender de la frecuencia del job (ejemplo C).
-  await client.query(
-    `UPDATE inv_resource_allocations SET status = 'RELEASED'
-      WHERE trip_resource_id = ANY($1::uuid[]) AND status = 'HELD' AND hold_expires_at < now()`,
-    [ids],
-  );
   try {
     await client.query(
       `INSERT INTO inv_resource_allocations
@@ -160,7 +164,12 @@ async function allocateResources(client: PoolClient, req: SaleRequest, status: s
 }
 
 async function allocatePools(client: PoolClient, req: SaleRequest, status: string): Promise<string[]> {
-  const demands = [...(req.poolDemands ?? [])].sort((a, b) => a.poolId.localeCompare(b.poolId));
+  // Un mismo pool pedido dos veces se suma en una sola demanda (si no, el recuento de filas bloqueadas falla).
+  const byPool = new Map<string, number>();
+  for (const d of req.poolDemands ?? []) byPool.set(d.poolId, (byPool.get(d.poolId) ?? 0) + d.quantity);
+  const demands = [...byPool]
+    .map(([poolId, quantity]) => ({ poolId, quantity }))
+    .sort((a, b) => a.poolId.localeCompare(b.poolId));
   const poolIds = demands.map((d) => d.poolId);
   const quantities = demands.map((d) => String(d.quantity));
 
@@ -222,10 +231,15 @@ async function allocatePools(client: PoolClient, req: SaleRequest, status: strin
 }
 
 /** Venta o retención atómica: recursos + pools en una sola transacción. Si algo falla, no se asigna nada. */
-export function sell(pool: Pool, req: SaleRequest): Promise<SaleResult> {
+export async function sell(pool: Pool, req: SaleRequest): Promise<SaleResult> {
   const status = req.status ?? 'CONFIRMED';
+  // async: los errores de validación llegan como promesa rechazada, nunca como excepción síncrona.
   if (status === 'HELD' && !req.holdExpiresAt)
     throw new InvalidSaleError('Una retención requiere vencimiento');
+  // Ejemplo C: las retenciones vencidas que estorban se liberan ENTERAS (recursos + pools) en una
+  // transacción previa, sin depender de la frecuencia del job. Si una vence justo después, la
+  // exclusión y el CHECK siguen garantizando que no hay doble venta (como mucho, falla y se reintenta).
+  await releaseExpiredHolds(pool, req);
   return inTenantTransaction(pool, req.tenantId, async (client) => {
     const trip = await client.query<{ stop_count: number; status: string }>(
       'SELECT stop_count, status FROM inv_trips WHERE id = $1 FOR SHARE',
@@ -243,39 +257,73 @@ export function sell(pool: Pool, req: SaleRequest): Promise<SaleResult> {
   });
 }
 
+/**
+ * Libera las asignaciones activas de los titulares indicados (recursos + pools), en la transacción en curso.
+ * Bloquea TODOS los contadores afectados en una sola consulta con el orden global (pool_id, segment_seq),
+ * el mismo que usa la venta: liberar varias asignaciones de un titular nunca invierte el orden (sin 40P01).
+ * `onlyExpired` limita la liberación a retenciones vencidas.
+ */
+async function releaseHolders(client: PoolClient, holderIds: string[], onlyExpired: boolean): Promise<void> {
+  if (holderIds.length === 0) return;
+  const scope = onlyExpired ? `AND status = 'HELD' AND hold_expires_at < now()` : `AND status <> 'RELEASED'`;
+  await client.query(
+    `UPDATE inv_resource_allocations SET status = 'RELEASED' WHERE holder_id = ANY($1::uuid[]) ${scope}`,
+    [holderIds],
+  );
+  const { rows: allocations } = await client.query<{ id: string }>(
+    `SELECT id FROM inv_pool_allocations WHERE holder_id = ANY($1::uuid[]) ${scope}`,
+    [holderIds],
+  );
+  if (allocations.length === 0) return;
+  const ids = allocations.map((a) => a.id);
+  await client.query(
+    `SELECT 1 FROM inv_pool_segment_usage u
+      WHERE EXISTS (SELECT 1 FROM inv_pool_allocations a
+                     WHERE a.id = ANY($1::uuid[]) AND a.pool_id = u.pool_id AND a.stop_range @> u.segment_seq)
+      ORDER BY u.pool_id, u.segment_seq FOR UPDATE`,
+    [ids],
+  );
+  await client.query(
+    `UPDATE inv_pool_segment_usage u SET used = u.used - d.qty
+       FROM (SELECT s.pool_id, s.segment_seq, sum(a.quantity) AS qty
+               FROM inv_pool_segment_usage s
+               JOIN inv_pool_allocations a ON a.pool_id = s.pool_id AND a.stop_range @> s.segment_seq
+              WHERE a.id = ANY($1::uuid[])
+              GROUP BY s.pool_id, s.segment_seq) d
+      WHERE u.pool_id = d.pool_id AND u.segment_seq = d.segment_seq`,
+    [ids],
+  );
+  await client.query(`UPDATE inv_pool_allocations SET status = 'RELEASED' WHERE id = ANY($1::uuid[])`, [ids]);
+}
+
+/** Libera, completas, las retenciones vencidas que ocupan los recursos o pools que pide la venta. */
+async function releaseExpiredHolds(pool: Pool, req: SaleRequest): Promise<void> {
+  const codes = req.resourceCodes ?? [];
+  const poolIds = (req.poolDemands ?? []).map((d) => d.poolId);
+  if (codes.length === 0 && poolIds.length === 0) return;
+  await inTenantTransaction(pool, req.tenantId, async (client) => {
+    const { rows } = await client.query<{ holder_id: string }>(
+      `SELECT a.holder_id FROM inv_resource_allocations a
+         JOIN inv_trip_resources r ON r.id = a.trip_resource_id
+         LEFT JOIN inv_trip_resources parent ON parent.id = r.parent_id
+        WHERE a.trip_id = $1 AND a.status = 'HELD' AND a.hold_expires_at < now()
+          AND (r.code = ANY($2::text[]) OR parent.code = ANY($2::text[]))
+       UNION
+       SELECT holder_id FROM inv_pool_allocations
+        WHERE pool_id = ANY($3::uuid[]) AND status = 'HELD' AND hold_expires_at < now()`,
+      [req.tripId, codes, poolIds],
+    );
+    await releaseHolders(
+      client,
+      rows.map((r) => r.holder_id),
+      true,
+    );
+  });
+}
+
 /** Libera todo lo asignado a un titular (cancelación, expiración o reembolso), en una transacción. */
 export function release(pool: Pool, tenantId: string, holderId: string): Promise<void> {
-  return inTenantTransaction(pool, tenantId, async (client) => {
-    await client.query(
-      `UPDATE inv_resource_allocations SET status = 'RELEASED' WHERE holder_id = $1 AND status <> 'RELEASED'`,
-      [holderId],
-    );
-    const active = await client.query<{
-      id: string;
-      pool_id: string;
-      lo: number;
-      hi: number;
-      quantity: string;
-    }>(
-      `SELECT id, pool_id, lower(stop_range) AS lo, upper(stop_range) AS hi, quantity
-         FROM inv_pool_allocations WHERE holder_id = $1 AND status <> 'RELEASED' ORDER BY pool_id`,
-      [holderId],
-    );
-    for (const allocation of active.rows) {
-      await client.query(
-        `SELECT 1 FROM inv_pool_segment_usage WHERE pool_id = $1 AND segment_seq >= $2 AND segment_seq < $3
-          ORDER BY segment_seq FOR UPDATE`,
-        [allocation.pool_id, allocation.lo, allocation.hi],
-      );
-      await client.query(
-        `UPDATE inv_pool_segment_usage SET used = used - $1 WHERE pool_id = $2 AND segment_seq >= $3 AND segment_seq < $4`,
-        [allocation.quantity, allocation.pool_id, allocation.lo, allocation.hi],
-      );
-      await client.query(`UPDATE inv_pool_allocations SET status = 'RELEASED' WHERE id = $1`, [
-        allocation.id,
-      ]);
-    }
-  });
+  return inTenantTransaction(pool, tenantId, (client) => releaseHolders(client, [holderId], false));
 }
 
 /**

@@ -117,3 +117,20 @@ Los conflictos de disponibilidad llegan siempre como errores de dominio controla
 - **Volúmenes de desarrollo creados antes de este cambio:** no tienen la base `yebo_migrations`. Se crea una vez con el bloque del script `infrastructure/docker/postgres/init/01-roles-and-databases.sh` (como superusuario, vía `docker exec`), o recreando los volúmenes. Ya está aplicado en el entorno local.
 - Disco: 36 GB libres (93 %).
 - Las PoC no forman parte del esquema de producción. El módulo `inventory` se construirá en las Fases 6–8 a partir de `allocator.ts`.
+
+## 7. Revisión del PR #1 (2026-11-05)
+
+Revisión de código del PR, nivel medio. Se verificaron en el código los hallazgos de producción (1–4); los demás son razonables según el código, y cada corrección lleva una prueba de regresión. Tras las correcciones: unitarias **38** (api 36, contracts 2), integración **6 suites · 74 correctas · 1 omitida**, y lint, typecheck y build 15/15.
+
+| # | Hallazgo | Corrección | Prueba |
+|---|---|---|---|
+| 1 | `TenantDbService.client` exponía `$transaction`: una transacción interactiva abierta desde él ejecutaría cada operación de tenant en otra transacción por lotes, fuera de la atomicidad del llamador | `withoutInteractiveTransactions()`: sin `$transaction` en los tipos y en tiempo de ejecución (`TenantTransactionMisuseError`). Las transacciones de tenant usan `TenantDbService.transaction()` | PoC 1: `client.$transaction` rechazado y el resto del cliente operativo |
+| 2 | Comentario que remitía a `runTenantTransaction`, que no existe | Remite a `TenantDbService.transaction()` / `setTransactionTenant` | — |
+| 3 | La verificación estática de ADR-025 recortaba el código tras `SELECT *` o `--`: falso negativo | Solo se descartan líneas que son enteramente comentario | 3 pruebas del propio detector (`SELECT *`, resta, comentario final) |
+| 4 | `RedisService` enviaba `QUIT` aunque la conexión nunca se hubiera abierto o Redis no respondiera | `quit()` solo con `ready`; en otro estado, `disconnect()` | `redis.service.spec.ts` (3 casos) |
+| 5 | PoC 2 · `release()` bloqueaba los contadores asignación por asignación, sin el orden global | Un solo bloqueo ordenado `(pool_id, segment_seq)` para todas las asignaciones del titular | 20 rondas de liberación en orden inverso frente a una venta: 0 errores |
+| 6 | PoC 2 · al liberar una retención vencida de un recurso no se liberaba su aforo | Liberación previa y **completa** (recursos + pools) de las retenciones vencidas que estorban, en una transacción aparte | Asiento + aforo con capacidad 1; retención solo de aforo |
+| 7 | PoC 2 · pedir un camarote y una de sus camas duplicaba la cama | Hojas sin duplicados | Camarote libre + cama: se vende |
+| 8 | PoC 2 · el mismo pool pedido dos veces fallaba con un mensaje engañoso | Demandas agregadas por pool | `[1, 2]` sobre el mismo pool → uso 3 |
+| 9 | PoC 2 · `sell()` lanzaba errores de forma síncrona; un `ROLLBACK` fallido ocultaba el error original y devolvía al pool una conexión rota | `sell` asíncrona; `ROLLBACK` protegido y `release(err)` | Rechazo como promesa; cliente simulado con `ROLLBACK` fallido |
+| 10 | `api-status.ts` duplicado en `apps/web` y `apps/platform` | **Diferido** (decisión del responsable): se unificará con `packages/api-client` (ADR-006) | — |

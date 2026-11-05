@@ -9,6 +9,7 @@ import type { Pool } from 'pg';
 import { testPool } from '../../support/db';
 import {
   CapacityExceededError,
+  InvalidSaleError,
   ResourceUnavailableError,
   reconciliationViolations,
   release,
@@ -617,6 +618,128 @@ describe('PoC 2 · inventario por tramos y concurrencia (PostgreSQL real, rol ye
       await expect(sell(app, truck('V1', 18000))).resolves.toBeDefined();
       await expect(sell(app, truck('V2', 30000))).rejects.toBeInstanceOf(CapacityExceededError); // 66 t > 60 t
       expect(await activeHolders(platform, trip.tripId, 'V2')).toEqual([]);
+    });
+  });
+
+  describe('correcciones de la revisión del PR #1', () => {
+    it('una retención vencida se libera ENTERA: el asiento y también su aforo', async () => {
+      const trip = await createTrip(platform, {
+        resources: [{ code: '9A', kind: 'SEAT' }],
+        pools: [{ code: 'NAVE', dimension: 'PERSONS', capacity: 1 }],
+      });
+      const poolId = trip.pools.NAVE ?? '';
+      const expired = request(trip, 0, 3, {
+        resourceCodes: ['9A'],
+        poolDemands: [{ poolId, quantity: 1 }],
+        status: 'HELD',
+        holdExpiresAt: new Date(Date.now() - 60_000),
+      });
+      await sell(app, expired);
+      expect(await usage(platform, poolId)).toEqual([1, 1, 1]);
+
+      // Con aforo 1, la reventa solo cabe si la retención vencida devolvió también su lugar en el pool.
+      const resale = request(trip, 0, 3, { resourceCodes: ['9A'], poolDemands: [{ poolId, quantity: 1 }] });
+      await expect(sell(app, resale)).resolves.toBeDefined();
+      expect(await usage(platform, poolId)).toEqual([1, 1, 1]);
+      const { rows } = await platform.query<{ status: string }>(
+        'SELECT status FROM inv_pool_allocations WHERE holder_id = $1',
+        [expired.holderId],
+      );
+      expect(rows.map((r) => r.status)).toEqual(['RELEASED']);
+    });
+
+    it('una retención vencida solo de aforo (sin asiento) también se recupera en la venta', async () => {
+      const trip = await createTrip(platform, {
+        pools: [{ code: 'ZONA', dimension: 'PERSONS', capacity: 1 }],
+      });
+      const poolId = trip.pools.ZONA ?? '';
+      await sell(
+        app,
+        request(trip, 0, 3, {
+          poolDemands: [{ poolId, quantity: 1 }],
+          status: 'HELD',
+          holdExpiresAt: new Date(Date.now() - 60_000),
+        }),
+      );
+      await expect(
+        sell(app, request(trip, 1, 2, { poolDemands: [{ poolId, quantity: 1 }] })),
+      ).resolves.toBeDefined();
+      expect(await usage(platform, poolId)).toEqual([0, 1, 0]);
+    });
+
+    it('pedir un camarote y una de sus camas no duplica la cama (el camarote libre se vende)', async () => {
+      const trip = await createTrip(platform, {
+        resources: [
+          { code: 'C9', kind: 'CABIN' },
+          { code: 'C9-B1', kind: 'BED', parent: 'C9' },
+          { code: 'C9-B2', kind: 'BED', parent: 'C9' },
+        ],
+      });
+      const result = await sell(app, request(trip, 0, 3, { resourceCodes: ['C9', 'C9-B1'] }));
+      expect(result.resourceIds).toHaveLength(2);
+    });
+
+    it('el mismo pool pedido dos veces se suma en una sola demanda', async () => {
+      const trip = await createTrip(platform, {
+        pools: [{ code: 'BODEGA', dimension: 'WEIGHT_KG', capacity: 10 }],
+      });
+      const poolId = trip.pools['BODEGA:WEIGHT_KG'] ?? '';
+      await sell(
+        app,
+        request(trip, 0, 2, {
+          poolDemands: [
+            { poolId, quantity: 1 },
+            { poolId, quantity: 2 },
+          ],
+        }),
+      );
+      expect(await usage(platform, poolId)).toEqual([3, 3, 0]);
+    });
+
+    it('sell() rechaza la promesa (no lanza de forma síncrona) ante una retención sin vencimiento', async () => {
+      const trip = await createTrip(platform, { resources: [{ code: '1Z', kind: 'SEAT' }] });
+      let promise: Promise<unknown> | undefined;
+      expect(() => {
+        promise = sell(app, request(trip, 0, 1, { resourceCodes: ['1Z'], status: 'HELD' }));
+      }).not.toThrow();
+      await expect(promise).rejects.toBeInstanceOf(InvalidSaleError);
+    });
+
+    it('liberar un titular con varias asignaciones en orden inverso no interbloquea con una venta (20 rondas)', async () => {
+      for (let i = 0; i < 20; i++) {
+        const trip = await createTrip(platform, {
+          stops: 6,
+          pools: [{ code: 'NAVE', dimension: 'PERSONS', capacity: 10 }],
+        });
+        const poolId = trip.pools.NAVE ?? '';
+        const holderId = randomUUID();
+        // Dos asignaciones del mismo titular: primero [3,5) y después [0,2).
+        await sell(app, request(trip, 3, 5, { holderId, poolDemands: [{ poolId, quantity: 1 }] }));
+        await sell(app, request(trip, 0, 2, { holderId, poolDemands: [{ poolId, quantity: 1 }] }));
+        const outcomes = await Promise.allSettled([
+          release(app, TENANT, holderId),
+          sell(app, request(trip, 0, 5, { poolDemands: [{ poolId, quantity: 1 }] })),
+        ]);
+        expect(outcomes.filter((o) => o.status === 'rejected')).toEqual([]);
+        expect(await usage(platform, poolId)).toEqual([1, 1, 1, 1, 1]);
+      }
+    });
+
+    it('si el ROLLBACK falla: se propaga el error original y la conexión rota no vuelve al pool', async () => {
+      const original = new Error('fallo de negocio');
+      const released: unknown[] = [];
+      const fakeClient = {
+        query: (sql: string) => {
+          if (sql.startsWith('SELECT stop_count')) return Promise.reject(original);
+          if (sql === 'ROLLBACK') return Promise.reject(new Error('Connection terminated'));
+          return Promise.resolve({ rows: [], rowCount: 0 });
+        },
+        release: (err?: unknown) => released.push(err),
+      };
+      const fakePool = { connect: () => Promise.resolve(fakeClient) } as unknown as Pool;
+      await expect(sell(fakePool, request({ tripId: randomUUID(), pools: {} }, 0, 1))).rejects.toBe(original);
+      expect(released).toHaveLength(1);
+      expect(released[0]).toBeInstanceOf(Error); // release(err) descarta la conexión en pg
     });
   });
 

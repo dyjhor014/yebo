@@ -21,8 +21,9 @@
 | Repetición de las 40 colisiones | ✅ 0 interbloqueos con ADR-026 (antes, 18–28 de 40) |
 | Mayor concurrencia (300 ventas, 40 conexiones) | ✅ solo errores controlados; 0 dobles ventas |
 | Tramos superpuestos y no superpuestos | ✅ |
-| Formato, lint, typecheck, unitarias (32) y build | ✅ |
-| Integración (6 suites, 66 pruebas) | ✅ en desarrollo y en una sala limpia que simula CI |
+| Formato, lint, typecheck, unitarias (38 tras la revisión; antes 32) y build | ✅ |
+| Integración (6 suites, 74 pruebas tras la revisión; antes 66) | ✅ en desarrollo y en una sala limpia que simula CI (antes de la revisión) |
+| Revisión del PR #1 | ✅ 9 hallazgos corregidos con pruebas; 1 diferido ([resultados §7](docs/development/phase-2-results.md)) |
 
 ## ADR
 
