@@ -1,0 +1,65 @@
+# Integración continua de YEBO.
+# Todas las verificaciones son obligatorias. La prueba de sincronización entre migraciones, esquema Prisma
+# y base real (ADR-024) forma parte de `pnpm test:integration` y no puede omitirse.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Lint, typecheck, pruebas, build e integración
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Formato
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Pruebas unitarias (incluye la verificación estática de ADR-025)
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Infraestructura (PostgreSQL y Redis con contraseñas aleatorias)
+        run: |
+          scripts/dev/init-env.sh
+          pnpm infra:up
+
+      - name: Pruebas de integración (migraciones, deriva ADR-024, RLS, concurrencia)
+        run: pnpm test:integration
+
+      - name: Logs de la infraestructura si algo falló
+        if: failure()
+        run: docker compose --env-file infrastructure/docker/.env -f infrastructure/docker/compose.dev.yaml logs --no-color --tail 200
+
+      - name: Detener la infraestructura
+        if: always()
+        run: pnpm infra:down

@@ -17,5 +17,6 @@ Decisiones de negocio y de producto tomadas por el responsable del proyecto. Las
 | D10 | 2026-11-05 | Entrega excepcional sin PIN: existe, deshabilitada por defecto, con doble autorización para valor alto | Aprobada | shipments §1.5b |
 | D11 | 2026-11-05 | La entrega con PIN requiere conexión; sin validación offline | Aprobada | shipments §1.7 |
 | — | 2026-11-05 | **Fase 1 aprobada.** Inicio de la Fase 2 en una rama independiente | — | PROJECT_STATUS |
+| — | 2026-11-05 | **ADR-024, 025 y 026 aceptados** con precisiones: deriva Prisma/SQL obligatoria en CI; tenant fijado por transacción, nunca heredado; bloqueos en orden determinista y conflictos como errores controlados. **Fase 2 aprobada para revisión y cierre mediante PR** (sin merge automático; la Fase 3 no comienza hasta el cierre) | Aprobada | architecture-decisions, phase-2-results |
 
 Puntos abiertos que no bloquean: impuestos (validar con un contador), formatos de manifiestos MTC/DICAPI, pasarela de pago, hosting de producción.

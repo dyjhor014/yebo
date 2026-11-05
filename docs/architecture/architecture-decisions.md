@@ -2,7 +2,7 @@
 
 Estados: **Propuesto** (pendiente de revisión) → **Aceptado** / **Rechazado** / **Reemplazado por ADR-XXX**.
 
-**Estado del registro: los 23 ADR fueron ACEPTADOS el 2026-11-05** (cierre de la Fase 1). Las precisiones de la aprobación están en la sección final y en el [registro de decisiones](decision-log.md).
+**Estado del registro: los ADR-001 a 023 fueron ACEPTADOS el 2026-11-05** (cierre de la Fase 1), y los ADR-024 a 026 el mismo día (Fase 2). Las precisiones de la aprobación están en la sección final y en el [registro de decisiones](decision-log.md).
 
 Historial:
 - **R1** (2026-11-05): primera propuesta de la Fase 1.
@@ -36,6 +36,9 @@ A partir de la aprobación, cualquier cambio se registra como **un ADR nuevo que
 | 021 | Categorías abiertas como catálogos; enums solo para máquinas de estado | **Aceptado** |
 | 022 | Hub de cuentas con authorization code + PKCE para login y cambio de empresa | **Aceptado** · nuevo en R2 |
 | 023 | Política de estados del tenant: bloquear nuevas obligaciones, nunca el cumplimiento | **Aceptado** · nuevo en R2 |
+| 024 | Restricciones de BD: FK en el esquema Prisma, EXCLUDE/CHECK/RLS en SQL y prueba de deriva | **Aceptado** · Fase 2 |
+| 025 | Políticas RLS con `NULLIF(current_setting(...), '')` y contexto por transacción | **Aceptado** · Fase 2 |
+| 026 | Bloqueo ordenado de recursos antes de la exclusión GIST | **Aceptado** · Fase 2 |
 
 ---
 
@@ -174,3 +177,34 @@ Ver [multitenancy.md §5](multitenancy.md#5-estados-del-tenant-y-operaciones-per
 | Suspensión | Sin nuevas operaciones comerciales (envíos, pasajes, carga); se completan todas las obligaciones existentes | 023 |
 | Entrega excepcional | Existe, deshabilitada por defecto, con verificación del destinatario, motivo, supervisor, segunda autorización para valor alto, evidencia, auditoría inmutable y aviso al remitente | 017 |
 | PIN offline | La entrega con PIN requiere el backend. **Sin** alternativa offline | 017 |
+
+---
+
+## ADR de la Fase 2 (aceptados el 2026-11-05)
+
+Surgen de las pruebas de concepto. Evidencia en [phase-2-results.md](../development/phase-2-results.md). No reemplazan ADR aceptados: precisan su implementación.
+
+### ADR-024 · Restricciones de base de datos y Prisma Migrate (aceptado)
+**Contexto:** en la PoC 2, Prisma Migrate eliminó en la siguiente migración generada las FK compuestas escritas a mano en SQL. **Decisión:**
+- Toda FK, incluidas las compuestas `(tenant_id, x_id)`, se declara en el esquema Prisma.
+- Lo que Prisma no modela (`EXCLUDE USING gist`, `CHECK`, políticas RLS, triggers) se escribe en migraciones SQL.
+- Una prueba de integración ejecuta `prisma migrate diff` y falla si hay deriva entre las migraciones y el esquema, y entre una base real migrada y el esquema.
+- **Precisión de la aprobación:** esta prueba es una verificación **obligatoria en CI** (`.github/workflows/ci.yml`, paso de integración).
+
+**Afecta:** ADR-003, ADR-007.
+
+### ADR-025 · Políticas RLS con `NULLIF` y contexto por transacción (aceptado)
+**Contexto:** en una conexión del pool que ya usó `set_config('app.tenant_id', …, true)`, `current_setting('app.tenant_id', true)` devuelve `''` y no `NULL`, y `''::uuid` lanza `22P02`. **Decisión:** las políticas usan `tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid` en `USING` y `WITH CHECK`, de modo que la ausencia de contexto dé siempre 0 filas y nunca un error de conversión.
+
+**Precisión de la aprobación:** cada transacción fija explícitamente su tenant con `set_config('app.tenant_id', …, true)` o `SET LOCAL`. El contexto **nunca** se hereda de una conexión anterior: se prohíben `SET`/`SET SESSION`, `set_config(…, false)` y los valores por defecto de rol o base de datos. Lo verifican una prueba estática (unitaria) y pruebas con una sola conexión reutilizada tras COMMIT, ROLLBACK y error.
+
+**Afecta:** ADR-003, multitenancy §4.
+
+### ADR-026 · Bloqueo ordenado de recursos antes de la exclusión GIST (aceptado)
+**Contexto:** con solo `EXCLUDE USING gist`, dos ventas simultáneas de tramos superpuestos del mismo recurso no producen doble venta, pero en 23 de 40 rondas una abortó con `40P01` (deadlock, ~1 s de espera) en lugar de `23P01`. **Decisión:** antes de insertar asignaciones, la transacción bloquea los recursos hoja con `SELECT … ORDER BY id FOR NO KEY UPDATE`. Las ventas en competencia esperan en orden. La restricción de exclusión sigue siendo la garantía, y el bloqueo solo la hace predecible. Las capacidades agregadas mantienen el bloqueo ordenado `(pool_id, segment_seq)` ya aprobado.
+
+**Precisión de la aprobación:** el orden de los bloqueos es determinista (recursos por `id`, luego pools por `(pool_id, segment_seq)`). Los conflictos de disponibilidad se traducen en errores de dominio controlados (`ResourceUnavailableError`, `CapacityExceededError`), nunca en errores internos ni interbloqueos. En la API se expondrán como `409` con el formato de error único (Fase 8).
+
+**Alternativas:** reintentar ante `40P01` (más latencia y más código); `SERIALIZABLE` (descartado en ADR-007).
+
+**Afecta:** ADR-007, capacity-and-inventory §3.

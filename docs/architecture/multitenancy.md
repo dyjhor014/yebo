@@ -85,9 +85,11 @@ Reglas:
 ALTER TABLE shipments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shipments FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON shipments
-  USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+  USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+  WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
 ```
+
+> **ADR-025 (Fase 2):** `NULLIF(..., '')` es necesario porque, en una conexión del *pool* que ya usó `set_config(..., true)`, `current_setting` devuelve `''` y no `NULL`. Sin `NULLIF`, `''::uuid` lanzaría `22P02` en lugar de devolver 0 filas.
 
 | Rol de BD | Uso | RLS |
 |---|---|---|
@@ -96,7 +98,8 @@ CREATE POLICY tenant_isolation ON shipments
 | `yebo_platform` | Resolver de dominios, auth, superadmin, jobs entre tenants (métricas, facturación SaaS) | `BYPASSRLS`, credenciales y *pool* separados |
 
 - La extensión de Prisma envuelve cada operación de tenant en una transacción que primero ejecuta `SELECT set_config('app.tenant_id', $1, true)`. El tercer parámetro, `true`, hace el valor **local a la transacción**, lo que evita fugas entre requests que comparten conexión del *pool*.
-- Sin `app.tenant_id`, `current_setting(..., true)` devuelve `NULL`: la política no devuelve filas y la escritura falla. La falla es segura por defecto.
+- Sin `app.tenant_id`, `current_setting(..., true)` devuelve `NULL` (conexión nueva) o `''` (conexión reutilizada). Con `NULLIF`, en ambos casos la política no devuelve filas y la escritura falla. La falla es segura por defecto.
+- Cada transacción fija su tenant explícitamente; el contexto nunca se hereda de una conexión anterior (ADR-025). Están prohibidos `SET`/`SET SESSION`, `set_config(..., false)` y los valores por defecto de rol o base de datos.
 - Coste: una transacción por operación. Se medirá en la Fase 3; si penaliza, se agrupan las lecturas de un request en una sola transacción.
 
 ### 4.3 Tablas globales (sin `tenant_id`, sin RLS de tenant)

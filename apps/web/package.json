@@ -1,0 +1,29 @@
+{
+  "name": "@yebo/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Frontend de empresas y clientes: portal p\u00fablico, seguimiento, hub de cuentas, panel, POS y PWA (ADR-002)",
+  "scripts": {
+    "dev": "next dev --port 3100",
+    "build": "next build",
+    "start": "next start --port 3100",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint app lib"
+  },
+  "dependencies": {
+    "@yebo/contracts": "workspace:*",
+    "next": "16.4.5",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "server-only": "0.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.4",
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@yebo/config": "workspace:*",
+    "tailwindcss": "4.3.4",
+    "typescript": "5.9.3"
+  }
+}

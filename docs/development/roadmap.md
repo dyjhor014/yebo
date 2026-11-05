@@ -6,7 +6,7 @@ Se trabaja una fase a la vez. No se avanza con errores críticos, decisiones blo
 |---|---|---|---|
 | 0 | Auditoría y descubrimiento | Informe entregado y decisiones identificadas | ✅ Completada |
 | 1 | Arquitectura y diseño | Documento de arquitectura, C4, ER, diccionario y ADR revisables | ✅ Aprobada (2026-11-05) |
-| 2 | Fundación técnica | El proyecto levanta de forma reproducible y supera las pruebas iniciales | 🚧 En curso |
+| 2 | Fundación técnica | El proyecto levanta de forma reproducible y supera las pruebas iniciales | ✅ Aprobada para cierre mediante PR ([resultados](phase-2-results.md)) |
 | 3 | Multitenancy y seguridad | Pruebas demuestran aislamiento total entre tenants | Pendiente |
 | 4 | Superadmin SaaS y membresías | Crear empresa, asignar plan, medir usuarios y calcular el importe | Pendiente |
 | 5 | White label | Dos portales visualmente distintos sin duplicar apps | Pendiente |

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["tsconfig.base.json"],
+  "tasks": {
+    "generate": {
+      "inputs": [
+        "prisma/**",
+        "test/poc/**/schema.prisma",
+        "test/poc/**/prisma.config.ts",
+        "prisma.config.ts"
+      ],
+      "outputs": ["src/generated/**", "test/poc/**/generated/**"]
+    },
+    "build": {
+      "dependsOn": ["^build", "generate"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build", "generate"]
+    },
+    "lint": {
+      "dependsOn": ["^build", "generate"]
+    },
+    "test": {
+      "dependsOn": ["^build", "generate"]
+    },
+    "test:integration": {
+      "dependsOn": ["^build", "generate"],
+      "cache": false
+    },
+    "dev": {
+      "dependsOn": ["^build", "generate"],
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

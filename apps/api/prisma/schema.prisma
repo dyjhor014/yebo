@@ -1,0 +1,15 @@
+// Esquema de producción de YEBO.
+// Fase 2 (fundación técnica): todavía no hay modelos de negocio. Los modelos se incorporan
+// a partir de la Fase 3 siguiendo docs/database/data-dictionary.md.
+// Convenciones: tablas snake_case (@@map), UUID v7, tenant_id + UNIQUE(tenant_id, id),
+// FK compuestas con tenant_id y RLS forzado en toda tabla de tenant (ADR-003).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}

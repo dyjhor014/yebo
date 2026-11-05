@@ -1,0 +1,48 @@
+// PRUEBA DE CONCEPTO (Fase 2) — aislamiento multitenant. No es parte del esquema de producción.
+// Reproduce las convenciones aprobadas: tenant_id, UNIQUE(tenant_id, id), FK compuestas y RLS forzado.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "./generated"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Tabla global (como `tenants`): sin tenant_id ni RLS de tenant.
+model PocTenant {
+  id     String     @id @db.Uuid
+  name   String
+  routes PocRoute[]
+  trips  PocTrip[]
+
+  @@map("poc_tenants")
+}
+
+model PocRoute {
+  id       String    @id @default(uuid(7)) @db.Uuid
+  tenantId String    @map("tenant_id") @db.Uuid
+  name     String
+  tenant   PocTenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  trips    PocTrip[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, name])
+  @@map("poc_routes")
+}
+
+model PocTrip {
+  id       String    @id @default(uuid(7)) @db.Uuid
+  tenantId String    @map("tenant_id") @db.Uuid
+  routeId  String    @map("route_id") @db.Uuid
+  code     String
+  tenant   PocTenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  /// FK compuesta: la ruta debe pertenecer al MISMO tenant que el viaje.
+  route    PocRoute  @relation(fields: [tenantId, routeId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@map("poc_trips")
+}

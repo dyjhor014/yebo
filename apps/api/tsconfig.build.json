@@ -1,0 +1,10 @@
+{
+  "extends": "@yebo/config/tsconfig/node-cjs.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": false
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.spec.ts"]
+}
