@@ -42,13 +42,12 @@
   - ADR-028 (módulo global de prospectos, con condiciones);
   - dominio `yebo.pe`;
   - subdominios reservados como requisito de la Fase 4;
-  - Impeccable con revisión previa. **Revisión hecha; aún no instalada**, porque los hooks se activan al instalar, el motor se cachea en `~/.impeccable` y la telemetría está activa por defecto. Ver [metodología §1.3](docs/design/design-methodology.md).
+  - Impeccable 4.8.0 instalada en el proyecto mediante el PR #3: npm con `--no-hooks`, `hook.enabled: false` y telemetría desactivada. Cualquier `impeccable update` debe usar `--no-hooks`. Ver [metodología §1.3](docs/design/design-methodology.md).
 - **No autorizado:**
   - implementar `apps/site` o el módulo de prospectos;
   - otros cambios de arquitectura;
   - avanzar a la Fase 3.
 - **Pendiente:**
-  - confirmar la configuración segura de Impeccable e instalarla en un PR de configuración separado;
   - propuesta de identidad visual (dirección preliminar: azul profundo, turquesa, blanco, inspiración amazónica);
   - verificación de titularidad y DNS de `yebo.pe`;
   - validación de las palabras clave.

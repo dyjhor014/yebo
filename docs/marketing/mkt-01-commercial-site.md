@@ -64,7 +64,7 @@ Estado de partida de cada capacidad (se actualiza al cerrar cada fase):
 
 **Recomendación: B.** El sitio comercial tiene otro público, otro ciclo de publicación y otros requisitos (SEO, CDN, sin autenticación) que los paneles. Separarlo evita que un error en el sitio afecte a la operación de las empresas, y al revés. **No cambia el stack:** es otra app Next.js del mismo monorepo. Como ADR-002 enumera las apps, esto se propone como **ADR-027** y no se aplica sin aprobación (§7).
 
-### 2.2 Diseño de `apps/site` (si se aprueba ADR-027)
+### 2.2 Diseño de `apps/site` (ADR-027 aceptado; sin implementar)
 
 ```mermaid
 flowchart LR
@@ -259,10 +259,10 @@ Decisiones externas: hosting (D12; el dominio `yebo.pe` ya está aprobado, a fal
 | # | Conflicto o vacío | Decisión afectada | Recomendación | Estado |
 |---|---|---|---|---|
 | K1 | ADR-002 define dos apps (`web`, `platform`). `apps/site` sería una tercera | ADR-002 | ADR-027 **amplía** ADR-002 sin cambiar las responsabilidades de `web` ni de `platform` | ✅ Resuelto: ADR-027 aceptado |
-| K2 | El C4 nivel 2 enruta las "páginas por host" a `apps/web`; no contempla el dominio raíz | system-overview §3 | Si se aprueba ADR-027, añadir `yebo.pe` → `apps/site` como **adición** al diagrama | Se documenta; el diagrama aprobado no se toca |
+| K2 | El C4 nivel 2 enruta las "páginas por host" a `apps/web`; no contempla el dominio raíz | system-overview §3 | Con ADR-027 aceptado, añadir `yebo.pe` → `apps/site` como **adición** al diagrama cuando se implemente MKT-01.2 | Pendiente para MKT-01.2; el diagrama aprobado no se toca hasta entonces |
 | K3 | Las tablas de prospectos no figuran en la lista de tablas globales | multitenancy §4 (lista de tablas globales) | ADR-028 las añade como globales solo de plataforma | ✅ Resuelto: ADR-028 aceptado. La lista de multitenancy §4 se actualizará al implementarlas (Fase 4) |
 | K4 | Faltan subdominios reservados | `tenant_domains` (diccionario de datos) | Adición a la Fase 4 (§2.3) | ✅ Requisito aprobado de la Fase 4 (MKT-D6) |
-| K5 | Impeccable no estaba instalada | — | Ver [metodología §1](../design/design-methodology.md) | Autorizada con revisión previa (MKT-D3) |
+| K5 | Impeccable no estaba instalada | — | Ver [metodología §1](../design/design-methodology.md) | ✅ Instalada en el proyecto mediante el PR #3 (npm, `--no-hooks`, telemetría desactivada) |
 
 Ningún ADR aceptado se modifica.
 
@@ -270,7 +270,7 @@ Ningún ADR aceptado se modifica.
 
 | Etapa | Contenido | Entregables | Criterio de aceptación | Cuándo |
 |---|---|---|---|---|
-| **MKT-01.0 · Estrategia** | Este documento; identidad de marca; validación de las palabras clave; dominio (D12) | Propuesta aprobada; ADR-027/028 decididos; marca definida | Aprobación del responsable | **Ahora**, solo documentación (en paralelo; no toca la Fase 3) |
+| **MKT-01.0 · Estrategia** | Este documento; identidad de marca; validación de las palabras clave; dominio (`yebo.pe` aprobado, MKT-D5; verificación DNS pendiente) | Propuesta aprobada; ADR-027/028 decididos; marca definida | Aprobación del responsable | **Ahora**, solo documentación (en paralelo; no toca la Fase 3) |
 | **MKT-01.1 · Fundamentos de diseño** | Tokens y primitivas de `packages/ui`; Skill `yebo-design-system` | Tokens versionados; Skill en el repositorio | Contraste AA verificado automáticamente; tema de prueba de un tenant que no rompe la accesibilidad | Al inicio de la Fase 4 (primera UI real) |
 | **MKT-01.2 · Sitio y captación** | `apps/site` con las páginas de lanzamiento; formulario; módulo `commercial-leads`; gestión en `apps/platform` | Sitio en preproducción (`noindex`); pruebas E2E del formulario | LCP < 2,5 s, INP < 200 ms y CLS < 0,1 (p75 móvil, laboratorio); axe sin errores; metadatos únicos; sitemap válido; rate limit y CAPTCHA probados; ningún prospecto visible para `yebo_app`; **cada capacidad con estado correcto** | Tras cerrar la Fase 4 |
 | **MKT-01.3 · Lanzamiento** | Producción, Search Console, analítica y textos legales | Sitio público indexable | Sitemap enviado y sin errores de cobertura; textos legales aprobados por un asesor | Con la Fase 15 o un despliegue previo dedicado; idealmente cuando el piloto (D1) esté próximo |

@@ -64,3 +64,17 @@ En todos los casos, `diff` contra la versión anterior da **0 líneas eliminadas
 - código, configuración y CI.
 
 **Impeccable no se instaló:** la revisión encontró los hallazgos I1–I6 y la instalación requiere un cambio de configuración, que no cabe en un PR documental.
+
+---
+
+## 2026-11-05 · Tercera revisión: correcciones tras la revisión de los PR
+
+- **Rama:** `docs/mkt-01-propuesta`.
+- **Sin código.**
+
+| Documento | Qué existía | Qué cambió | Motivo |
+|---|---|---|---|
+| `docs/marketing/mkt-01-commercial-site.md` | "si se aprueba ADR-027" (§2.2 y K2); "dominio (D12)" en MKT-01.0; K5 "autorizada" | Redacción acorde a ADR-027 aceptado y al dominio aprobado; K5 instalada mediante el PR #3 | Textos anteriores a la aprobación |
+| `docs/design/design-methodology.md` | §1.3: "instalación pendiente" | Estado de la instalación del PR #3 y regla `impeccable update --no-hooks` | El orden de integración previsto (#1 → #3 → #2) dejaría el texto anterior desactualizado |
+| `PROJECT_STATUS.md` | "aún no instalada" y una tarea pendiente de instalación | Instalada mediante el PR #3; se retira la tarea | Ídem |
+| `docs/development/changelog.md` | Dos entradas | Esta entrada | Trazabilidad |

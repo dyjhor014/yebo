@@ -63,7 +63,14 @@ Fuente: `https://github.com/pbakaus/impeccable`, commit `ac0966d` del 2026-11-05
 | I5 | Instalar en el proyecto modifica `.claude/settings.json` (plugins habilitados y marketplace conocido) | El PR documental debe ser **solo documentación** | La instalación va en un **cambio separado** (PR de configuración), no en el PR de MKT-01 |
 | I6 | El principio de la Skill "Finish the job… production-grade code" podría empujar a implementar | Límites de autorización vigentes | La precedencia de §1.4 manda: Impeccable no autoriza implementar ni cambiar decisiones |
 
-**Estado: revisión completada. Instalación pendiente** de tu confirmación de la configuración segura (I1–I3) y de hacerla en un cambio separado (I5).
+**Estado (tercera revisión, 2026-11-05): instalada mediante el PR #3**, de configuración y separado de este. Según lo decidido por el responsable:
+
+- **Instalador oficial de npm, no el marketplace:** `npx impeccable@4.8.0 install --no-hooks --providers=claude --scope=project`. Resuelve I1: no se instaló ningún hook ni existe `.claude/settings*.json`.
+- **Detector desactivado** también en la configuración: `hook.enabled: false`, escrito con el comando oficial `impeccable hooks off`.
+- **Motor** v0.1.18 junto al lanzador, dentro del proyecto (la ubicación por defecto del instalador; no se versiona). Resuelve I2 sin variables de entorno.
+- **Telemetría desactivada** (`"telemetry": false`, la configuración documentada), lo que resuelve I3. La consulta de versiones (`/api/version`) sigue habilitada por decisión del responsable, sin descargas automáticas. La consulta del catálogo (`/api/roll`) se mantiene porque es la funcionalidad misma: **la telemetría desactivada no implica ausencia de comunicaciones externas**.
+- I4 se mantiene: no se ejecuta `init` ni `document`.
+- **Regla de mantenimiento:** cualquier `impeccable update` se ejecuta **siempre con `--no-hooks`**. Sin ese parámetro, la actualización instalaría los hooks en `.claude/settings.local.json`.
 
 ### 1.4 Cómo se adoptaría
 
