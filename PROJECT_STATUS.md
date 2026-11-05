@@ -4,7 +4,9 @@
 
 ## Fase actual
 
-**Fase 2: Fundación técnica — aprobada para revisión y cierre mediante PR.** El PR hacia `main` espera la revisión del responsable del proyecto. **No se fusiona automáticamente.** La Fase 3 no comienza hasta el cierre. Resultados: [phase-2-results.md](docs/development/phase-2-results.md).
+**Fase 3: Multitenancy y seguridad — en curso** (rama `fase-3/multitenancy-seguridad`, apilada sobre `fase-2/fundacion-tecnica` por decisión del responsable, sin esperar al merge del PR #1). **Etapa 3.1** (esquema base de tenancy e identidad + resolución del tenant por host) **lista para revisión**. Plan: [phase-3-plan.md](docs/development/phase-3-plan.md).
+
+La Fase 2 sigue en revisión mediante el PR #1, sin merge. Orden de integración previsto: #1 → #3 → #2.
 
 ## Fases completadas
 
