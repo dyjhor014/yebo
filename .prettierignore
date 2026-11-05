@@ -10,3 +10,6 @@ infrastructure/docker/postgres/init/
 
 # Generado por Next.js
 next-env.d.ts
+
+# Impeccable (distribución de terceros): se mantiene idéntica a la versión firmada; no se reformatea
+.claude/skills/impeccable/

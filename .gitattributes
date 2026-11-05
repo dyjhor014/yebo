@@ -1,0 +1,5 @@
+# Impeccable (distribución de terceros, versión firmada skill-v4.8.0).
+# Sus archivos se versionan sin modificar: incluyen espacios finales y finales de línea CRLF
+# (impeccable.cmd) intencionados. Solo se desactivan las comprobaciones de espacios en blanco
+# para esta ruta; no se cambia ningún otro atributo (sin conversión de finales de línea).
+/.claude/skills/impeccable/** -whitespace
