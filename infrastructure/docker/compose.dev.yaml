@@ -1,0 +1,45 @@
+# Infraestructura local de desarrollo y pruebas de YEBO.
+# Uso: pnpm infra:up  (requiere infrastructure/docker/.env, generado por scripts/dev/init-env.sh)
+name: yebo-dev
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PG_SUPERUSER_PASSWORD:?definir en infrastructure/docker/.env}
+      POSTGRES_DB: postgres
+      YEBO_OWNER_PASSWORD: ${PG_OWNER_PASSWORD:?}
+      YEBO_APP_PASSWORD: ${PG_APP_PASSWORD:?}
+      YEBO_PLATFORM_PASSWORD: ${PG_PLATFORM_PASSWORD:?}
+    ports:
+      - '127.0.0.1:${PG_PORT:-5433}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d yebo_dev']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7.4.6-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--requirepass', '${REDIS_PASSWORD:?}', '--appendonly', 'yes']
+    ports:
+      - '127.0.0.1:${REDIS_PORT:-6380}:6379'
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" --no-auth-warning ping | grep -q PONG']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?}
+
+volumes:
+  pgdata:
+  redisdata:

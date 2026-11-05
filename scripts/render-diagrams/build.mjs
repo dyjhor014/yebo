@@ -1,11 +1,18 @@
-import fs from 'node:fs'; import path from 'node:path';
-const [,, root, out] = process.argv;
+import fs from 'node:fs';
+import path from 'node:path';
+const [, , root, out] = process.argv;
 const files = process.argv.slice(4);
 const diagrams = [];
 for (const f of files) {
   const txt = fs.readFileSync(path.join(root, f), 'utf8');
-  const re = /```mermaid\n([\s\S]*?)```/g; let m, i = 0;
-  while ((m = re.exec(txt))) { i++; const line = txt.slice(0, m.index).split('\n').length; diagrams.push({ id: `${f}#${i}`, line, src: m[1] }); }
+  const re = /```mermaid\n([\s\S]*?)```/g;
+  let m,
+    i = 0;
+  while ((m = re.exec(txt))) {
+    i++;
+    const line = txt.slice(0, m.index).split('\n').length;
+    diagrams.push({ id: `${f}#${i}`, line, src: m[1] });
+  }
 }
 const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;background:#fff;margin:16px;width:1400px}h3{font-size:14px;margin:24px 0 4px;color:#333}.err{color:#b00;white-space:pre-wrap}.d svg{max-width:1380px;height:auto}</style>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11.12.0/dist/mermaid.min.js"></script></head><body>

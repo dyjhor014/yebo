@@ -1,0 +1,107 @@
+// PRUEBA DE CONCEPTO (Fase 2) — inventario por tramos y concurrencia (ADR-007, capacity-and-inventory.md).
+// No es parte del esquema de producción. Las restricciones que Prisma no modela (EXCLUDE, CHECK,
+// FK compuesta con columna opcional) se crean con SQL en la migración; la prueba de deriva verifica
+// que Prisma no intente eliminarlas.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "./generated"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model InvTrip {
+  id        String            @id @db.Uuid
+  tenantId  String            @map("tenant_id") @db.Uuid
+  code      String
+  /// Cantidad de paradas (seq 0..stop_count-1). Tramos: 0..stop_count-2.
+  stopCount Int               @map("stop_count")
+  status    String            @default("OPEN_FOR_SALE")
+  resources InvTripResource[]
+  pools     InvPool[]
+
+  @@unique([tenantId, id])
+  @@map("inv_trips")
+}
+
+model InvTripResource {
+  id       String  @id @db.Uuid
+  tenantId String  @map("tenant_id") @db.Uuid
+  tripId   String  @map("trip_id") @db.Uuid
+  code     String
+  kind     String
+  /// Camarote padre de una cama. FK compuesta (tenant_id, parent_id) con columna opcional.
+  parentId String? @map("parent_id") @db.Uuid
+  trip     InvTrip @relation(fields: [tenantId, tripId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  parent   InvTripResource?  @relation("ResourceHierarchy", fields: [tenantId, parentId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  children InvTripResource[] @relation("ResourceHierarchy")
+  allocations InvResourceAllocation[]
+
+  @@unique([tenantId, id])
+  @@unique([tripId, code])
+  @@index([tenantId, parentId])
+  @@map("inv_trip_resources")
+}
+
+model InvResourceAllocation {
+  id             String                     @id @db.Uuid
+  tenantId       String                     @map("tenant_id") @db.Uuid
+  tripId         String                     @map("trip_id") @db.Uuid
+  tripResourceId String                     @map("trip_resource_id") @db.Uuid
+  stopRange      Unsupported("int4range")   @map("stop_range")
+  status         String
+  holdExpiresAt  DateTime?                  @map("hold_expires_at") @db.Timestamptz(6)
+  holderType     String                     @map("holder_type")
+  holderId       String                     @map("holder_id") @db.Uuid
+  resource       InvTripResource            @relation(fields: [tenantId, tripResourceId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([tenantId, holderId])
+  @@map("inv_resource_allocations")
+}
+
+model InvPool {
+  id        String  @id @db.Uuid
+  tenantId  String  @map("tenant_id") @db.Uuid
+  tripId    String  @map("trip_id") @db.Uuid
+  code      String
+  dimension String
+  capacity  Decimal @db.Decimal(14, 3)
+  trip      InvTrip @relation(fields: [tenantId, tripId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  segments    InvPoolSegmentUsage[]
+  allocations InvPoolAllocation[]
+
+  @@unique([tenantId, id])
+  @@unique([tripId, code, dimension])
+  @@map("inv_pools")
+}
+
+model InvPoolSegmentUsage {
+  tenantId   String  @map("tenant_id") @db.Uuid
+  poolId     String  @map("pool_id") @db.Uuid
+  segmentSeq Int     @map("segment_seq")
+  capacity   Decimal @db.Decimal(14, 3)
+  used       Decimal @default(0) @db.Decimal(14, 3)
+  pool       InvPool @relation(fields: [tenantId, poolId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([poolId, segmentSeq])
+  @@map("inv_pool_segment_usage")
+}
+
+model InvPoolAllocation {
+  id            String                   @id @db.Uuid
+  tenantId      String                   @map("tenant_id") @db.Uuid
+  poolId        String                   @map("pool_id") @db.Uuid
+  stopRange     Unsupported("int4range") @map("stop_range")
+  quantity      Decimal                  @db.Decimal(14, 3)
+  status        String
+  holdExpiresAt DateTime?                @map("hold_expires_at") @db.Timestamptz(6)
+  holderType    String                   @map("holder_type")
+  holderId      String                   @map("holder_id") @db.Uuid
+  pool          InvPool                  @relation(fields: [tenantId, poolId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([tenantId, holderId])
+  @@map("inv_pool_allocations")
+}

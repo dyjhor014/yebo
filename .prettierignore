@@ -1,0 +1,12 @@
+pnpm-lock.yaml
+**/dist
+**/.next
+**/generated
+**/coverage
+docs/diagrams/*.svg
+docs/
+*.md
+infrastructure/docker/postgres/init/
+
+# Generado por Next.js
+next-env.d.ts

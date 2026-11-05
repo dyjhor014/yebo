@@ -1,0 +1,19 @@
+@import 'tailwindcss';
+
+/* Tokens base. El tema white label por tenant se aplica en la Fase 5 (site_versions). */
+:root {
+  --background: #ffffff;
+  --foreground: #0f172a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0b1120;
+    --foreground: #e2e8f0;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}

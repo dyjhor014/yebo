@@ -1,0 +1,9 @@
+{
+  "extends": "@yebo/config/tsconfig/node-cjs.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "types": ["node", "jest"]
+  },
+  "include": ["src", "test", "prisma.config.ts"]
+}

@@ -64,6 +64,8 @@ CREATE TABLE resource_allocations (
 
 No hay ninguna ventana en la que ambas puedan confirmarse.
 
+> **ADR-026 (Fase 2):** antes del `INSERT`, la transacción bloquea los recursos hoja con `SELECT … FROM trip_resources WHERE id = ANY(…) ORDER BY id FOR NO KEY UPDATE`. Sin este paso, dos inserciones simultáneas que chocan pueden esperarse mutuamente dentro del índice GIST y una aborta con `40P01` (interbloqueo, ~1 s) en lugar de `23P01`. Con el bloqueo ordenado, la segunda espera a la primera tal como se describe arriba. La restricción de exclusión sigue siendo la garantía. Orden global: recursos por `id`, luego pools por `(pool_id, segment_seq)`.
+
 ### Ejemplo A: mismo asiento, tramos parcialmente superpuestos, simultáneo
 
 Asiento **12A**. La taquilla de Pucallpa vende Pucallpa→Yurimaguas `[0,2)` y, en el mismo instante, el portal online vende Contamana→Iquitos `[1,3)`.

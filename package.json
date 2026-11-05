@@ -1,0 +1,41 @@
+{
+  "name": "yebo",
+  "private": true,
+  "description": "YEBO \u2014 plataforma SaaS multitenant de transporte, pasajeros, encomiendas y carga",
+  "packageManager": "pnpm@10.34.9",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "scripts": {
+    "setup:env": "scripts/dev/init-env.sh",
+    "infra:up": "docker compose --env-file infrastructure/docker/.env -f infrastructure/docker/compose.dev.yaml up -d --wait",
+    "infra:down": "docker compose --env-file infrastructure/docker/.env -f infrastructure/docker/compose.dev.yaml down",
+    "infra:ps": "docker compose --env-file infrastructure/docker/.env -f infrastructure/docker/compose.dev.yaml ps",
+    "generate": "turbo run generate",
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:integration": "turbo run test:integration",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "docs:diagrams": "scripts/render-diagrams/render.sh"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "eslint": "9.39.5",
+    "prettier": "3.9.10",
+    "turbo": "2.11.10",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1"
+  },
+  "pnpm": {
+    "//": "Scripts de instalaci\u00f3n revisados y bloqueados: telemetr\u00eda (@scarf/scarf), aceleraci\u00f3n nativa opcional de BullMQ (msgpackr-extract) y observador nativo opcional (@parcel/watcher).",
+    "ignoredBuiltDependencies": [
+      "@parcel/watcher",
+      "@scarf/scarf",
+      "msgpackr-extract"
+    ]
+  }
+}
