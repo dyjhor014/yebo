@@ -33,6 +33,26 @@
   - **ADR-025:** tenant fijado por transacción, nunca heredado.
   - **ADR-026:** orden de bloqueo determinista; los conflictos se traducen en errores controlados.
 
+## Iniciativa transversal MKT-01 (planificación aprobada, 2026-11-05)
+
+**Sitio web comercial de YEBO**, más la metodología de diseño del frontend. Solo hay documentación; **nada implementado**. No altera la Fase 2 en revisión ni autoriza la Fase 3.
+
+- Documentos: [mkt-01-commercial-site.md](docs/marketing/mkt-01-commercial-site.md) · [design-methodology.md](docs/design/design-methodology.md) · [roadmap §Iniciativas transversales](docs/development/roadmap.md#iniciativas-transversales) · [changelog](docs/development/changelog.md).
+- **Aprobado:**
+  - ADR-027 (`apps/site`, amplía ADR-002);
+  - ADR-028 (módulo global de prospectos, con condiciones);
+  - dominio `yebo.pe`;
+  - subdominios reservados como requisito de la Fase 4;
+  - Impeccable 4.8.0 instalada en el proyecto mediante el PR #3: npm con `--no-hooks`, `hook.enabled: false` y telemetría desactivada. Cualquier `impeccable update` debe usar `--no-hooks`. Ver [metodología §1.3](docs/design/design-methodology.md).
+- **No autorizado:**
+  - implementar `apps/site` o el módulo de prospectos;
+  - otros cambios de arquitectura;
+  - avanzar a la Fase 3.
+- **Pendiente:**
+  - propuesta de identidad visual (dirección preliminar: azul profundo, turquesa, blanco, inspiración amazónica);
+  - verificación de titularidad y DNS de `yebo.pe`;
+  - validación de las palabras clave.
+
 ## Supuestos y puntos por validar (no bloquean)
 
 D1 (cliente piloto), D6 (propietarios), D7 (agencias), S2 (contrato de la API de facturación; bloquea solo el adaptador), S5 (impuestos con un contador), S6 (formatos de manifiestos), D9 (pasarela de pago) y D12 (hosting).

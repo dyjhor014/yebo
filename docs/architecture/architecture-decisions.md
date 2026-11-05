@@ -14,7 +14,7 @@ A partir de la aprobación, cualquier cambio se registra como **un ADR nuevo que
 | ADR | Título | Estado |
 |---|---|---|
 | 001 | Monolito modular con procesos `api` y `worker` | **Aceptado** |
-| 002 | Monorepo pnpm + Turborepo con `apps/web` y `apps/platform` | **Aceptado** |
+| 002 | Monorepo pnpm + Turborepo con `apps/web` y `apps/platform` | **Aceptado** · ampliado por ADR-027 (2026-11-05) |
 | 003 | Multitenancy: BD compartida, FK compuestas, extensión Prisma y RLS | **Aceptado** |
 | 004 | Tenant resuelto por host y validado contra el token | **Aceptado** · R2 |
 | 005 | Identidad global + membresías por tenant; staff de plataforma separado | **Aceptado** (D3) |
@@ -39,6 +39,8 @@ A partir de la aprobación, cualquier cambio se registra como **un ADR nuevo que
 | 024 | Restricciones de BD: FK en el esquema Prisma, EXCLUDE/CHECK/RLS en SQL y prueba de deriva | **Aceptado** · Fase 2 |
 | 025 | Políticas RLS con `NULLIF(current_setting(...), '')` y contexto por transacción | **Aceptado** · Fase 2 |
 | 026 | Bloqueo ordenado de recursos antes de la exclusión GIST | **Aceptado** · Fase 2 |
+| 027 | Sitio comercial en una app independiente `apps/site` (amplía ADR-002) | **Aceptado** · MKT-01 |
+| 028 | Módulo `commercial-leads` de ámbito plataforma, aislado en PostgreSQL | **Aceptado** · MKT-01 |
 
 ---
 
@@ -208,3 +210,54 @@ Surgen de las pruebas de concepto. Evidencia en [phase-2-results.md](../developm
 **Alternativas:** reintentar ante `40P01` (más latencia y más código); `SERIALIZABLE` (descartado en ADR-007).
 
 **Afecta:** ADR-007, capacity-and-inventory §3.
+
+---
+
+## ADR de la iniciativa MKT-01 (aceptados el 2026-11-05)
+
+Propuestos y aceptados el 2026-11-05. Detalle en [mkt-01-commercial-site.md](../marketing/mkt-01-commercial-site.md). **No modifican el contenido de ningún ADR aceptado.** ADR-027 **amplía** ADR-002: el texto y la decisión original de ADR-002 se conservan íntegros, y en el índice solo se anota "ampliado por ADR-027". La aceptación **no autoriza la implementación**: `apps/site` se construye en la etapa MKT-01.2 y el módulo de prospectos con la Fase 4, cada uno con su propia autorización.
+
+### ADR-027 · Sitio comercial en `apps/site` (aceptado; amplía ADR-002)
+**Contexto:** MKT-01 requiere un sitio corporativo de YEBO orientado a SEO y captación. ADR-002 define dos apps: `web` (contexto de tenant por host) y `platform` (superadmin).
+**Decisión propuesta:**
+- Tercera app Next.js, `apps/site`, en el mismo monorepo y con el mismo stack.
+- Servida en el dominio raíz de la plataforma; estática (SSG/ISR).
+- Sin sesión, sin resolución de tenant y sin cookies de aplicación.
+- Reutiliza `packages/ui` y `packages/contracts`.
+- Envía los prospectos servidor a servidor a la API.
+
+**Alternativas:** una ruta dentro de `apps/web` (respeta ADR-002, pero mezcla el marketing con el *middleware* de tenant, la CSP y el ciclo de despliegue de la app operativa); un sitio externo fuera del stack (sin reutilización ni control de rendimiento).
+**Consecuencias:** un contenedor más en el despliegue (Fase 15); una adición al C4 nivel 2 (`yebo.pe` → `apps/site`); una lista de subdominios reservados para los tenants.
+
+**Condiciones de la aprobación:**
+- Separada de la aplicación operativa.
+- No comparte sesiones con `apps/web` ni con `apps/platform`.
+- **No tiene acceso directo a ninguna base de datos:** solo llama a la API.
+- Puede reutilizar paquetes compartidos (`packages/ui`, `packages/contracts`, `packages/config`) cuando corresponda.
+- Dominio objetivo `yebo.pe` (aprobado). La titularidad, la disponibilidad y la configuración DNS quedan pendientes de verificar antes del despliegue.
+
+### ADR-028 · Prospectos comerciales en un módulo de ámbito plataforma (aceptado)
+**Contexto:** los prospectos de MKT-01 son empresas que aún no son tenants. Sus datos no deben mezclarse con datos operativos de ningún tenant.
+**Decisión propuesta:**
+- Módulo `commercial-leads` en la capa L0 de la API.
+- Tablas globales sin `tenant_id` (`sales_leads`, `sales_lead_events` append-only), accesibles solo con `yebo_platform`; `yebo_app` sin permisos.
+- Gestión en `apps/platform`.
+- Al ganar un prospecto, el alta del tenant usa el flujo de la Fase 4 y guarda `converted_tenant_id`, sin copiar los datos.
+- Datos personales: minimización, cifrado de campo del contacto (principio de ADR-019), consentimiento comercial separado y retención de 24 meses sin actividad.
+- Puerto `CrmExporter` (ADR-012) para una integración futura.
+
+**Alternativa:** CRM externo (transferencia internacional de datos personales, dependencia del proveedor).
+**Consecuencias:** se añaden dos tablas a la lista de tablas globales de multitenancy §4; el endpoint público requiere rate limit y CAPTCHA (`security.md`).
+
+**Condiciones obligatorias de la aprobación:**
+1. Tablas globales **fuera del acceso de los tenants**.
+2. `yebo_app` **sin ningún permiso** sobre ellas: ni `GRANT`, ni privilegios por defecto que las alcancen.
+3. Acceso solo mediante un **servicio de plataforma con permisos específicos**. El servicio usa un rol de BD dedicado (p. ej. `yebo_leads`), con privilegios mínimos sobre esas tablas, en lugar de depender solo de `yebo_platform` con BYPASSRLS. El endpoint público solo puede **insertar** prospectos.
+4. **Separación de permisos** entre ventas (gestionar prospectos), soporte (lectura limitada, sin exportar) y superadministración (configuración y retención), dentro de los permisos de `platform_users`.
+5. **Auditoría** de toda lectura de datos de contacto, cambio de estado, exportación y anonimización (`audit_logs`), y **protección de datos personales**: cifrado de campo, minimización, consentimiento separado y retención.
+6. **Aislamiento respaldado por PostgreSQL**, no solo por la lógica de aplicación:
+   - `REVOKE` explícito a `yebo_app` y a `PUBLIC`;
+   - prueba automática de que `yebo_app` no puede leer ni escribir esas tablas;
+   - `sales_lead_events` *append-only* a nivel de permisos (sin `UPDATE` ni `DELETE`).
+
+El diseño detallado del rol y de los permisos se hará en la Fase 4 y se someterá a revisión antes de implementarlo.
