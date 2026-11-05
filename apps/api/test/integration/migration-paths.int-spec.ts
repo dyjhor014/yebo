@@ -27,6 +27,10 @@ interface MigrationSet {
   migrations: string;
   /** Tablas con tenant_id que deben quedar con RLS forzado (vacío en producción: aún no hay tablas). */
   tenantTables: string[];
+  /** Tablas globales con tenant_id (multitenancy §4.3): sin RLS y sin acceso para yebo_app. */
+  globalTablesWithTenantId?: string[];
+  /** El esquema anterior tenía la política RLS sin NULLIF (fallo corregido por ADR-025). */
+  previousHadRlsBug?: boolean;
   /** Extensiones que deben quedar instaladas. */
   extensions: string[];
   /** Migraciones del esquema anterior a ADR-024/025 (null: no existe un esquema anterior). */
@@ -126,8 +130,19 @@ async function verifyFinalState(set: MigrationSet, owner: Pool, app: Pool): Prom
      WHERE c.relkind = 'r' AND EXISTS (SELECT 1 FROM pg_attribute a
            WHERE a.attrelid = c.oid AND a.attname = 'tenant_id' AND NOT a.attisdropped)
      ORDER BY 1`);
-  expect(tables.map((t) => t.table)).toEqual([...set.tenantTables].sort());
-  expect(tables.filter((t) => !t.enabled || !t.forced)).toEqual([]);
+  const globals = set.globalTablesWithTenantId ?? [];
+  const scoped = tables.filter((t) => !globals.includes(t.table));
+  expect(scoped.map((t) => t.table)).toEqual([...set.tenantTables].sort());
+  expect(scoped.filter((t) => !t.enabled || !t.forced)).toEqual([]);
+  // Las excepciones globales existen, no tienen RLS de tenant y yebo_app no puede leerlas.
+  expect(tables.filter((t) => globals.includes(t.table)).map((t) => t.table)).toEqual([...globals].sort());
+  for (const g of globals) {
+    const { rows } = await owner.query<{ can: boolean }>(
+      `SELECT has_table_privilege('yebo_app', $1, 'SELECT') AS can`,
+      [`public.${g}`],
+    );
+    expect(rows[0]?.can).toBe(false);
+  }
 
   // ADR-025: toda política de tenant trata el contexto vacío como "sin tenant" (NULLIF), en USING y WITH CHECK.
   const { rows: policies } = await owner.query<{ table: string; qual: string; check: string }>(`
@@ -149,15 +164,20 @@ const SETS: MigrationSet[] = [
     name: 'producción',
     schema: 'prisma/schema.prisma',
     migrations: 'prisma/migrations',
-    tenantTables: [],
+    tenantTables: ['tenant_memberships', 'roles', 'role_permissions', 'membership_roles'],
+    globalTablesWithTenantId: ['tenant_domains'],
     extensions: ['btree_gist', 'citext'],
-    previous: null, // `main` no contiene esquema: la Fase 2 crea la primera migración.
+    // Esquema anterior = el de la Fase 2 (solo extensiones). Prueba que la Fase 3 se aplica sobre él.
+    previous: ['20261105000000_init_extensions'],
+    previousHadRlsBug: false,
+    seed: () => Promise.resolve({}),
   },
   {
     name: 'PoC aislamiento',
     schema: 'test/poc/tenancy/schema.prisma',
     migrations: 'test/poc/tenancy/migrations',
     tenantTables: ['poc_routes', 'poc_trips'],
+    previousHadRlsBug: true,
     extensions: [],
     previous: ['20261105000100_poc_tenancy'],
     async seed(platform) {
@@ -189,6 +209,7 @@ const SETS: MigrationSet[] = [
       'inv_pool_segment_usage',
       'inv_pool_allocations',
     ],
+    previousHadRlsBug: true,
     extensions: ['btree_gist'],
     previous: ['20261105000200_poc_inventory'],
     async seed(platform) {
@@ -279,9 +300,11 @@ describe.each(SETS)('migraciones · $name', (set) => {
 
     // 2) Datos de dos tenants.
     const expected = await seed(platform);
-    const firstTable = set.tenantTables[0] ?? '';
-    // Comportamiento anterior (motivo de ADR-025): el contexto vacío lanzaba 22P02 en vez de dar 0 filas.
-    await expect(countAs(app, firstTable, '')).rejects.toMatchObject({ code: '22P02' });
+    if (set.previousHadRlsBug) {
+      const firstTable = set.tenantTables[0] ?? '';
+      // Comportamiento anterior (motivo de ADR-025): el contexto vacío lanzaba 22P02 en vez de dar 0 filas.
+      await expect(countAs(app, firstTable, '')).rejects.toMatchObject({ code: '22P02' });
+    }
 
     // 3) Migraciones nuevas sobre la base con datos.
     const output = expectOk(prisma(set, set.migrations, 'migrate', 'deploy'));
@@ -289,7 +312,7 @@ describe.each(SETS)('migraciones · $name', (set) => {
 
     // 4) Datos intactos, aislamiento intacto y estado final idéntico al de una base nueva.
     await expect(rowCounts(platform, Object.keys(expected))).resolves.toEqual(expected);
-    for (const t of set.tenantTables) {
+    for (const t of set.tenantTables.filter((table) => table in expected)) {
       const total = expected[t] ?? 0;
       const forA = await countAs(app, t, A);
       const forB = await countAs(app, t, B);
