@@ -147,7 +147,7 @@ Eliminar o desactivar usuarios **después** del cierre no altera nada: el cálcu
 | Caso | Regla |
 |---|---|
 | Trial | Se mide igual (útil para la conversión). La factura del trial tiene importe 0 o no se emite, según el plan |
-| Cambio de plan a mitad del período | MVP: el nuevo plan aplica **desde el período siguiente**. El prorrateo queda como evolución (por validar) |
+| Cambio de plan a mitad del período | **Decisión del 2026-11-10 (Fase 4.5)**:<br>• **Upgrade:** el plan nuevo (módulos, límites y precio) aplica **desde el día en que se registra**. El período en curso se corta ese día y se factura con la **base prorrateada** (días usados / días del período) más los usuarios adicionales medidos en esos días; el plan nuevo empieza ese día su propio ciclo y se cobra a su cierre.<br>• **Downgrade:** aplica desde el período siguiente.<br>Upgrade = la base mensual equivalente sube, o es igual con más usuarios incluidos |
 | Altas y bajas por error en pocos minutos | Cuentan mientras estuvieron activas. Opcional por plan: `min_active_seconds` para ignorar intervalos muy cortos (por defecto 0, por validar) |
 | Tenant `SUSPENDED` | La medición continúa: las membresías activas siguen siendo accesos habilitados. El tenant puede reducir usuarios (`USERS_REDUCE`) |
 

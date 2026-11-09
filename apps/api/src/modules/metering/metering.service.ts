@@ -4,6 +4,8 @@ import { Clock } from '../identity/clock';
 import { MeteringPrismaService } from './metering-prisma.service';
 import { USAGE_ALGORITHM_VERSION, computeUsageDay, minActiveSecondsOf } from './usage-calculation';
 
+type Tx = Prisma.TransactionClient;
+
 /** Un día se cierra 15 minutos después de terminar en la zona horaria de la empresa (billing §4). */
 export const DAY_CLOSE_MARGIN_MINUTES = 15;
 
@@ -59,19 +61,27 @@ export class MeteringService {
         const minActiveSeconds = await minActiveSecondsOf(tx);
         let created = 0;
         for (const { d } of pending) {
-          const day = await computeUsageDay(tx, { tenantId, date: d, timezone, minActiveSeconds });
-          const detail = JSON.stringify({ minActiveSeconds, intervals: day.intervals });
-          created += await tx.$executeRaw`
-            INSERT INTO usage_daily_snapshots (tenant_id, usage_date, timezone, day_range, peak_concurrent,
-                                               distinct_active, status, algorithm_version, detail, computed_at)
-            VALUES (${tenantId}::uuid, ${d}::date, ${timezone}, tstzrange(${day.dayFrom}, ${day.dayTo}, '[)'),
-                    ${day.peakConcurrent}, ${day.distinctActive}, 'FINAL', ${USAGE_ALGORITHM_VERSION},
-                    ${detail}::jsonb, ${now})
-            ON CONFLICT (tenant_id, usage_date) DO NOTHING`;
+          created += await insertSnapshot(tx, { tenantId, date: d, timezone, minActiveSeconds, now });
         }
         return created;
       },
       { timeout: 60_000, isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
     );
   }
+}
+
+/** Calcula y guarda el snapshot FINAL de un día terminado (idempotente). Devuelve 1 si lo creó. */
+export async function insertSnapshot(
+  tx: Tx,
+  input: { tenantId: string; date: string; timezone: string; minActiveSeconds: number; now: Date },
+): Promise<number> {
+  const day = await computeUsageDay(tx, input);
+  const detail = JSON.stringify({ minActiveSeconds: input.minActiveSeconds, intervals: day.intervals });
+  return tx.$executeRaw`
+    INSERT INTO usage_daily_snapshots (tenant_id, usage_date, timezone, day_range, peak_concurrent,
+                                       distinct_active, status, algorithm_version, detail, computed_at)
+    VALUES (${input.tenantId}::uuid, ${input.date}::date, ${input.timezone}, tstzrange(${day.dayFrom}, ${day.dayTo}, '[)'),
+            ${day.peakConcurrent}, ${day.distinctActive}, 'FINAL', ${USAGE_ALGORITHM_VERSION},
+            ${detail}::jsonb, ${input.now})
+    ON CONFLICT (tenant_id, usage_date) DO NOTHING`;
 }

@@ -22,6 +22,11 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set<string>([
   'MembershipInvitation',
   'MembershipStatusHistory',
   'UsageDailySnapshot',
+  'BillingPeriod',
+  'UsagePeriodCalculation',
+  'PlatformInvoice',
+  'PlatformInvoiceLine',
+  'SubscriptionPayment',
 ]);
 
 /** Nombres de tabla de TENANT_SCOPED_MODELS, para las verificaciones sobre el catálogo de PostgreSQL. */
@@ -39,6 +44,11 @@ export const TENANT_SCOPED_TABLES: readonly string[] = [
   'membership_invitations',
   'membership_status_history',
   'usage_daily_snapshots',
+  'billing_periods',
+  'usage_period_calculations',
+  'platform_invoices',
+  'platform_invoice_lines',
+  'subscription_payments',
 ];
 
 /**

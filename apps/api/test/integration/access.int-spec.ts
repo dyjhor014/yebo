@@ -35,6 +35,7 @@ const MIGRATION = resolve(__dirname, '../../prisma/migrations/20261110120000_fas
 /** Permisos que añaden migraciones posteriores (4.3b: members.invite): se toma su bloque de siembra tal cual. */
 const LATER_SEEDS = [
   resolve(__dirname, '../../prisma/migrations/20261110210000_fase4_3b_membership_invitations/migration.sql'),
+  resolve(__dirname, '../../prisma/migrations/20261111020000_fase4_5_billing/migration.sql'),
 ].map((file) => {
   const sql = readFileSync(file, 'utf8');
   return sql.slice(sql.indexOf('INSERT INTO "permissions"'), sql.indexOf('-- Roles ya creados'));

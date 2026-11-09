@@ -79,6 +79,7 @@ model Tenant {
   operationOverrides TenantOperationOverride[]
   invitations        MembershipInvitation[]
   usageSnapshots     UsageDailySnapshot[]
+  invoices           PlatformInvoice[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -463,6 +464,7 @@ model PlatformUser {
   opOverridesGranted TenantOperationOverride[] @relation("OpOverrideGrantedBy")
   opOverridesEnded   TenantOperationOverride[] @relation("OpOverrideEndedBy")
   invitationsSent    MembershipInvitation[]
+  paymentsRecorded   SubscriptionPayment[]
 
   @@map("platform_users")
 }
@@ -634,6 +636,10 @@ model PlanVersion {
   limits           Json              @default("{}")
   /// Política de estados (días de gracia y de cierre); esquema validado. Por defecto, la de multitenancy §5.
   suspensionPolicy Json              @default("{}") @map("suspension_policy")
+  /// Vencimiento de la factura = emisión + N días (Fase 4.5).
+  paymentTermsDays Int               @default(7) @map("payment_terms_days")
+  /// Tasa de impuesto sobre el subtotal; 0 hasta validar S5 (Fase 4.5).
+  taxRate          Decimal           @default(0) @map("tax_rate") @db.Decimal(5, 4)
   publishedAt      DateTime?         @map("published_at") @db.Timestamptz(6)
   retiredAt        DateTime?         @map("retired_at") @db.Timestamptz(6)
   createdById      String?           @map("created_by_id") @db.Uuid
@@ -644,6 +650,8 @@ model PlanVersion {
   createdBy     PlatformUser?       @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   modules       PlanVersionModule[]
   subscriptions Subscription[]
+
+  scheduledSubscriptions Subscription[] @relation("SubscriptionNextPlan")
 
   @@unique([planId, version])
   @@map("plan_versions")
@@ -705,6 +713,11 @@ model Subscription {
 
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   planVersion PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  /// Downgrade programado: aplica desde el período siguiente (billing §7).
+  nextPlanVersionId String?         @map("next_plan_version_id") @db.Uuid
+  nextPlanVersion   PlanVersion?    @relation("SubscriptionNextPlan", fields: [nextPlanVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  billingPeriods    BillingPeriod[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, isCurrent])
@@ -914,4 +927,176 @@ model UsageDailySnapshot {
   @@unique([tenantId, id])
   @@unique([tenantId, usageDate])
   @@map("usage_daily_snapshots")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 4.5 · Períodos, importe y cobro (billing §5–7)
+// ---------------------------------------------------------------------------------------------------------------
+
+enum BillingPeriodStatus {
+  OPEN
+  CLOSING
+  CLOSED
+
+  @@map("billing_period_status")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  PARTIALLY_PAID
+  VOID
+  OVERDUE
+
+  @@map("invoice_status")
+}
+
+enum InvoiceLineKind {
+  BASE
+  EXTRA_USERS
+  ADDON
+  ADJUSTMENT
+  CREDIT
+
+  @@map("invoice_line_kind")
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CASH
+  CARD
+  OTHER
+
+  @@map("payment_method")
+}
+
+enum PaymentStatus {
+  CONFIRMED
+  REVERSED
+
+  @@map("payment_status")
+}
+
+/// Período de facturación con zona horaria FIJA. OPEN → CLOSING → CLOSED; cerrado, inmutable (trigger).
+model BillingPeriod {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String              @map("tenant_id") @db.Uuid
+  subscriptionId String              @map("subscription_id") @db.Uuid
+  periodStart    DateTime            @map("period_start") @db.Date
+  /// Exclusivo: el período cubre [period_start, period_end).
+  periodEnd      DateTime            @map("period_end") @db.Date
+  timezone       String
+  isTrial        Boolean             @map("is_trial")
+  /// Upgrade a mitad de período: el período termina este día (exclusivo) y se factura prorrateado.
+  cutOff         DateTime?           @map("cut_off") @db.Date
+  status         BillingPeriodStatus @default(OPEN)
+  closedAt       DateTime?           @map("closed_at") @db.Timestamptz(6)
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  subscription Subscription            @relation(fields: [tenantId, subscriptionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  calculation  UsagePeriodCalculation?
+  invoice      PlatformInvoice?
+
+  @@unique([tenantId, id])
+  @@unique([subscriptionId, periodStart])
+  @@index([tenantId, status])
+  @@map("billing_periods")
+}
+
+/// Cálculo del período con la copia de la versión de plan y la serie diaria. Inmutable (trigger).
+model UsagePeriodCalculation {
+  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String           @map("tenant_id") @db.Uuid
+  billingPeriodId     String           @map("billing_period_id") @db.Uuid
+  usageMetric         UsageMetric      @map("usage_metric")
+  dailyAggregation    DailyAggregation @map("daily_aggregation")
+  metricValue         Int              @map("metric_value")
+  includedUsers       Int              @map("included_users")
+  extraUsers          Int              @map("extra_users")
+  currency            String           @db.Char(3)
+  baseAmount          Decimal          @map("base_amount") @db.Decimal(14, 2)
+  extraUserPrice      Decimal          @map("extra_user_price") @db.Decimal(14, 2)
+  extraAmount         Decimal          @map("extra_amount") @db.Decimal(14, 2)
+  subtotal            Decimal          @db.Decimal(14, 2)
+  taxRate             Decimal          @map("tax_rate") @db.Decimal(5, 4)
+  taxAmount           Decimal          @map("tax_amount") @db.Decimal(14, 2)
+  totalAmount         Decimal          @map("total_amount") @db.Decimal(14, 2)
+  planVersionSnapshot Json             @map("plan_version_snapshot")
+  pricing             Json
+  dailySeries         Json             @map("daily_series")
+  computedAt          DateTime         @map("computed_at") @db.Timestamptz(6)
+
+  period BillingPeriod @relation(fields: [tenantId, billingPeriodId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, billingPeriodId])
+  @@map("usage_period_calculations")
+}
+
+/// Factura de YEBO a la empresa. Importes inmutables; solo cambian estado y saldo (trigger).
+model PlatformInvoice {
+  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String        @map("tenant_id") @db.Uuid
+  code              String        @unique
+  billingPeriodId   String?       @map("billing_period_id") @db.Uuid
+  status            InvoiceStatus
+  issueDate         DateTime      @map("issue_date") @db.Date
+  dueDate           DateTime      @map("due_date") @db.Date
+  currency          String        @db.Char(3)
+  subtotal          Decimal       @db.Decimal(14, 2)
+  tax               Decimal       @db.Decimal(14, 2)
+  total             Decimal       @db.Decimal(14, 2)
+  balance           Decimal       @db.Decimal(14, 2)
+  fiscalDocumentRef Json?         @map("fiscal_document_ref")
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  period   BillingPeriod?        @relation(fields: [tenantId, billingPeriodId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  lines    PlatformInvoiceLine[]
+  payments SubscriptionPayment[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, billingPeriodId])
+  @@index([tenantId, status])
+  @@map("platform_invoices")
+}
+
+model PlatformInvoiceLine {
+  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String          @map("tenant_id") @db.Uuid
+  invoiceId   String          @map("invoice_id") @db.Uuid
+  kind        InvoiceLineKind
+  description String
+  quantity    Int
+  unitPrice   Decimal         @map("unit_price") @db.Decimal(14, 2)
+  amount      Decimal         @db.Decimal(14, 2)
+
+  invoice PlatformInvoice @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([invoiceId])
+  @@map("platform_invoice_lines")
+}
+
+/// Pago registrado a mano por el staff (sin pagos simulados).
+model SubscriptionPayment {
+  id                       String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                 String        @map("tenant_id") @db.Uuid
+  invoiceId                String        @map("invoice_id") @db.Uuid
+  amount                   Decimal       @db.Decimal(14, 2)
+  method                   PaymentMethod
+  reference                String
+  paidAt                   DateTime      @map("paid_at") @db.Timestamptz(6)
+  recordedByPlatformUserId String        @map("recorded_by_platform_user_id") @db.Uuid
+  status                   PaymentStatus @default(CONFIRMED)
+  createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  invoice    PlatformInvoice @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  recordedBy PlatformUser    @relation(fields: [recordedByPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([invoiceId])
+  @@map("subscription_payments")
 }

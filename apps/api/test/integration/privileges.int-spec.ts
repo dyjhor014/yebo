@@ -23,15 +23,19 @@ const RUNTIME = ['yebo_app', 'yebo_platform', 'yebo_identity', 'yebo_backoffice'
 
 /** Matriz esperada de privilegios de TABLA (explícitos) de los roles de ejecución en el esquema public. */
 const EXPECTED_TABLE_GRANTS = [
+  'yebo_app billing_periods SELECT',
   'yebo_app membership_invitations INSERT,SELECT',
   'yebo_app membership_roles DELETE,INSERT,SELECT,UPDATE',
   'yebo_app membership_status_history INSERT,SELECT',
   'yebo_app modules SELECT',
   'yebo_app permissions SELECT',
   'yebo_app plan_version_modules SELECT',
+  'yebo_app platform_invoice_lines SELECT',
+  'yebo_app platform_invoices SELECT',
   'yebo_app role_permissions DELETE,INSERT,SELECT,UPDATE',
   'yebo_app role_templates SELECT',
   'yebo_app roles DELETE,INSERT,SELECT,UPDATE',
+  'yebo_app subscription_payments SELECT',
   'yebo_app subscriptions SELECT',
   'yebo_app tenant_memberships SELECT',
   'yebo_app tenant_module_overrides SELECT',
@@ -40,6 +44,8 @@ const EXPECTED_TABLE_GRANTS = [
   'yebo_app tenant_settings SELECT',
   'yebo_app tenant_status_history SELECT',
   'yebo_app usage_daily_snapshots SELECT',
+  'yebo_app usage_period_calculations SELECT',
+  'yebo_backoffice billing_periods INSERT,SELECT',
   'yebo_backoffice membership_invitations INSERT,SELECT',
   'yebo_backoffice membership_status_history SELECT',
   'yebo_backoffice modules SELECT',
@@ -48,12 +54,15 @@ const EXPECTED_TABLE_GRANTS = [
   'yebo_backoffice plan_versions INSERT,SELECT,UPDATE',
   'yebo_backoffice plans INSERT,SELECT,UPDATE',
   'yebo_backoffice platform_audit_logs INSERT,SELECT',
+  'yebo_backoffice platform_invoice_lines SELECT',
+  'yebo_backoffice platform_invoices SELECT',
   'yebo_backoffice platform_sessions INSERT,SELECT,UPDATE',
   'yebo_backoffice platform_setup_tokens INSERT,SELECT,UPDATE',
   'yebo_backoffice platform_users INSERT,SELECT,UPDATE',
   'yebo_backoffice role_permissions INSERT',
   'yebo_backoffice role_templates SELECT',
   'yebo_backoffice roles INSERT,SELECT',
+  'yebo_backoffice subscription_payments INSERT,SELECT',
   'yebo_backoffice subscriptions INSERT,SELECT',
   'yebo_backoffice tenant_domains INSERT,SELECT',
   'yebo_backoffice tenant_module_overrides INSERT,SELECT,UPDATE',
@@ -63,6 +72,7 @@ const EXPECTED_TABLE_GRANTS = [
   'yebo_backoffice tenant_status_history INSERT,SELECT',
   'yebo_backoffice tenants INSERT,SELECT',
   'yebo_backoffice usage_daily_snapshots SELECT',
+  'yebo_backoffice usage_period_calculations SELECT',
   'yebo_identity authorization_codes INSERT,SELECT,UPDATE',
   'yebo_identity identity_sessions INSERT,SELECT,UPDATE',
   'yebo_identity membership_invitations SELECT',
@@ -75,11 +85,15 @@ const EXPECTED_TABLE_GRANTS = [
   'yebo_identity tenant_operation_overrides SELECT',
   'yebo_identity tenant_sessions INSERT,SELECT,UPDATE',
   'yebo_identity users INSERT,SELECT',
+  'yebo_metering billing_periods INSERT,SELECT',
   'yebo_metering membership_status_history SELECT',
   'yebo_metering plan_versions SELECT',
-  'yebo_metering subscriptions SELECT',
+  'yebo_metering platform_invoice_lines INSERT,SELECT',
+  'yebo_metering platform_invoices INSERT,SELECT',
+  'yebo_metering subscriptions INSERT,SELECT',
   'yebo_metering tenants SELECT',
   'yebo_metering usage_daily_snapshots INSERT,SELECT',
+  'yebo_metering usage_period_calculations INSERT,SELECT',
   'yebo_platform tenant_domains SELECT',
   'yebo_platform tenants SELECT',
 ];
@@ -91,7 +105,12 @@ const EXPECTED_COLUMN_GRANTS = [
   'yebo_app tenant_memberships.permissions_version UPDATE',
   'yebo_app tenant_memberships.status UPDATE',
   'yebo_app tenant_memberships.updated_at UPDATE',
-  // Fase 4.3a: transiciones de estado del tenant y de su suscripción vigente.
+  'yebo_backoffice billing_periods.cut_off UPDATE',
+  'yebo_backoffice platform_invoices.balance UPDATE',
+  'yebo_backoffice platform_invoices.status UPDATE',
+  'yebo_backoffice platform_invoices.updated_at UPDATE',
+  'yebo_backoffice subscriptions.is_current UPDATE',
+  'yebo_backoffice subscriptions.next_plan_version_id UPDATE',
   'yebo_backoffice subscriptions.status UPDATE',
   'yebo_backoffice subscriptions.updated_at UPDATE',
   'yebo_backoffice tenants.activated_at UPDATE',
@@ -100,13 +119,19 @@ const EXPECTED_COLUMN_GRANTS = [
   'yebo_backoffice tenants.status_changed_at UPDATE',
   'yebo_backoffice tenants.trial_ends_at UPDATE',
   'yebo_backoffice tenants.updated_at UPDATE',
-  // Fase 4.3b: aceptar invitaciones en el hub.
   'yebo_identity membership_invitations.accepted_at UPDATE',
   'yebo_identity membership_invitations.accepted_membership_id UPDATE',
   'yebo_identity membership_status_history.valid_to UPDATE',
   'yebo_identity tenant_memberships.permissions_version UPDATE',
   'yebo_identity tenant_memberships.status UPDATE',
   'yebo_identity tenant_memberships.updated_at UPDATE',
+  'yebo_metering billing_periods.closed_at UPDATE',
+  'yebo_metering billing_periods.status UPDATE',
+  'yebo_metering subscriptions.current_period_end UPDATE',
+  'yebo_metering subscriptions.current_period_start UPDATE',
+  'yebo_metering subscriptions.is_current UPDATE',
+  'yebo_metering subscriptions.next_plan_version_id UPDATE',
+  'yebo_metering subscriptions.updated_at UPDATE',
 ];
 
 function walk(dir: string): string[] {
@@ -252,7 +277,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
       expect(rows.map((r) => r.line)).toEqual(EXPECTED_TABLE_GRANTS);
     });
 
-    it('privilegios de columna explícitos: membresías (3.3), estados (4.3a), invitaciones (4.3b) e historial (4.4)', async () => {
+    it('privilegios de columna explícitos: membresías, estados, invitaciones, historial y facturación (3.3–4.5)', async () => {
       const { rows } = await owner.query<{ line: string }>(
         `SELECT r.rolname || ' ' || c.relname || '.' || att.attname || ' ' || a.privilege_type AS line
            FROM pg_attribute att JOIN pg_class c ON c.oid = att.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace,

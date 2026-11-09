@@ -41,6 +41,13 @@ export const PlanVersionInputSchema = z
     dailyAggregation: z.enum(['PEAK_CONCURRENT', 'DISTINCT_ACTIVE']).default('PEAK_CONCURRENT'),
     minActiveSeconds: z.number().int().nonnegative().default(0),
     trialDays: z.number().int().min(0).max(365).default(0),
+    /** Vencimiento de la factura = emisión + N días (Fase 4.5). */
+    paymentTermsDays: z.number().int().min(0).max(90).default(7),
+    /** Tasa de impuesto sobre el subtotal, como fracción («0.18»); 0 hasta validar S5 (Fase 4.5). */
+    taxRate: z
+      .string()
+      .regex(/^0(\.\d{1,4})?$/, 'Fracción entre 0 y 1 con hasta 4 decimales')
+      .default('0'),
     limits: PlanLimitsSchema.default({ branches: null, vehicles: null, storageGb: null }),
     suspensionPolicy: SuspensionPolicySchema.default({ pastDueGraceDays: 7, cancelledClosingDays: 30 }),
     modules: z

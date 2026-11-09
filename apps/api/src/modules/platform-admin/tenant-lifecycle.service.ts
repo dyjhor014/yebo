@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AppError } from '../../common/errors/app-error';
-import type { TenantStatus } from '../../generated/prisma/client';
+import type { Prisma, TenantStatus } from '../../generated/prisma/client';
 import { Clock } from '../identity/clock';
 import { TenantResolverService } from '../tenancy/tenant-resolver.service';
 import { BackofficePrismaService } from './backoffice-prisma.service';
@@ -44,8 +44,18 @@ export class TenantLifecycleService {
 
   /** Devuelve `false` si `expect` ya no se cumple (el job lo omite sin error). */
   async transition(req: TransitionRequest): Promise<boolean> {
+    const applied = await this.db.client.$transaction((tx) => this.applyIn(tx, req));
+    if (applied) await this.invalidate(req.tenantId);
+    return applied;
+  }
+
+  /**
+   * La transición DENTRO de una transacción ya abierta (p. ej., el registro de un pago que reactiva la empresa).
+   * Quien llama invalida la caché del resolvedor después del commit (`invalidate`).
+   */
+  async applyIn(tx: Prisma.TransactionClient, req: TransitionRequest): Promise<boolean> {
     const now = this.clock.now();
-    const applied = await this.db.client.$transaction(async (tx) => {
+    {
       const [row] = await tx.$queryRaw<{ status: TenantStatus; status_changed_at: Date }[]>`
         SELECT status::text AS status, status_changed_at FROM tenants WHERE id = ${req.tenantId}::uuid FOR UPDATE`;
       if (!row) throw new AppError('NOT_FOUND', 'Recurso no encontrado', 404);
@@ -98,9 +108,7 @@ export class TenantLifecycleService {
         tx,
       );
       return true;
-    });
-    if (applied) await this.invalidate(req.tenantId);
-    return applied;
+    }
   }
 
   /**
@@ -109,6 +117,7 @@ export class TenantLifecycleService {
    */
   async runDue(): Promise<number> {
     const now = this.clock.now();
+    let applied = await this.markOverdue(now);
     const candidates = await this.db.client.tenant.findMany({
       where: {
         OR: [
@@ -118,7 +127,6 @@ export class TenantLifecycleService {
       },
       select: { id: true, status: true, statusChangedAt: true, trialEndsAt: true },
     });
-    let applied = 0;
     for (const c of candidates) {
       const pastDueGraceDays = c.status === 'PAST_DUE' ? await this.graceDays(c.id) : null;
       const to = dueTransition({ ...c, pastDueGraceDays }, now);
@@ -135,6 +143,43 @@ export class TenantLifecycleService {
       } catch (error) {
         // Un tenant problemático no detiene a los demás; el siguiente ciclo lo reintenta.
         this.logger.error({ err: error, tenantId: c.id, to }, 'No se pudo aplicar la transición automática');
+      }
+    }
+    return applied;
+  }
+
+  /**
+   * Facturas vencidas (Fase 4.5): las emitidas o parciales con saldo y fecha de vencimiento ya pasada en la zona de
+   * la empresa pasan a OVERDUE; una empresa ACTIVE con una factura vencida pasa a PAST_DUE (multitenancy §5.2).
+   */
+  private async markOverdue(now: Date): Promise<number> {
+    const tenants = await this.db.client.tenant.findMany({
+      select: { id: true, status: true, statusChangedAt: true, timezone: true },
+    });
+    let applied = 0;
+    for (const t of tenants) {
+      try {
+        const overdue = await this.db.withTenant(t.id, async (tx) => {
+          await tx.$executeRaw`
+            UPDATE platform_invoices SET status = 'OVERDUE', updated_at = now()
+             WHERE status IN ('ISSUED', 'PARTIALLY_PAID') AND balance > 0
+               AND due_date < (${now}::timestamptz AT TIME ZONE ${t.timezone})::date`;
+          const [row] = await tx.$queryRaw<{ n: number }[]>`
+            SELECT count(*)::int AS n FROM platform_invoices WHERE status = 'OVERDUE' AND balance > 0`;
+          return (row?.n ?? 0) > 0;
+        });
+        if (overdue && t.status === 'ACTIVE') {
+          const done = await this.transition({
+            tenantId: t.id,
+            to: 'PAST_DUE',
+            reason: AUTOMATIC_REASON.PAST_DUE ?? 'Factura vencida',
+            actorPlatformUserId: null,
+            expect: { status: t.status, statusChangedAt: t.statusChangedAt },
+          });
+          if (done) applied += 1;
+        }
+      } catch (error) {
+        this.logger.error({ err: error, tenantId: t.id }, 'No se pudieron revisar sus facturas vencidas');
       }
     }
     return applied;

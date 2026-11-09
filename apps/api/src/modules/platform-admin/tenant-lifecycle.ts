@@ -63,5 +63,6 @@ export function dueTransition(c: LifecycleCandidate, now: Date): TenantStatus | 
 
 export const AUTOMATIC_REASON: Readonly<Partial<Record<TenantStatus, string>>> = {
   EXPIRED: 'Fin del periodo de prueba sin activación',
+  PAST_DUE: 'Factura vencida sin pagar',
   SUSPENDED: 'Fin de los días de gracia sin regularizar el pago',
 };

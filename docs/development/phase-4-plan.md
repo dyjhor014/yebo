@@ -1,6 +1,6 @@
 # Fase 4 — Superadmin SaaS y membresías: plan de trabajo
 
-- **Estado:** ✅ Plan **aprobado** por el responsable el 2026-11-10, con las decisiones F4-Q1 a F4-Q6 tal como se recomendaron. Etapa **4.1 implementada**, pendiente de revisión; etapa **4.2 aprobada** (2026-11-10); etapa **4.3a aprobada** (2026-11-10). Etapa **4.3b aprobada** (2026-11-10). Etapa **4.4 aprobada** (2026-11-10).
+- **Estado:** ✅ Plan **aprobado** por el responsable el 2026-11-10, con las decisiones F4-Q1 a F4-Q6 tal como se recomendaron. Etapa **4.1 implementada**, pendiente de revisión; etapa **4.2 aprobada** (2026-11-10); etapa **4.3a aprobada** (2026-11-10). Etapa **4.3b aprobada** (2026-11-10). Etapa **4.4 aprobada** (2026-11-10). Etapa **4.5 aprobada** (2026-11-10).
 - **Rama:** `fase-4/plan`, apilada sobre `fase-3/adr-034-privilegios` (`d21b591`). La Fase 3 sigue en revisión.
 - **Criterio de aceptación (roadmap):** crear empresa, asignar plan, medir usuarios y calcular el importe.
 - **Decisiones que se implementan:**
@@ -408,3 +408,80 @@ La 4.3 se divide en dos partes, cada una con sus pruebas: **4.3a** (alta de empr
 
 - ✅ Migraciones aplicadas a `yebo_dev` (con copia previa).
 - 4.5: la zona horaria del período sustituye a la de la empresa.
+
+## Etapa 4.5 · Períodos, importe y cobro (implementada y aprobada el 2026-11-10)
+
+### Decisiones del responsable (2026-11-10)
+
+| Pregunta | Decisión |
+|---|---|
+| ¿Cuándo vence una factura? | **Días por plan:** `plan_versions.payment_terms_days` (por defecto 7); vencimiento = emisión + N días |
+| Impuestos mientras S5 no esté validado | **Tasa 0 configurable:** `plan_versions.tax_rate` (por defecto 0); los precios del plan son la base imponible. Cuando el contador valide S5 se fija la tasa sin migrar datos (**pendiente explícito**) |
+| Períodos en prueba | **Sin factura:** se cierran y se calculan, pero no se emite factura |
+| Reactivación al pagar | **Sin saldo vencido:** cuando no queda ninguna factura vencida con saldo, la empresa en `PAST_DUE`, `SUSPENDED` o `EXPIRED` vuelve a `ACTIVE` en la misma transacción que el pago. Pagos parciales sí; pagar más que el saldo, no |
+
+### Decisiones de implementación
+
+| Tema | Decisión | Motivo |
+|---|---|---|
+| Precio (F4-Q1) | **Punto único** `billing/pricing.ts` (`resolvePricing`): la versión de plan con la excepción comercial de la suscripción (`price_override`: `basePrice`, `extraUserPrice`, `includedUsers` y un motivo obligatorio; cualquier otro campo detiene el cierre). El cálculo guarda el precio aplicado (`pricing`) y la copia de la versión de plan | ADR-031 podrá sustituir solo esa función, sin migrar datos |
+| Valor e importe | `periodValue` (`PEAK_DAILY` = máximo, `AVERAGE_DAILY` = techo de la media, `END_OF_PERIOD` = último día) y `periodAmounts` (adicionales, base, impuesto redondeado a 2 decimales), con `Decimal`, nunca `float` | billing §5 |
+| Períodos | `[period_start, period_end)` en fechas locales, con la zona horaria **fija** desde que se abre. El job abre el período de la suscripción vigente si falta (salvo empresas `CANCELLED` o `EXPIRED`) | billing §2.2 |
+| Cierre | Job horario del worker (el mismo de la medición, rol `yebo_metering`), 15 min después del fin del período. Por empresa, con su contexto y un cerrojo consultivo, en una transacción: `OPEN` → `CLOSING`; completa los snapshots que falten (nunca factura con días faltantes); calcula; si no es de prueba, emite la factura (`ISSUED`, o `PAID` si el total es 0) con sus líneas `BASE` y `EXTRA_USERS`; `CLOSED`; avanza la suscripción y abre el período siguiente. Un job caído varios períodos los cierra en orden | billing §6 |
+| Código de factura | `YB-AAAAMM-` más 8 caracteres hexadecimales del id: único, sin secuencia. La numeración fiscal correlativa llegará con el comprobante (`fiscal_document_ref`, puerto de facturación de la Fase 11) | Una secuencia suelta rompería la prueba de deriva |
+| Inmutabilidad | Triggers: período cerrado inmutable (y transiciones solo hacia adelante); cálculos y líneas append-only; factura con importes, fechas y período inmutables (solo cambian estado y saldo); facturas, períodos y pagos nunca se borran. `CHECK` de coherencia de importes, y de estado y saldo | billing §6 |
+| Vencimiento | El job de estados (4.3a) marca `OVERDUE` las facturas con saldo cuya fecha de vencimiento ya pasó en la zona de la empresa, y pasa la empresa `ACTIVE` a `PAST_DUE`. La gracia hasta `SUSPENDED` ya existía | multitenancy §5.2 |
+| Pagos | `POST /platform/tenants/:id/invoices/:invoiceId/payments` (`platform.billing.manage`: BILLING y SUPERADMIN). Bloquea la factura; rechaza pagar más que el saldo (`400`) o una factura pagada o anulada (`409`); guarda el pago; actualiza saldo y estado (`PAID`, `PARTIALLY_PAID` u `OVERDUE`); audita; reactiva si procede. La transición de estado se separó de su transacción (`TenantLifecycleService.applyIn`) para hacerlo todo en una | Decisión del 2026-11-10 |
+| Panel | `GET /platform/tenants/:id/billing` (`platform.billing.read`): períodos con su cálculo, y facturas con líneas y pagos | Pantallas de la 4.7 |
+| Empresa | `GET /api/v1/billing/obligations` (permiso nuevo `billing.read`, categoría `BILLING_SELF`, disponible también suspendida): saldo pendiente por moneda, período en curso y facturas con líneas y pagos | «Obligaciones con YEBO» |
+
+### Base de datos
+
+- **Migración `20261111020000_fase4_5_billing`:**
+  - columnas `payment_terms_days` y `tax_rate` en `plan_versions`;
+  - tablas `billing_periods`, `usage_period_calculations`, `platform_invoices`, `platform_invoice_lines` y `subscription_payments`, de tenant, con RLS forzado y claves foráneas compuestas;
+  - `CHECK` e inmutabilidad;
+  - permiso `billing.read`, añadido a la plantilla y a los roles Administrador existentes.
+
+  La reversión está en su cabecera.
+- **Privilegios:**
+  - `yebo_metering`:
+    - SELECT e INSERT en períodos, cálculos, facturas y líneas;
+    - UPDATE del estado y del cierre del período, y del período vigente de la suscripción.
+  - `yebo_backoffice`:
+    - SELECT de todo;
+    - INSERT de pagos;
+    - UPDATE del estado y del saldo de las facturas.
+  - `yebo_app`: SELECT de sus períodos, cálculos, facturas, líneas y pagos (RLS).
+
+### Pruebas
+
+| Suite | Contenido | Resultado |
+|---|---|---|
+| Unitarias: `pricing.spec` (6) | Ejemplo de §5 (204), sin adicionales, las tres métricas y la serie vacía, excepción comercial (y su rechazo si está mal formada), impuesto redondeado | ✅ |
+| `billing.int-spec` (15, con el cambio de plan) | **Cierre:** margen de 15 min y los 31 días; fórmula de §5 (12 → 7 adicionales → 204,00) con copia del plan; factura, líneas y vencimiento a 7 días; suscripción avanzada y período siguiente abierto; repetir no crea nada; revocar usuarios después no altera la factura; nada se modifica tras el cierre (período, cálculo, líneas, importes, snapshots); `AVERAGE_DAILY` y `END_OF_PERIOD`; trial sin factura; excepción comercial. **Cobro:** parcial, superar el saldo, VIEWER sin permiso; vencimiento (no el mismo día, sí el siguiente) → `OVERDUE` y `PAST_DUE`; pagar el saldo → `PAID` y `ACTIVE` con historial y auditoría; factura pagada → `409`. **Empresa:** obligaciones propias, y RLS frente a otra empresa | ✅ |
+| `access` y `privileges` | `billing.read` en el catálogo y la plantilla; matriz versionada | ✅ |
+| Integración completa | 20 suites y 344 pruebas (con el cambio de plan) | ✅ |
+| Unitarias, lint, typecheck, formato y build | 144 unitarias | ✅ |
+
+**Mutaciones detectadas (11 de 11):**
+- en el cierre: sin margen, sin completar los días, trial facturado, sin avanzar la suscripción, vencimiento sin los días del plan, sin la excepción comercial;
+- en los pagos: sin límite de saldo, factura pagada que admite pagos, sin reactivar;
+- en los vencimientos: sin marcar vencidas, vencer el mismo día.
+
+### Cambio de plan a mitad de período (decisión del responsable, 2026-11-10)
+
+Sustituye la regla MVP de billing §7 para los upgrades. Migración `20261111030000_fase4_5_plan_change`.
+
+| Caso | Regla e implementación |
+|---|---|
+| Upgrade (la base mensual equivalente sube, o es igual con más incluidos) | Aplica **hoy** (día local de la empresa), desde la petición siguiente: módulos y límites salen de la suscripción vigente. En una transacción del panel (`POST /platform/tenants/:id/subscription/plan`, `platform.billing.manage`): el período en curso recibe `cut_off` = hoy, la suscripción vigente deja de serlo y se crea otra con el plan nuevo que empieza hoy con su propio ciclo, junto con su período. El job cierra el período cortado con los días hasta ayer: **base prorrateada** (días usados / días del período, redondeo a 2 decimales) más los usuarios adicionales medidos en esos días a su precio; la factura se emite el día del corte. El período nuevo se factura a su cierre |
+| Downgrade | Se programa (`subscriptions.next_plan_version_id`) y aplica al cerrar el período en curso, que se cobra completo: el job crea la suscripción nueva desde el fin del período |
+| Restricciones | Solo versiones publicadas y distintas de la vigente; empresa en `TRIAL`, `ACTIVE` o `PAST_DUE`. El corte se fija una sola vez y no se mueve (trigger). La excepción comercial del plan anterior no pasa a la suscripción nueva. Un upgrade el mismo día en que empezaba el período cierra ese período sin días ni importe |
+| Pruebas | Upgrade el 21/10: el período de octubre se cierra con 20/31 días (63,87 de base + 7 × 15 = 168,87, emitida el 21/10) y el nuevo (21/10–21/11) se factura a su cierre con el plan nuevo (199,00); downgrade aplicado el 1/11 con octubre completo (204,00); validaciones. Unitaria del prorrateo. Mutaciones detectadas (5 de 5): todo es upgrade, sin prorrateo, corte ignorado, downgrade no aplicado, versión no publicada |
+
+### Pendiente
+
+- **S5:** fijar `tax_rate` cuando el contador valide los impuestos.
+- **Ajustes y anulaciones** (`ADJUSTMENT`, `CREDIT`, `VOID`) y **reversión de pagos** (`REVERSED`): los tipos existen, pero no hay operación todavía.
+- ✅ Migraciones aplicadas a `yebo_dev` el 2026-11-10 (con copia previa).

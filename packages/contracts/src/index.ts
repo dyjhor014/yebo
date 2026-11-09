@@ -1,6 +1,7 @@
 export * from './catalog';
 export * from './tenants';
 export * from './invitations';
+export * from './billing';
 export * from './platform';
 export * from './access';
 export * from './auth';

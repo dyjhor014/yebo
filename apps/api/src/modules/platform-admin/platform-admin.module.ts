@@ -3,13 +3,16 @@ import { FieldEncryption } from '../../common/crypto/field-encryption';
 import { IdentityModule } from '../identity/identity.module';
 import { TenancyModule } from '../tenancy/tenancy.module';
 import { BackofficePrismaService } from './backoffice-prisma.service';
+import { BillingService } from './billing.service';
 import { CatalogService } from './catalog.service';
+import { BillingController } from './http/billing.controller';
 import { CatalogController } from './http/catalog.controller';
 import { PlatformAuthController } from './http/platform-auth.controller';
 import { PlatformInvitationsController } from './http/platform-invitations.controller';
 import { PlatformGuard } from './http/platform.guard';
 import { StaffController } from './http/staff.controller';
 import { TenantsController } from './http/tenants.controller';
+import { PlanChangeService } from './plan-change.service';
 import { PlatformAuditService } from './platform-audit.service';
 import { PlatformAuthService } from './platform-auth.service';
 import { StaffService } from './staff.service';
@@ -29,6 +32,7 @@ import { TenantsService } from './tenants.service';
     CatalogController,
     TenantsController,
     PlatformInvitationsController,
+    BillingController,
   ],
   providers: [
     BackofficePrismaService,
@@ -39,6 +43,8 @@ import { TenantsService } from './tenants.service';
     CatalogService,
     TenantLifecycleService,
     TenantsService,
+    BillingService,
+    PlanChangeService,
     PlatformGuard,
   ],
   exports: [PlatformAuthService, PlatformGuard],
