@@ -107,6 +107,8 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
     const nest = moduleRef.createNestApplication<NestExpressApplication>({ bufferLogs: true });
     configureApp(nest, parseEnv(process.env), { swagger: false });
     await nest.init();
+    // Un solo servidor escuchando: si no, supertest abre uno por petición (fuga de listeners con carga).
+    await nest.listen(0, '127.0.0.1');
     app = nest;
     sessions = app.get(SessionService);
     cls = app.get(ClsService);

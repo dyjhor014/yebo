@@ -13,7 +13,9 @@
 
 La **3.2b** (hub de cuentas y flujo OAuth propio + PKCE S256, con sus pantallas y la identidad visual YEBO v1.0) está **implementada y pendiente de revisión**. La 3.2 completa está en un **commit local** (`83df1c1`, rama `fase-3/3.2-sesiones`, sin push).
 
-La **3.3** (autorización y estado del tenant: guards globales con denegación por defecto, permisos, matriz de estados y gestión mínima de accesos) está **implementada y pendiente de revisión** en la rama `fase-3/3.3-autorizacion`, sin commit. `support_access_grants` pasa a la Fase 4. Sus migraciones no se aplicaron a ninguna base del proyecto. Plan: [phase-3-plan.md](docs/development/phase-3-plan.md).
+La **3.3** (autorización y estado del tenant: guards globales con denegación por defecto, permisos, matriz de estados y gestión mínima de accesos) está en un **commit local** (`1c695b1`, rama `fase-3/3.3-autorizacion`, sin push).
+
+La **3.4** (cierre: aislamiento de extremo a extremo sobre endpoints autenticados y medición del coste de una transacción por operación) está **implementada y pendiente de revisión** en la rama `fase-3/3.4-cierre`, sin commit. **Criterio de aceptación de la Fase 3 cumplido:** las siete pruebas de multitenancy §7 pasan y se ejecutan en CI. Resultados: [phase-3-results.md](docs/development/phase-3-results.md). `support_access_grants` pasa a la Fase 4. Sus migraciones no se aplicaron a ninguna base del proyecto. Plan: [phase-3-plan.md](docs/development/phase-3-plan.md).
 
 La Fase 2 sigue en revisión mediante el PR #1, sin merge. Orden de integración previsto: #1 → #3 → #2.
 
@@ -66,4 +68,4 @@ Ninguno abierto.
 3. Revisión de la etapa 3.1 (PR #4) y de la etapa 3.2a.
 4. Revisión del SQL de **ADR-034** (separación de privilegios: `yebo_platform` sin BYPASSRLS; rol `yebo_test_bypass` solo para pruebas), propuesto en [phase-3-plan](docs/development/phase-3-plan.md). Dirección aprobada; **no implementado**.
 5. Para migrar `yebo_dev` tras aprobar la 3.2 y la 3.3: `scripts/dev/create-identity-role.sh` y después `pnpm --filter @yebo/api db:migrate:deploy` (reversiones en [phase-3-plan](docs/development/phase-3-plan.md)).
-6. Revisión de la 3.2b (commit local `83df1c1`) y de la **3.3** (rama `fase-3/3.3-autorizacion`, sin commit). La 3.4 (cierre de la Fase 3) **solo con autorización expresa**.
+6. Revisión de la Fase 3 completa: 3.2 (`83df1c1`), 3.3 (`1c695b1`) y 3.4 (sin commit). Decisiones pendientes en [phase-3-results §4](docs/development/phase-3-results.md#4-pendientes-para-cerrar-la-fase-3): ADR-034, migración de `yebo_dev`, la regla «≥ 2 operaciones → una transacción», y commits, push y PR. La Fase 4 **solo con autorización expresa**.

@@ -103,7 +103,7 @@ CREATE POLICY tenant_isolation ON shipments
 - La extensión de Prisma envuelve cada operación de tenant en una transacción que primero ejecuta `SELECT set_config('app.tenant_id', $1, true)`. El tercer parámetro, `true`, hace el valor **local a la transacción**, lo que evita fugas entre requests que comparten conexión del *pool*.
 - Sin `app.tenant_id`, `current_setting(..., true)` devuelve `NULL` (conexión nueva) o `''` (conexión reutilizada). Con `NULLIF`, en ambos casos la política no devuelve filas y la escritura falla. La falla es segura por defecto.
 - Cada transacción fija su tenant explícitamente; el contexto nunca se hereda de una conexión anterior (ADR-025). Están prohibidos `SET`/`SET SESSION`, `set_config(..., false)` y los valores por defecto de rol o base de datos.
-- Coste: una transacción por operación. Se medirá en la Fase 3; si penaliza, se agrupan las lecturas de un request en una sola transacción.
+- Coste: una transacción por operación. Se medirá en la Fase 3; si penaliza, se agrupan las lecturas de un request en una sola transacción. *(Medido en la Fase 3.4: unas 4 idas y vueltas por operación, ×3,2 frente a una lectura simple; penaliza en peticiones con varias lecturas. Datos y propuesta, pendiente de decisión, en [phase-3-results §3](../development/phase-3-results.md#3-coste-de-una-transacción-por-operación-multitenancy-42).)*
 
 ### 4.3 Tablas globales (sin `tenant_id`, sin RLS de tenant)
 
