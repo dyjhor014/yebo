@@ -12,7 +12,7 @@ import { cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Pool } from 'pg';
-import { testPool } from '../support/db';
+import { grantTestBypass, testBypassPool, testPool } from '../support/db';
 
 const API_ROOT = resolve(__dirname, '..', '..');
 const PRISMA_CLI = require.resolve('prisma/build/index.js', { paths: [API_ROOT] });
@@ -35,7 +35,7 @@ interface MigrationSet {
   extensions: string[];
   /** Migraciones del esquema anterior a ADR-024/025 (null: no existe un esquema anterior). */
   previous: string[] | null;
-  /** Siembra datos de dos tenants con el rol de plataforma; devuelve el número de filas por tabla. */
+  /** Siembra datos de dos tenants con el rol exclusivo de pruebas (ADR-034); devuelve el número de filas por tabla. */
   seed?: (platform: Pool) => Promise<Record<string, number>>;
 }
 
@@ -57,19 +57,22 @@ function expectOk(result: { status: number | null; output: string }): string {
   return result.output;
 }
 
-/** Deja la base como recién creada por el script de inicialización: esquema public vacío y sin extensiones. */
-async function resetDatabase(owner: Pool): Promise<void> {
+/**
+ * Deja la base como recién creada por el script de inicialización (ADR-034): esquema public vacío y sin extensiones.
+ * Las bases de la aplicación NO tienen privilegios por defecto (cada migración declara sus GRANT); las de las PoC
+ * de la Fase 2 sí dan DML por defecto a yebo_app, porque sus migraciones no llevan GRANT.
+ */
+async function resetDatabase(owner: Pool, set: MigrationSet): Promise<void> {
   await owner.query(`
     DROP SCHEMA public CASCADE;
     CREATE SCHEMA public;
     REVOKE ALL ON SCHEMA public FROM PUBLIC;
-    GRANT USAGE ON SCHEMA public TO yebo_app, yebo_platform;
-    ALTER DEFAULT PRIVILEGES FOR ROLE yebo_owner IN SCHEMA public
-      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO yebo_app, yebo_platform;
-    ALTER DEFAULT PRIVILEGES FOR ROLE yebo_owner IN SCHEMA public
-      GRANT USAGE, SELECT ON SEQUENCES TO yebo_app, yebo_platform;
-    ALTER DEFAULT PRIVILEGES FOR ROLE yebo_owner IN SCHEMA public
-      GRANT EXECUTE ON FUNCTIONS TO yebo_app, yebo_platform;`);
+    GRANT USAGE ON SCHEMA public TO yebo_app, yebo_platform, yebo_identity, yebo_test_bypass;`);
+  if (set.schema.startsWith('test/poc/')) {
+    await owner.query(`
+      ALTER DEFAULT PRIVILEGES FOR ROLE yebo_owner IN SCHEMA public
+        GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO yebo_app;`);
+  }
   const { rows } = await owner.query<{ objects: number; extensions: number }>(`
     SELECT (SELECT count(*)::int FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
              WHERE n.nspname = 'public') AS objects,
@@ -289,7 +292,8 @@ describe.each(SETS)('migraciones · $name', (set) => {
   beforeAll(() => {
     owner = testPool('owner', DB, 1);
     app = testPool('app', DB, 2);
-    platform = testPool('platform', DB, 1);
+    // Rol exclusivo de pruebas (ADR-034): siembra y cuenta filas de todos los tenants.
+    platform = testBypassPool(DB, 1);
   });
 
   afterAll(async () => {
@@ -297,7 +301,7 @@ describe.each(SETS)('migraciones · $name', (set) => {
   });
 
   it('desde una base vacía: aplica todas las migraciones y es idempotente', async () => {
-    await resetDatabase(owner);
+    await resetDatabase(owner, set);
     expectOk(prisma(set, set.migrations, 'migrate', 'deploy'));
     await verifyFinalState(set, owner, app);
     // Una segunda ejecución no tiene nada pendiente.
@@ -309,7 +313,7 @@ describe.each(SETS)('migraciones · $name', (set) => {
     const previous = set.previous ?? [];
     const seed = set.seed;
     if (!seed) throw new Error('falta la siembra');
-    await resetDatabase(owner);
+    await resetDatabase(owner, set);
 
     // 1) Esquema anterior: solo las migraciones previas a ADR-024/025.
     const tmp = mkdtempSync(join(tmpdir(), 'yebo-migrations-'));
@@ -322,7 +326,8 @@ describe.each(SETS)('migraciones · $name', (set) => {
       rmSync(tmp, { recursive: true, force: true });
     }
 
-    // 2) Datos de dos tenants.
+    // 2) Datos de dos tenants (el rol de pruebas recibe sus permisos tras migrar, como en global-setup).
+    await grantTestBypass(DB);
     const expected = await seed(platform);
     if (set.previousHadRlsBug) {
       const firstTable = set.tenantTables[0] ?? '';
@@ -335,6 +340,7 @@ describe.each(SETS)('migraciones · $name', (set) => {
     expect(output).not.toMatch(/No pending migrations/);
 
     // 4) Datos intactos, aislamiento intacto y estado final idéntico al de una base nueva.
+    await grantTestBypass(DB);
     await expect(rowCounts(platform, Object.keys(expected))).resolves.toEqual(expected);
     for (const t of set.tenantTables.filter((table) => table in expected)) {
       const total = expected[t] ?? 0;

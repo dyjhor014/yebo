@@ -8,7 +8,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ClsService } from 'nestjs-cls';
 import type { Pool, PoolClient } from 'pg';
 import request from 'supertest';
-import { PlatformPrismaService } from '../../src/infrastructure/database/platform-prisma.service';
+import { createPrismaClient } from '../../src/infrastructure/database/create-prisma-client';
 import { TenantDbService } from '../../src/infrastructure/database/tenant-db.service';
 import {
   GLOBAL_TABLES_WITH_TENANT_ID,
@@ -17,7 +17,7 @@ import {
 import { TenantResolverService } from '../../src/modules/tenancy/tenant-resolver.service';
 import type { PrismaClient } from '../../src/generated/prisma/client';
 import { createTestApp } from '../support/create-test-app';
-import { testPool } from '../support/db';
+import { testBypassUrl, testPool } from '../support/db';
 
 const DB = 'yebo_test';
 const A = '0190f0a0-0000-7000-8000-00000000a001';
@@ -132,7 +132,12 @@ describe('Fase 3.1 · tenancy e identidad (PostgreSQL real, rol yebo_app)', () =
     app = await createTestApp();
     // Un solo servidor escuchando: si no, supertest abre uno por petición (fuga de listeners en §7.6).
     await app.listen(0, '127.0.0.1');
-    platform = app.get(PlatformPrismaService).client;
+    // Siembra con el rol EXCLUSIVO de pruebas (ADR-034): yebo_platform ya no salta RLS ni escribe.
+    platform = createPrismaClient({
+      connectionString: testBypassUrl(DB),
+      max: 2,
+      applicationName: 'yebo-test-seed',
+    });
     await app.get(TenantResolverService).invalidate(HOST_A);
     await app.get(TenantResolverService).invalidate(HOST_B);
     await app.get(TenantResolverService).invalidate(HOST_PENDING);
@@ -141,7 +146,7 @@ describe('Fase 3.1 · tenancy e identidad (PostgreSQL real, rol yebo_app)', () =
 
   afterAll(async () => {
     await app.close();
-    await Promise.all([owner.end(), appPool.end()]);
+    await Promise.all([owner.end(), appPool.end(), platform.$disconnect()]);
   });
 
   describe('base de datos', () => {
@@ -225,7 +230,7 @@ describe('Fase 3.1 · tenancy e identidad (PostgreSQL real, rol yebo_app)', () =
       ).rejects.toThrow(/row-level security/);
     });
 
-    it('§7.5 · la FK compuesta impide asignar a una membresía de A un rol de B, incluso con yebo_platform', async () => {
+    it('§7.5 · la FK compuesta impide asignar a una membresía de A un rol de B, incluso con un rol que salta RLS', async () => {
       await expect(
         platform.membershipRole.create({
           data: { tenantId: A, membershipId: ids.membershipA, roleId: ids.roleB },

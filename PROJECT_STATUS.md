@@ -1,6 +1,6 @@
 # Estado del proyecto — YEBO
 
-**Última actualización:** 2026-11-10
+**Última actualización:** 2026-11-10 (ADR-034)
 
 ## Fase actual
 
@@ -15,7 +15,9 @@ La **3.2b** (hub de cuentas y flujo OAuth propio + PKCE S256, con sus pantallas 
 
 La **3.3** (autorización y estado del tenant: guards globales con denegación por defecto, permisos, matriz de estados y gestión mínima de accesos) está en un **commit local** (`1c695b1`, rama `fase-3/3.3-autorizacion`, sin push).
 
-La **3.4** (cierre: aislamiento de extremo a extremo sobre endpoints autenticados y medición del coste de una transacción por operación) está **implementada y pendiente de revisión** en la rama `fase-3/3.4-cierre`, sin commit. **Criterio de aceptación de la Fase 3 cumplido:** las siete pruebas de multitenancy §7 pasan y se ejecutan en CI. Resultados: [phase-3-results.md](docs/development/phase-3-results.md). `support_access_grants` pasa a la Fase 4. Sus migraciones no se aplicaron a ninguna base del proyecto. Plan: [phase-3-plan.md](docs/development/phase-3-plan.md).
+La **3.4** (cierre: aislamiento de extremo a extremo y medición del coste de una transacción por operación) está en un **commit local** (`da999d8`, rama `fase-3/3.4-cierre`). **Criterio de aceptación de la Fase 3 cumplido**; resultados en [phase-3-results.md](docs/development/phase-3-results.md).
+
+**ADR-034 aplicado** y **regla de §4.2 adoptada** (2026-11-10), en la rama `fase-3/adr-034-privilegios`, sin commit. `yebo_platform` ya no salta RLS. El clúster de desarrollo está endurecido y **`yebo_dev` migrada** (7 migraciones).
 
 La Fase 2 sigue en revisión mediante el PR #1, sin merge. Orden de integración previsto: #1 → #3 → #2.
 
@@ -56,6 +58,10 @@ D1 (cliente piloto), D6 (propietarios), D7 (agencias), S2 (contrato de la API de
 - Docker Desktop: `systemctl --user start docker-desktop`. Puertos 5433 (PostgreSQL) y 6380 (Redis).
 - Los volúmenes creados antes de este cambio necesitan la base `yebo_migrations` (ver phase-2-results §4). Ya está creada en el entorno local.
 - Disco: 36 GB libres (93 %).
+- **ADR-034 en un volumen existente** (ya aplicado en el de este equipo):
+  1. `scripts/dev/init-env.sh`, que añade `TEST_PG_BYPASS_PASSWORD` y crea `apps/api/.env.test`;
+  2. `scripts/dev/harden-roles.sh --test-role`;
+  3. `pnpm --filter @yebo/api db:migrate:deploy`.
 
 ## Errores conocidos
 
@@ -66,6 +72,4 @@ Ninguno abierto.
 1. Revisión de los PR abiertos por el responsable del proyecto; el merge lo hace él. Orden de integración previsto: #1 (Fase 2) → #3 (Impeccable) → #2 (MKT-01) → #4 (Fase 3.1, apilado sobre la rama de la Fase 2).
 2. Tras el cierre de la Fase 2: activar la protección de `main` exigiendo el check de CI.
 3. Revisión de la etapa 3.1 (PR #4) y de la etapa 3.2a.
-4. Revisión del SQL de **ADR-034** (separación de privilegios: `yebo_platform` sin BYPASSRLS; rol `yebo_test_bypass` solo para pruebas), propuesto en [phase-3-plan](docs/development/phase-3-plan.md). Dirección aprobada; **no implementado**.
-5. Para migrar `yebo_dev` tras aprobar la 3.2 y la 3.3: `scripts/dev/create-identity-role.sh` y después `pnpm --filter @yebo/api db:migrate:deploy` (reversiones en [phase-3-plan](docs/development/phase-3-plan.md)).
-6. Revisión de la Fase 3 completa: 3.2 (`83df1c1`), 3.3 (`1c695b1`) y 3.4 (sin commit). Decisiones pendientes en [phase-3-results §4](docs/development/phase-3-results.md#4-pendientes-para-cerrar-la-fase-3): ADR-034, migración de `yebo_dev`, la regla «≥ 2 operaciones → una transacción», y commits, push y PR. La Fase 4 **solo con autorización expresa**.
+4. Revisión de la Fase 3 completa: 3.2 (`83df1c1`), 3.3 (`1c695b1`), 3.4 (`da999d8`) y ADR-034 (sin commit). Push y PR **solo con autorización expresa**. La Fase 4, también.

@@ -95,15 +95,19 @@ CREATE POLICY tenant_isolation ON shipments
 |---|---|---|
 | `yebo_owner` | Migraciones (propietario de las tablas) | No aplica (solo se usa en el despliegue) |
 | `yebo_app` | API y worker en contexto de tenant | **Aplica** |
-| `yebo_platform` | Resolver de dominios, superadmin, jobs entre tenants (métricas, facturación SaaS) | `BYPASSRLS`, credenciales y *pool* separados |
+| `yebo_platform` | Resolver de dominios y health check. En la Fase 4, superadmin y jobs entre tenants con permisos explícitos | **Aplica** (sin BYPASSRLS desde ADR-034). Solo SELECT sobre `tenants` y `tenant_domains`; credenciales y *pool* separados |
 | `yebo_identity` | **Solo el módulo identity** (Fase 3.2a): sesiones y tokens; lectura de `users`, `tenant_memberships` y `tenant_domains` | **Aplica** (sin BYPASSRLS); política propia de solo lectura sobre `tenant_memberships`. Permisos explícitos, nunca por defecto. Detalle en [phase-3-plan](../development/phase-3-plan.md) |
 
-> **ADR-034 (dirección aprobada el 2026-11-09, aún no implementado):** `yebo_platform` perderá `BYPASSRLS` y quedará con SELECT sobre `tenants` y `tenant_domains`; todos los roles de ejecución pasarán a una lista blanca de permisos explícitos. Hasta su implementación, esta tabla describe el estado vigente. Ver [ADR-034](architecture-decisions.md) y [phase-3-plan](../development/phase-3-plan.md).
+> **ADR-034 (aplicado el 2026-11-10):** ningún rol de ejecución salta RLS, hereda privilegios ni pertenece a otro rol. Los permisos sobre tablas son una **lista blanca** que concede cada migración (sin privilegios por defecto), y una prueba compara la foto de privilegios con una matriz versionada. Solo las pruebas usan un rol con BYPASSRLS (`yebo_test_bypass`), que no existe en producción ni tiene acceso a `yebo_dev`. Ver [ADR-034](architecture-decisions.md) y [phase-3-plan](../development/phase-3-plan.md#adr-034--implementación-2026-11-10).
 
 - La extensión de Prisma envuelve cada operación de tenant en una transacción que primero ejecuta `SELECT set_config('app.tenant_id', $1, true)`. El tercer parámetro, `true`, hace el valor **local a la transacción**, lo que evita fugas entre requests que comparten conexión del *pool*.
 - Sin `app.tenant_id`, `current_setting(..., true)` devuelve `NULL` (conexión nueva) o `''` (conexión reutilizada). Con `NULLIF`, en ambos casos la política no devuelve filas y la escritura falla. La falla es segura por defecto.
 - Cada transacción fija su tenant explícitamente; el contexto nunca se hereda de una conexión anterior (ADR-025). Están prohibidos `SET`/`SET SESSION`, `set_config(..., false)` y los valores por defecto de rol o base de datos.
-- Coste: una transacción por operación. Se medirá en la Fase 3; si penaliza, se agrupan las lecturas de un request en una sola transacción. *(Medido en la Fase 3.4: unas 4 idas y vueltas por operación, ×3,2 frente a una lectura simple; penaliza en peticiones con varias lecturas. Datos y propuesta, pendiente de decisión, en [phase-3-results §3](../development/phase-3-results.md#3-coste-de-una-transacción-por-operación-multitenancy-42).)*
+- Coste: una transacción por operación (unas 4 idas y vueltas; ×3,2 frente a una lectura simple, medido en la Fase 3.4: [phase-3-results §3](../development/phase-3-results.md#3-coste-de-una-transacción-por-operación-multitenancy-42)).
+- **Regla adoptada el 2026-11-10:**
+  - **Por defecto**, una transacción por operación: es la que garantiza que el contexto nunca se hereda.
+  - **Casos de uso con dos o más operaciones de tenant:** las agrupan en una sola con `TenantDbService.transaction(...)`, que fija el tenant una vez. Se revisa en cada PR y se mide con `pnpm --filter @yebo/api bench`.
+  - **Sin transacción por request completo:** retendría una conexión durante toda la petición, también mientras espera a Redis, a identidad o a servicios externos.
 
 ### 4.3 Tablas globales (sin `tenant_id`, sin RLS de tenant)
 

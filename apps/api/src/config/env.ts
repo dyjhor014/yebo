@@ -85,6 +85,16 @@ export const EnvSchema = z
         message: 'el rol de plataforma debe ser distinto del rol de aplicación (ADR-003)',
       });
     }
+    // ADR-034: el rol exclusivo de pruebas (salta RLS) nunca puede ser la identidad de un servicio de ejecución.
+    for (const key of ['PG_APP_USER', 'PG_PLATFORM_USER', 'PG_IDENTITY_USER', 'PG_OWNER_USER'] as const) {
+      if (env[key]?.toLowerCase().includes('bypass')) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: 'un rol que salta RLS no puede usarse en la API, el worker ni las migraciones (ADR-034)',
+        });
+      }
+    }
     if (env.PG_IDENTITY_USER === env.PG_APP_USER || env.PG_IDENTITY_USER === env.PG_PLATFORM_USER) {
       ctx.addIssue({
         code: 'custom',

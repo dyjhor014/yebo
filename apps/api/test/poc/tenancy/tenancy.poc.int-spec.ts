@@ -20,7 +20,7 @@ import {
   withoutInteractiveTransactions,
   type TenantScopeOptions,
 } from '../../../src/infrastructure/database/tenant-scope/tenant-scope.extension';
-import { testDbUrl, testPool } from '../../support/db';
+import { testBypassUrl, testDbUrl, testPool } from '../../support/db';
 import { Prisma, PrismaClient } from './generated/client';
 
 const DB = 'yebo_poc_tenancy';
@@ -41,8 +41,10 @@ const options: TenantScopeOptions = {
 const asTenant = <T>(tenantId: string, fn: () => PromiseLike<T>): Promise<T> =>
   context.run({ tenantId }, async () => await fn());
 
-function newClient(role: 'app' | 'platform', max: number): PrismaClient {
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString: testDbUrl(role, DB), max }) });
+/** `app`: rol de ejecución con RLS. `seed`: rol EXCLUSIVO de pruebas (ADR-034), que salta RLS para sembrar. */
+function newClient(role: 'app' | 'seed', max: number): PrismaClient {
+  const connectionString = role === 'seed' ? testBypassUrl(DB) : testDbUrl(role, DB);
+  return new PrismaClient({ adapter: new PrismaPg({ connectionString, max }) });
 }
 
 /** Igual que TenantDbService en producción: filtro (barrera 1) + sesión RLS (barrera 2). */
@@ -69,10 +71,10 @@ describe('PoC 1 · aislamiento multitenant (PostgreSQL real, rol yebo_app)', () 
     owner = testPool('owner', DB, 2);
     await owner.query('TRUNCATE poc_trips, poc_routes, poc_tenants');
     appBase = newClient('app', 4);
-    platform = newClient('platform', 2);
+    platform = newClient('seed', 2);
     db = tenantDb(appBase);
 
-    // Datos sembrados con el rol de plataforma (BYPASSRLS), como haría el superadmin.
+    // Datos sembrados con el rol exclusivo de pruebas (BYPASSRLS; ADR-034).
     await platform.pocTenant.createMany({
       data: [
         { id: A, name: 'Transportes A' },

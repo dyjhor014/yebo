@@ -2,7 +2,7 @@
  * Fase 3.4 · Coste de "una transacción por operación" (multitenancy §4.2) y de la cadena de guards de la 3.3.
  *
  * Escenarios con el cliente real (Prisma 7 + adaptador pg), en serie y con concurrencia:
- *  1. lectura con yebo_platform, sin RLS ni transacción (referencia);
+ *  1. lectura sin RLS ni transacción (referencia; antes de ADR-034 con yebo_platform, ahora con el rol de pruebas);
  *  2. lectura con TenantDbService.client: BEGIN; set_config; consulta; COMMIT;
  *  3. "request típico" de 3 lecturas, una transacción por lectura;
  *  4. las mismas 3 lecturas agrupadas en UNA transacción (TenantDbService.transaction).
@@ -19,12 +19,12 @@ import { configureApp } from '../../src/common/http/configure-app';
 import { parseEnv } from '../../src/config/env';
 import type { RequestContextStore } from '../../src/infrastructure/context/request-context';
 import { AppPrismaService } from '../../src/infrastructure/database/app-prisma.service';
-import { PlatformPrismaService } from '../../src/infrastructure/database/platform-prisma.service';
+import { createPrismaClient } from '../../src/infrastructure/database/create-prisma-client';
 import { TenantDbService } from '../../src/infrastructure/database/tenant-db.service';
 import { RolesService } from '../../src/modules/access/roles.service';
 import { SessionService } from '../../src/modules/identity/session.service';
 import { TenantResolverService } from '../../src/modules/tenancy/tenant-resolver.service';
-import { testPool } from '../support/db';
+import { testBypassPool, testBypassUrl, testPool } from '../support/db';
 
 const DB = 'yebo_test';
 const A = '0190f0a0-0000-7000-8000-00000000a0b1';
@@ -88,18 +88,18 @@ async function concurrent(name: string, fn: () => Promise<unknown>): Promise<Sta
 describe('Fase 3.4 · medición del coste de una transacción por operación', () => {
   let app: INestApplication;
   let owner: Pool;
-  let platformPool: Pool;
+  let seed: Pool;
   const results: Stats[] = [];
 
   afterAll(async () => {
     process.stdout.write(`\nRESULTADOS_BENCH ${JSON.stringify(results)}\n`);
     await app?.close();
-    await Promise.all([owner?.end(), platformPool?.end()]);
+    await Promise.all([owner?.end(), seed?.end()]);
   });
 
   it('mide', async () => {
     owner = testPool('owner', DB, 2);
-    platformPool = testPool('platform', DB, 2);
+    seed = testBypassPool(DB, 2);
     await owner.query(
       'TRUNCATE authorization_codes, refresh_tokens, tenant_sessions, identity_sessions, membership_roles, role_permissions, roles, tenant_memberships, users, permissions, role_templates, tenant_domains, tenants',
     );
@@ -137,7 +137,7 @@ describe('Fase 3.4 · medición del coste de una transacción por operación', (
     );
     const memberships: string[] = [];
     for (const u of users.rows) {
-      const r = await platformPool.query<{ id: string }>(
+      const r = await seed.query<{ id: string }>(
         `INSERT INTO tenant_memberships (id, tenant_id, user_id, status, updated_at)
          VALUES (gen_random_uuid(), $1, $2, 'ACTIVE', now()) RETURNING id`,
         [A, u.id],
@@ -152,13 +152,19 @@ describe('Fase 3.4 · medición del coste de una transacción por operación', (
         return await fn();
       });
     const admin = (await inA(() => app.get(RolesService).instantiateTemplates()))[0] ?? '';
-    await platformPool.query(
-      'INSERT INTO membership_roles (tenant_id, membership_id, role_id) VALUES ($1, $2, $3)',
-      [A, memberships[0], admin],
-    );
+    await seed.query('INSERT INTO membership_roles (tenant_id, membership_id, role_id) VALUES ($1, $2, $3)', [
+      A,
+      memberships[0],
+      admin,
+    ]);
 
     const tenantDb = app.get(TenantDbService);
-    const platform = app.get(PlatformPrismaService).client;
+    // Mismo cliente (Prisma 7 + adaptador pg) y misma consulta, sin RLS ni transacción.
+    const platform = createPrismaClient({
+      connectionString: testBypassUrl(DB),
+      max: WORKERS,
+      applicationName: 'yebo-bench-ref',
+    });
     const member = memberships[0] ?? '';
     const reference = () =>
       platform.role.findFirst({ where: { tenantId: A, id: admin }, select: { id: true } });
@@ -212,7 +218,7 @@ describe('Fase 3.4 · medición del coste de una transacción por operación', (
       }),
     );
     await rawPool.end();
-    results.push(await serial('1 · referencia: yebo_platform, sin RLS ni transacción', reference));
+    results.push(await serial('1 · referencia: lectura sin RLS ni transacción', reference));
     results.push(await serial('2 · yebo_app, una transacción por operación', perOperation));
     results.push(await serial('3a · 3 lecturas en serie, una transacción cada una', threeSequentialSeparate));
     results.push(await serial('3b · 3 lecturas en paralelo, una transacción cada una', threeSeparate));

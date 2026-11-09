@@ -5,6 +5,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 INFRA_ENV="$ROOT/infrastructure/docker/.env"
 API_ENV="$ROOT/apps/api/.env"
+# Credenciales del rol de PRUEBAS yebo_test_bypass (ADR-034). Solo las carga test/support; la API no las conoce.
+TEST_ENV="$ROOT/apps/api/.env.test"
 FORCE="${1:-}"
 
 # Clave Ed25519 de los access tokens (EdDSA, security.md §1): PEM PKCS#8 en base64, en una sola línea.
@@ -32,14 +34,36 @@ add_missing_phase32() {
   fi
 }
 
+# Rol de pruebas (ADR-034): contraseña en infrastructure/docker/.env (init del contenedor y harden-roles.sh) y en
+# apps/api/.env.test (pruebas). En un volumen existente, el rol se crea con scripts/dev/harden-roles.sh --test-role.
+write_test_env() {
+  umask 077
+  printf '# Rol EXCLUSIVO de pruebas (ADR-034): BYPASSRLS, solo en bases de prueba. Nunca en la API ni en producción.\nTEST_PG_BYPASS_USER=yebo_test_bypass\nTEST_PG_BYPASS_PASSWORD=%s\n' "$1" > "$TEST_ENV"
+}
+
+add_missing_adr034() {
+  if [[ -f "$INFRA_ENV" ]] && ! grep -q '^TEST_PG_BYPASS_PASSWORD=' "$INFRA_ENV"; then
+    local pass
+    pass=$(openssl rand -hex 24)
+    printf 'TEST_PG_BYPASS_PASSWORD=%s\n' "$pass" >> "$INFRA_ENV"
+    write_test_env "$pass"
+    echo "Añadida TEST_PG_BYPASS_PASSWORD. En un volumen existente: scripts/dev/harden-roles.sh --test-role"
+  elif [[ -f "$INFRA_ENV" && ! -f "$TEST_ENV" ]]; then
+    write_test_env "$(grep '^TEST_PG_BYPASS_PASSWORD=' "$INFRA_ENV" | cut -d= -f2-)"
+    echo "Generado apps/api/.env.test."
+  fi
+}
+
 if [[ -f "$INFRA_ENV" && "$FORCE" != "--force" ]]; then
   add_missing_phase32
+  add_missing_adr034
   echo "Ya existe $INFRA_ENV (usa --force para regenerar)."; exit 0
 fi
 
 rnd() { openssl rand -hex 24; }
 PG_SUPERUSER_PASSWORD=$(rnd); PG_OWNER_PASSWORD=$(rnd); PG_APP_PASSWORD=$(rnd); PG_PLATFORM_PASSWORD=$(rnd); REDIS_PASSWORD=$(rnd)
 PG_IDENTITY_PASSWORD=$(rnd)
+TEST_PG_BYPASS_PASSWORD=$(rnd)
 
 umask 077
 cat > "$INFRA_ENV" <<ENV
@@ -51,7 +75,9 @@ PG_APP_PASSWORD=$PG_APP_PASSWORD
 PG_PLATFORM_PASSWORD=$PG_PLATFORM_PASSWORD
 PG_IDENTITY_PASSWORD=$PG_IDENTITY_PASSWORD
 REDIS_PASSWORD=$REDIS_PASSWORD
+TEST_PG_BYPASS_PASSWORD=$TEST_PG_BYPASS_PASSWORD
 ENV
+write_test_env "$TEST_PG_BYPASS_PASSWORD"
 
 sed -e "s|^PG_OWNER_PASSWORD=.*|PG_OWNER_PASSWORD=$PG_OWNER_PASSWORD|" \
     -e "s|^PG_APP_PASSWORD=.*|PG_APP_PASSWORD=$PG_APP_PASSWORD|" \
@@ -62,4 +88,4 @@ sed -e "s|^PG_OWNER_PASSWORD=.*|PG_OWNER_PASSWORD=$PG_OWNER_PASSWORD|" \
     -e "s|^AUTH_COOKIE_SECRET=.*|AUTH_COOKIE_SECRET=$(openssl rand -hex 32)|" \
     "$ROOT/apps/api/.env.example" > "$API_ENV"
 
-echo "Generados: infrastructure/docker/.env y apps/api/.env (permisos 600)."
+echo "Generados: infrastructure/docker/.env, apps/api/.env y apps/api/.env.test (permisos 600)."
