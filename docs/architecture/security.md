@@ -7,13 +7,13 @@
 | Contraseñas | Argon2id (parámetros OWASP vigentes; recalibrar en la Fase 3). Política de longitud mínima de 10, verificación contra listas de contraseñas filtradas (k-anonymity opcional). |
 | Flujo de login y cambio de empresa | Hub de cuentas con *authorization code* + PKCE. Detalle en [identity-and-sessions.md](identity-and-sessions.md). |
 | Access token | JWT firmado (EdDSA o ES256), 10 min, *claims* mínimos (`sub`, `sid`, `tid`, `mid`, `ver`). |
-| Refresh token | Opaco, 256 bits, **hasheado** (SHA-256) en `refresh_tokens`, rotado en cada uso, con una ventana de gracia de 20 s para pestañas concurrentes. Si se reutiliza un token ya rotado fuera de la ventana, se revoca la sesión de empresa completa (detección de robo). |
+| Refresh token | Opaco, 256 bits, **hasheado** (SHA-256) en `refresh_tokens`, rotado en cada uso, con una ventana de gracia de 20 s para pestañas concurrentes. Durante la gracia, el sucesor se guarda solo **cifrado** (AES-256-GCM con una clave HKDF del token padre, Fase 3.2a). Si se reutiliza un token ya rotado fuera de la ventana, se revoca la sesión de empresa completa (detección de robo). |
 | Transporte en web | Cookies `httpOnly`, `Secure`, `SameSite=Lax`, ligadas al host. Protección CSRF con *double submit token* en mutaciones (decisión D10). |
 | Transporte en PWA operativa e integraciones | `Authorization: Bearer`. Dispositivos registrados (`devices`) para operación offline. |
 | Cuentas de servicio | `service_accounts` por tenant con API keys hasheadas, alcances explícitos y sin facturación (D5). |
 | MFA | TOTP opcional por usuario; obligatorio para staff de plataforma y configurable por tenant para roles administrativos. |
 | Fuerza bruta | Rate limit por IP + identificador (Redis), bloqueo progresivo, misma respuesta para usuario inexistente o contraseña errónea. |
-| Revocación | **Inmediata**: el estado de la sesión se verifica en Redis (con PostgreSQL como respaldo) en cada request. Matriz completa de eventos de revocación en [identity-and-sessions.md §8](identity-and-sessions.md#8-revocación). |
+| Revocación | Surte efecto en toda verificación que empiece tras su COMMIT: el estado de la sesión se verifica **en PostgreSQL** en cada request (precisión de la Fase 3.2a: sin caché positiva en Redis). Matriz de eventos en [identity-and-sessions.md §8](identity-and-sessions.md#8-revocación). |
 
 ## 2. Autorización
 

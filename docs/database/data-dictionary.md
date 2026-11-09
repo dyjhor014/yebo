@@ -105,9 +105,15 @@ Los `enum` son cerrados; los `→ catálogo` son tablas extensibles.
 ### 🌐 identity_sessions / tenant_sessions / refresh_tokens / authorization_codes / password_reset_tokens
 Ver [identity-and-sessions.md](../architecture/identity-and-sessions.md).
 - **identity_sessions:** `user_id`, `ip`, `user_agent`, `mfa_verified_at?`, `auth_methods text[]`, `last_seen_at`, `idle_expires_at`, `absolute_expires_at`, `revoked_at?`, `revoke_reason?`. Cookie `__Host-yebo_hub` (solo el hub).
-- **tenant_sessions:** `identity_session_id`, `user_id`, `tenant_id`, `membership_id`, `host`, `device_id?`, `last_seen_at`, `idle_expires_at`, `absolute_expires_at`, `revoked_at?`, `revoke_reason?`. Su estado activo se replica en Redis (`tsess:{id}`) para la verificación en cada request.
-- **refresh_tokens:** `tenant_session_id` (= familia), `token_hash UNIQUE`, `parent_id?`, `successor_id?`, `rotated_at?` (ventana de gracia de 20 s), `expires_at`, `revoked_at?`.
-- **authorization_codes:** `code_hash UNIQUE`, `user_id`, `tenant_id`, `identity_session_id`, `redirect_uri`, `code_challenge`, `code_challenge_method` (`S256`), `expires_at` (60 s), `consumed_at?`.
+- **tenant_sessions:** `identity_session_id`, `user_id`, `tenant_id`, `membership_id`, `host`, `device_id?`, `last_seen_at`, `idle_expires_at`, `absolute_expires_at`, `revoked_at?`, `revoke_reason?`.
+  - FK compuestas `(identity_session_id, user_id)` → `identity_sessions` y `(tenant_id, user_id, membership_id)` → `tenant_memberships`.
+  - **Excepción global con `tenant_id`** (sin RLS de tenant).
+  - Se verifica en PostgreSQL en cada request (Fase 3.2a: sin réplica en Redis).
+- **refresh_tokens:** `tenant_session_id` (= familia), `token_hash bytea UNIQUE` (SHA-256, 32 bytes), `parent_id?` (FK compuesta a la misma sesión; `UNIQUE (tenant_session_id, parent_id)` = un único sucesor), `rotated_at?` (ventana de gracia de 20 s), `successor_ciphertext bytea?` (sucesor cifrado, 61 bytes, solo en tokens rotados), `expires_at`, `revoked_at?`.
+  - *Fase 3.2a:* `successor_id` no existe; el sucesor se obtiene por `parent_id`.
+- **Privilegios (Fase 3.2a):** las tres tablas, solo con `yebo_identity` (SELECT, INSERT, UPDATE; sin DELETE). `revoke_reason` es el enum `session_revoke_reason`.
+- **authorization_codes:** `code_hash bytea UNIQUE` (SHA-256, 32 bytes), `user_id`, `tenant_id`, `identity_session_id` (FK compuesta con `user_id`), `redirect_uri` (CHECK: `https://<redemption_host>/auth/callback`), `redemption_host citext`, `code_challenge` (43 caracteres), `code_challenge_method` (CHECK `S256`), `expires_at` (60 s; CHECK ≤ 65 s), `consumed_at?`, `tenant_session_id?` (sesión emitida; se revoca si el código se reutiliza).
+  - *Fase 3.2b:* excepción global con `tenant_id`; solo `yebo_identity` (SELECT, INSERT, UPDATE).
 - **password_reset_tokens:** `token_hash`, `user_id`, `expires_at`, `used_at?`.
 
 ### service_accounts / api_keys

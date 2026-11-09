@@ -8,6 +8,8 @@ export const ErrorCode = z.enum([
   'VALIDATION_FAILED',
   'BAD_REQUEST',
   'UNAUTHENTICATED',
+  /** El token se emitió con otra versión de permisos: el cliente lo renueva en silencio (identity-and-sessions §7). */
+  'PERMISSIONS_CHANGED',
   'FORBIDDEN',
   'NOT_FOUND',
   'CONFLICT',

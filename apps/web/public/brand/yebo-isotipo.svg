@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200" role="img" aria-labelledby="title desc">
+  <title id="title">YEBO — isotipo</title>
+  <desc id="desc">Símbolo abstracto de rutas que convergen y representan movimiento y conexión.</desc>
+  <path d="M28 24 H76 Q84 24 90 31 L126 72 L96 104 L25 39 Q15 30 28 24Z" fill="#16C7B2"/>
+  <path d="M201 26 Q210 18 219 27 Q228 36 219 45 L111 158 Q103 166 94 157 Q85 148 94 139 L201 26Z" fill="#16C7B2"/>
+  <path d="M184 91 Q193 82 202 91 Q211 100 202 109 L128 184 Q119 193 110 184 Q101 175 110 166 L184 91Z" fill="#C5F36B"/>
+  <circle cx="202" cy="100" r="14" fill="#C5F36B"/>
+</svg>

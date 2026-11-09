@@ -1,0 +1,125 @@
+/*
+ * Roles FUNCIONALES de la interfaz, derivados de la identidad YEBO v1.0 (identity.css).
+ * Los tonos intermedios son mezclas de la propia paleta, no colores de marca nuevos. Contraste WCAG medido
+ * (Fase 3.2b): el teal sobre claro da 1,96:1, así que en superficies claras SOLO rellena la acción principal
+ * (texto navy, 7,99:1); los enlaces y el foco son navy. Teal y lime como texto, solo sobre navy.
+ * Tema oscuro: valores de identidad/tokens (superficie navy, superficie secundaria slate, texto cloud); se aplica
+ * con la preferencia del sistema o con data-theme="dark" en <html>, y data-theme="light" lo fuerza claro.
+ */
+:root {
+  --access-color-scheme: light;
+
+  /* Superficies */
+  --surface-canvas: var(--yebo-cloud-white);
+  --surface-raised: #ffffff;
+  --surface-rail: var(--yebo-midnight-navy);
+  --surface-rail-track: var(--yebo-slate-blue); /* pista del trayecto; el avance teal sobre ella da 5,7:1 */
+  --surface-rail-edge: var(--yebo-midnight-navy); /* en claro se funde con el carril */
+
+  /* Texto sobre superficies claras */
+  --text-primary: var(--yebo-midnight-navy); /* 15,7:1 */
+  --text-secondary: color-mix(in srgb, var(--yebo-midnight-navy) 68%, var(--yebo-cloud-white)); /* 5,7:1 */
+
+  /* Texto sobre el carril navy */
+  --text-on-rail: var(--yebo-cloud-white); /* 15,7:1 */
+  --text-on-rail-secondary: color-mix(
+    in srgb,
+    var(--yebo-cloud-white) 72%,
+    var(--yebo-midnight-navy)
+  ); /* 8,6:1 */
+  --accent-on-rail: var(--yebo-amazon-teal); /* 8,0:1 */
+  --highlight-on-rail: var(--yebo-electric-lime); /* 13,3:1: destino, estado destacado */
+
+  /* Acción principal */
+  --action-fill: var(--yebo-amazon-teal);
+  --action-fill-hover: color-mix(in srgb, var(--yebo-amazon-teal) 88%, var(--yebo-midnight-navy));
+  --action-text: var(--yebo-midnight-navy); /* 8,0:1 sobre teal; 6,5:1 en hover */
+
+  /* Controles */
+  --control-border: color-mix(in srgb, var(--yebo-midnight-navy) 55%, var(--yebo-cloud-white)); /* 3,75:1 */
+  --control-border-strong: var(--yebo-midnight-navy);
+  --focus-ring: var(--yebo-midnight-navy);
+  --focus-ring-on-rail: var(--yebo-electric-lime);
+  --link-underline: var(--yebo-amazon-teal); /* decorativo: el texto del enlace es navy */
+  --divider: color-mix(in srgb, var(--yebo-midnight-navy) 12%, var(--yebo-cloud-white));
+
+  /* Estados (funcionales, fuera de la marca) */
+  --state-danger: #b42318; /* 6,05:1 sobre cloud */
+  --state-danger-surface: color-mix(in srgb, #b42318 8%, var(--yebo-cloud-white));
+
+  /* Ritmo */
+  --radius-control: var(--yebo-radius-sm);
+  --motion-quick: 180ms;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Tema oscuro. Mismo bloque dos veces: por preferencia del sistema y forzado con data-theme="dark". */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --access-color-scheme: dark;
+
+    /* Superficies: el carril y el lienzo comparten navy; los separa un filo slate. Los campos se elevan a slate. */
+    --surface-canvas: var(--yebo-midnight-navy);
+    --surface-raised: var(--yebo-slate-blue);
+    --surface-rail-edge: var(--yebo-slate-blue);
+
+    /* Texto */
+    --text-primary: var(--yebo-cloud-white); /* 15,7:1 sobre navy; 11,2:1 sobre slate */
+    --text-secondary: color-mix(
+      in srgb,
+      var(--yebo-cloud-white) 72%,
+      var(--yebo-midnight-navy)
+    ); /* 8,6:1 / 6,2:1 */
+
+    /* Acción principal: el mismo teal con texto navy; en hover se aclara hacia cloud */
+    --action-fill-hover: color-mix(in srgb, var(--yebo-amazon-teal) 85%, var(--yebo-cloud-white));
+
+    /* Controles */
+    --control-border: color-mix(
+      in srgb,
+      var(--yebo-cloud-white) 50%,
+      var(--yebo-midnight-navy)
+    ); /* 4,9:1 / 3,5:1 */
+    --control-border-strong: var(--yebo-cloud-white);
+    --focus-ring: var(--yebo-electric-lime); /* 13,3:1 */
+    --divider: var(--yebo-slate-blue);
+
+    /* Estados */
+    --state-danger: #ff8b7e; /* 7,5:1 sobre navy */
+    --state-danger-surface: color-mix(in srgb, #ff8b7e 14%, var(--yebo-midnight-navy)); /* texto 6,0:1 */
+  }
+}
+
+:root[data-theme='dark'] {
+  --access-color-scheme: dark;
+
+  /* Superficies: el carril y el lienzo comparten navy; los separa un filo slate. Los campos se elevan a slate. */
+  --surface-canvas: var(--yebo-midnight-navy);
+  --surface-raised: var(--yebo-slate-blue);
+  --surface-rail-edge: var(--yebo-slate-blue);
+
+  /* Texto */
+  --text-primary: var(--yebo-cloud-white); /* 15,7:1 sobre navy; 11,2:1 sobre slate */
+  --text-secondary: color-mix(
+    in srgb,
+    var(--yebo-cloud-white) 72%,
+    var(--yebo-midnight-navy)
+  ); /* 8,6:1 / 6,2:1 */
+
+  /* Acción principal: el mismo teal con texto navy; en hover se aclara hacia cloud */
+  --action-fill-hover: color-mix(in srgb, var(--yebo-amazon-teal) 85%, var(--yebo-cloud-white));
+
+  /* Controles */
+  --control-border: color-mix(
+    in srgb,
+    var(--yebo-cloud-white) 50%,
+    var(--yebo-midnight-navy)
+  ); /* 4,9:1 / 3,5:1 */
+  --control-border-strong: var(--yebo-cloud-white);
+  --focus-ring: var(--yebo-electric-lime); /* 13,3:1 */
+  --divider: var(--yebo-slate-blue);
+
+  /* Estados */
+  --state-danger: #ff8b7e; /* 7,5:1 sobre navy */
+  --state-danger-surface: color-mix(in srgb, #ff8b7e 14%, var(--yebo-midnight-navy)); /* texto 6,0:1 */
+}

@@ -32,24 +32,42 @@ export default tseslint.config(
     languageOptions: { parserOptions: { emitDecoratorMetadata: true, experimentalDecorators: true } },
   },
   {
-    // El cliente Prisma de plataforma (BYPASSRLS) solo puede usarse desde módulos autorizados (multitenancy §3).
-    files: ['apps/api/src/modules/**/*.ts'],
-    // Módulos de plataforma autorizados a usar PlatformPrismaService (omite RLS). Añadir uno exige revisión.
-    ignores: ['apps/api/src/modules/health/**', 'apps/api/src/modules/tenancy/**'],
+    // Frontera 1 · El cliente Prisma de plataforma (BYPASSRLS) solo se usa en los módulos autorizados
+    // (multitenancy §3). Cubre TODO apps/api/src, no solo modules/ (hallazgo M3 de la auditoría de la 3.2a).
+    files: ['apps/api/src/**/*.ts'],
+    // Autorizados a usar PlatformPrismaService. Añadir uno exige revisión. identity ya NO está: usa yebo_identity.
+    ignores: [
+      'apps/api/src/infrastructure/database/**',
+      'apps/api/src/modules/health/**',
+      'apps/api/src/modules/tenancy/**',
+    ],
     rules: {
       'no-restricted-imports': [
         'error',
         {
-          paths: [
+          patterns: [
             {
-              name: '../../infrastructure/database/platform-prisma.service',
+              group: ['**/platform-prisma.service', '**/platform-prisma.service.js'],
               message: 'PlatformPrismaService omite RLS. Solo módulos de plataforma autorizados (ADR-003).',
             },
           ],
+        },
+      ],
+    },
+  },
+  {
+    // Frontera 2 · El cliente con el rol yebo_identity (sesiones y tokens) solo existe dentro del módulo identity.
+    // Regla distinta de la frontera 1 (la versión de typescript-eslint) para que ninguna de las dos anule a la otra.
+    files: ['apps/api/src/**/*.ts'],
+    ignores: ['apps/api/src/modules/identity/**'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
           patterns: [
             {
-              group: ['**/infrastructure/database/platform-prisma.service'],
-              message: 'PlatformPrismaService omite RLS. Solo módulos de plataforma autorizados (ADR-003).',
+              group: ['**/identity-prisma.service', '**/identity-prisma.service.js'],
+              message: 'IdentityPrismaService (rol yebo_identity) es exclusivo del módulo identity.',
             },
           ],
         },

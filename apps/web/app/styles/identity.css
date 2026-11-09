@@ -1,0 +1,15 @@
+/*
+ * Identidad YEBO v1.0 · primitivas de MARCA. Fuente: identidad/tokens/yebo-tokens.css (propuesta de trabajo,
+ * no arte final; el sistema se formaliza en la Fase 4). Solo se copian los valores; ningún componente los usa
+ * directamente: pasan por los roles de semantic.css.
+ */
+:root {
+  --yebo-midnight-navy: #101d2b;
+  --yebo-amazon-teal: #16c7b2;
+  --yebo-electric-lime: #c5f36b;
+  --yebo-cloud-white: #f3f6f5;
+  --yebo-slate-blue: #263747;
+
+  --yebo-radius-sm: 8px;
+  --yebo-radius-md: 12px;
+}

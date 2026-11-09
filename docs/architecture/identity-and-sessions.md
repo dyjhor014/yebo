@@ -24,7 +24,7 @@ flowchart LR
   HUB["Hub de cuentas<br/>cuentas.yebo.pe<br/>login, MFA, emisión de códigos"]
   API["API<br/>/api/v1/auth/*"]
   DB[("identity_sessions<br/>tenant_sessions<br/>refresh_tokens<br/>authorization_codes")]
-  RD[("Redis<br/>estado de sesión activa")]
+  RD[("Redis<br/>(sin uso en identidad desde la 3.2a)")]
   CH --- HUB
   CA --- API
   CB --- API
@@ -118,6 +118,14 @@ sequenceDiagram
 | Cookies leídas por JavaScript | `httpOnly`, `Secure` y prefijo `__Host-` (ligada al host exacto, sin `Domain`) |
 | CSRF en mutaciones de la API | `SameSite=Lax` + token *double-submit* (cookie `csrf` + cabecera `X-CSRF-Token`). La API está en el mismo origen (`{tenant}/api`, vía Nginx), así que no se abre CORS para la web |
 
+
+> **Implementación de la Fase 3.2b (2026-11-10):**
+> - El inicio va por `GET /api/v1/auth/start` en el dominio de la empresa. El `state` y el `code_verifier` viven en la cookie firmada `__Host-yebo_auth`; el verifier no pasa por el JavaScript del navegador.
+> - El callback es una página que canjea el código **por POST** (`/api/v1/auth/token`).
+> - La cookie del hub contiene el id de la sesión de identidad firmado.
+> - Reutilizar un código revoca la sesión emitida con él.
+> - Detalle y pruebas en [phase-3-plan](../development/phase-3-plan.md).
+
 ## 6. Refresh tokens
 
 - Opacos (256 bits), **hasheados** (SHA-256) en `refresh_tokens`, con `family_id` = sesión de empresa.
@@ -126,14 +134,25 @@ sequenceDiagram
 - **Ventana de gracia de 20 s**: varias pestañas pueden refrescar a la vez. Si llega el refresh recién rotado dentro de esa ventana, se devuelve **el mismo** sucesor (respuesta idempotente) en lugar de tratarlo como robo. El frontend además coordina el refresh entre pestañas con la Web Locks API.
 - Expiración: inactividad configurable por tenant (p. ej., 12 h para turnos de taquilla) y máximo absoluto (p. ej., 30 días).
 
+> **Precisión de la Fase 3.2a (2026-11-09):**
+> - Para devolver el mismo sucesor, el token rotado guarda el sucesor **cifrado** (AES-256-GCM, con una clave HKDF derivada del propio token en claro). Solo lo descifra quien presenta ese token; nunca se guarda en claro y no se usa Redis.
+> - La familia y el sucesor se modelan con `parent_id` (UNIQUE por sesión), sin `successor_id`.
+> - Detalle en [phase-3-plan](../development/phase-3-plan.md).
+
 ## 7. Validación en cada request
 
 1. Firma y expiración del JWT (`sub`, `sid`, `tid`, `mid`, `ver`).
 2. `tid` == tenant resuelto por el host.
-3. **Estado de la sesión en Redis** (`tsess:{sid}` → activa + `permissions_version`). Si Redis no responde, se consulta PostgreSQL (nunca se acepta sin verificar).
+3. **Estado de la sesión en PostgreSQL**, en una sola consulta por clave primaria:
+   - sesión de empresa y sesión de identidad no revocadas ni expiradas;
+   - membresía y usuario ACTIVE;
+   - `permissions_version` vigente;
+   - y, si el request tiene tenant en su contexto, que coincida.
+
+   *(Precisión de la Fase 3.2a, 2026-11-09: el diseño aprobado decía "en Redis, con PostgreSQL de respaldo". La auditoría demostró que una caché positiva aceptaba sesiones revocadas durante hasta 60 s. Por decisión del responsable, PostgreSQL es la fuente de verdad en cada petición. Ver [phase-3-plan](../development/phase-3-plan.md).)*
 4. `ver` == `permissions_version` actual de la membresía. Si difiere, responde `401 PERMISSIONS_CHANGED`. El frontend refresca en silencio y obtiene un token con los permisos nuevos. **No** cierra la sesión.
 
-Gracias al paso 3, **la revocación es inmediata** (desde el siguiente request), no "en cuanto expire el access token".
+Gracias al paso 3, la revocación surte efecto en **toda verificación que empiece después de su COMMIT**, no "en cuanto expire el access token". Una petición que ya pasó su verificación termina con el estado que tenía (carrera documentada en phase-3-plan).
 
 ## 8. Revocación
 
@@ -164,3 +183,7 @@ Los dispositivos de embarque y almacén se **registran** (`devices`, con aprobac
 - `sessions` se reemplaza por **`identity_sessions`** (hub) y **`tenant_sessions`** (por empresa, con `identity_session_id`).
 - `auth_handoff_codes` se reemplaza por **`authorization_codes`**: `code_hash`, `user_id`, `tenant_id`, `identity_session_id`, `redirect_uri`, `code_challenge`, `expires_at`, `consumed_at`.
 - `refresh_tokens.session_id` pasa a `tenant_session_id`. Se añaden `successor_id` y `rotated_at` para la ventana de gracia.
+- **Fase 3.2a (2026-11-09):**
+  - `refresh_tokens` no tiene `successor_id`: el sucesor se obtiene por `parent_id`, con `UNIQUE (tenant_session_id, parent_id)`;
+  - se añade `successor_ciphertext` (sucesor cifrado para la ventana de gracia);
+  - las tres tablas de sesión son exclusivas del rol `yebo_identity`.

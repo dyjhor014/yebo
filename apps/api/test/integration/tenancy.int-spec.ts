@@ -126,7 +126,7 @@ describe('Fase 3.1 · tenancy e identidad (PostgreSQL real, rol yebo_app)', () =
   beforeAll(async () => {
     owner = testPool('owner', DB, 1);
     await owner.query(
-      'TRUNCATE membership_roles, role_permissions, roles, tenant_memberships, users, permissions, role_templates, tenant_domains, tenants',
+      'TRUNCATE authorization_codes, refresh_tokens, tenant_sessions, identity_sessions, membership_roles, role_permissions, roles, tenant_memberships, users, permissions, role_templates, tenant_domains, tenants',
     );
     appPool = testPool('app', DB, 4);
     app = await createTestApp();
