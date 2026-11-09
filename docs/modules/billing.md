@@ -2,6 +2,8 @@
 
 > **Aprobado el 2026-11-05:** el pico diario de cuentas humanas habilitadas simultáneamente. **No** se cuentan sesiones conectadas: el cálculo se basa en los intervalos de vigencia de las membresías habilitadas, en la zona horaria fija del período. Un reemplazo sin superposición (se deshabilita la cuenta anterior y luego se habilita la nueva) **no** suma dos usuarios.
 
+> **Propuesta del 2026-11-09 (pendiente):** el precio por usuario podrá negociarse por tenant mediante acuerdos comerciales versionados (ADR-031, [platform-revenue.md §2](platform-revenue.md)). **La definición de usuario facturable y el cálculo de este documento no cambian**; solo cambia de dónde salen `base_price`, los usuarios incluidos y el precio por usuario.
+
 - **Decisión base:** D5. Se factura el máximo de usuarios humanos activos, configurable por plan.
 - **ADR:** ADR-016.
 

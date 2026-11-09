@@ -39,8 +39,13 @@ A partir de la aprobación, cualquier cambio se registra como **un ADR nuevo que
 | 024 | Restricciones de BD: FK en el esquema Prisma, EXCLUDE/CHECK/RLS en SQL y prueba de deriva | **Aceptado** · Fase 2 |
 | 025 | Políticas RLS con `NULLIF(current_setting(...), '')` y contexto por transacción | **Aceptado** · Fase 2 |
 | 026 | Bloqueo ordenado de recursos antes de la exclusión GIST | **Aceptado** · Fase 2 |
-| 027 | Sitio comercial en una app independiente `apps/site` (amplía ADR-002) | **Aceptado** · MKT-01 |
+| 027 | Sitio comercial en una app independiente `apps/site` (amplía ADR-002) | **Aceptado** · MKT-01 · asignación exclusiva de la raíz `yebo.pe` reemplazada por ADR-029 (2026-11-09) |
 | 028 | Módulo `commercial-leads` de ámbito plataforma, aislado en PostgreSQL | **Aceptado** · MKT-01 |
+| 029 | Distribución de `yebo.pe` (raíz: portal central de viajes; `/empresas`: sitio comercial) servida por `apps/site`; reemplaza la asignación exclusiva de la raíz de ADR-027 | **Aceptado** (AMP-D1, 2026-11-09): dominio y aplicación compartida · no autoriza la implementación |
+| 030 | Índice central de publicación de viajes como proyección global alimentada por el outbox | **Propuesto** · ampliación 2026-11-09 |
+| 031 | Acuerdos comerciales versionados por tenant (precio por usuario y comisión) | **Propuesto** · ampliación 2026-11-09 |
+| 032 | Comisión de plataforma: fotografía por venta, devengo, reversión y liquidación | **Propuesto** · ampliación 2026-11-09 |
+| 033 | Publicidad: datos de plataforma, segmentación contextual y entrega propia | **Propuesto** · ampliación 2026-11-09 |
 
 ---
 
@@ -261,3 +266,95 @@ Propuestos y aceptados el 2026-11-05. Detalle en [mkt-01-commercial-site.md](../
    - `sales_lead_events` *append-only* a nivel de permisos (sin `UPDATE` ni `DELETE`).
 
 El diseño detallado del rol y de los permisos se hará en la Fase 4 y se someterá a revisión antes de implementarlo.
+
+---
+
+## ADR de la ampliación funcional (2026-11-09)
+
+**Estado:** ADR-029 está **aceptado** (AMP-D1, 2026-11-09) en sus dos decisiones: la distribución del dominio y el uso de `apps/site` para el portal y el sitio comercial. ADR-030 a 033 siguen **Propuestos**. **Ninguno autoriza la implementación**, migraciones, cambios en Prisma ni en la API. No se edita el texto de ningún ADR aceptado: ADR-029 **reemplaza explícitamente** la asignación exclusiva de la raíz que hacían ADR-027 y MKT-D5, y el índice de ADR-027 lo anota. Detalle en [marketplace.md](../modules/marketplace.md), [platform-revenue.md](../modules/platform-revenue.md) y [advertising.md](../modules/advertising.md).
+
+### ADR-029 · Distribución de `yebo.pe` y aplicación compartida: portal central de viajes en la raíz, sitio comercial en `/empresas`, ambos en `apps/site` (aceptado)
+- **Contexto:** se pide un buscador central de viajes de todos los tenants en `yebo.pe`, distinto del sitio comercial (MKT-01) y de las vitrinas (ADR-002).
+- **Problema:** ADR-027 ("servida en el dominio raíz de la plataforma") y MKT-D5 asignaban la raíz `yebo.pe` en exclusiva al sitio comercial. `apps/web` exige un tenant por host, así que no puede servir el portal.
+- **Alternativas evaluadas:**
+  1. portal en `yebo.pe` y sitio comercial en `empresas.yebo.pe`;
+  2. portal en `viajes.yebo.pe` y ADR-027 intacto;
+  3. **portal en la raíz y sitio comercial en `yebo.pe/empresas`, en el mismo host** (elegida).
+
+  Para la aplicación: una app nueva `apps/marketplace`, `apps/site` con rutas diferenciadas, o `apps/web`.
+- **Decisión aprobada 1 · distribución del dominio (AMP-D1, 2026-11-09):**
+
+  | Ruta | Experiencia | Público |
+  |---|---|---|
+  | `yebo.pe/` | Portal central: búsqueda, resultados, destinos y empresas transportistas | Pasajeros |
+  | `yebo.pe/empresas` y `yebo.pe/empresas/...` | Sitio comercial de MKT-01: funcionalidades, verticales, beneficios, demostración y captación | Empresas transportistas |
+  | `<empresa>.yebo.pe` (o el dominio propio del tenant) | Vitrina del tenant (sin cambios: ADR-002, ADR-004) | Pasajeros y remitentes de esa empresa |
+
+- **Relación con decisiones aceptadas:**
+  - **ADR-027:** se **reemplaza solo** su asignación exclusiva de la raíz. Siguen vigentes `apps/site` como app pública independiente de la operativa, las condiciones de su aprobación (sin sesiones compartidas, sin tenant, sin acceso directo a la BD, reutilización de paquetes) y el módulo de prospectos (ADR-028). Su texto no se edita: el índice anota el reemplazo.
+  - **MKT-D5:** `yebo.pe` sigue siendo el dominio aprobado. Lo que cambia es su reparto: el sitio comercial pasa de la raíz a `/empresas`. Lo registra AMP-D1 en el registro de decisiones.
+  - **MKT-D6:** no hace falta ningún subdominio nuevo.
+- **Decisión aprobada 2 · aplicación compartida (AMP-D1, 2026-11-09):** `apps/site` sirve las dos experiencias con segmentos de ruta y layouts separados de Next.js (p. ej. grupos `(marketplace)` y `(empresas)`), cada uno con su navegación, metadatos, cabeceras y presupuesto de rendimiento. **No se crea `apps/marketplace` ni ninguna otra app.**
+  - Lo que antes justificaba una app aparte (una búsqueda dinámica frente a un sitio estático) lo resuelve Next.js por ruta: `/empresas` sigue en SSG/ISR y el portal usa SSR para la búsqueda e ISR para las páginas de rutas y destinos (las URL concretas del portal se definen en la Fase 13).
+  - La CSP y la caché se fijan por ruta.
+  - **Precisión sobre ADR-027:** su "estática (SSG/ISR)" pasa a aplicarse a la sección `/empresas`; el portal añade rutas dinámicas que solo llaman a la API pública del índice (ADR-030).
+  - **Coste aceptado:** un despliegue del portal redespliega también `/empresas`, y al revés. Se revisaría una separación solo si una métrica concreta lo exige (tráfico, frecuencia de despliegue o incidentes de una sección que afecten a la otra).
+- **Separación de las tres experiencias:**
+  - el portal y `/empresas` no comparten navegación principal, metadatos, analítica de conversión ni espacios publicitarios (PUB-01 solo en el portal);
+  - se enlazan entre sí solo desde el pie de página y desde llamadas explícitas ("YEBO para empresas");
+  - las vitrinas siguen en el host de cada tenant y el portal solo deriva a ellas.
+- **Consecuencias:**
+  - el SEO se reparte por intención de búsqueda ([marketplace §4.2](../modules/marketplace.md));
+  - las URL de MKT-01 pasan a `/empresas/...`;
+  - el directorio de empresas del portal **no** puede usar `/empresas` (ruta propuesta, sujeta a definición en la Fase 13: `/transportistas/<slug>`; igual que `/buscar`, `/rutas/...` y `/destinos/...`);
+  - las páginas legales comunes del dominio (`/privacidad`, `/terminos`, `/cookies`) quedan en la raíz, con secciones específicas del portal (AMP-Q15);
+  - una adición al C4 (`yebo.pe` → `apps/site`, con dos secciones) cuando se implemente.
+- **Dependencias:** ADR-002, ADR-004, ADR-027, ADR-028, ADR-030, MKT-D5, MKT-D6; Fases 13 y 15; MKT-01.2.
+- **Alcance de la aceptación:** fija la arquitectura. **No autoriza** implementar el portal ni el sitio comercial, ni crear migraciones, modelos Prisma o endpoints. Cada etapa requiere su propia autorización.
+
+### ADR-030 · Índice central de publicación de viajes (propuesto)
+- **Contexto:** el portal debe mostrar viajes de muchos tenants sin romper el aislamiento (ADR-003, ADR-025).
+- **Problema:** leer las tablas de los tenants desde un endpoint público requiere `BYPASSRLS`.
+- **Alternativas:** consulta directa con `yebo_platform`; vista materializada entre tenants; **proyección global alimentada por eventos**; motor de búsqueda externo.
+- **Decisión propuesta:**
+  - proyección de solo datos públicos en tablas globales;
+  - escrita por un consumidor del outbox (ADR-008) con el rol `yebo_marketplace_writer`, y leída con `yebo_marketplace_reader`; `yebo_app` sin permisos;
+  - *opt-in* del tenant; retiro automático (despublicación, cancelación, salida, estado del tenant según ADR-023);
+  - reconciliación periódica idempotente;
+  - disponibilidad en bandas;
+  - **la verdad transaccional sigue en el tenant**: la vitrina valida la disponibilidad real antes de reservar (ADR-007).
+- **Consecuencias:** excepción declarada en la lista de tablas globales (multitenancy §4.3) y en la prueba de cobertura de RLS; consistencia eventual con un objetivo de retraso.
+- **Dependencias:** ADR-003, 007, 008, 023, 025; Fases 7, 8 y 13.
+
+### ADR-031 · Acuerdos comerciales versionados por tenant (propuesto)
+- **Contexto:** el precio por usuario y la comisión se negocian por empresa. Hoy solo existe `subscriptions.price_override jsonb`.
+- **Problema:** hacen falta vigencias, historial inmutable y un sitio para la comisión, sin alterar la medición D5.
+- **Alternativas:** un plan por empresa; `price_override`; **acuerdos versionados**.
+- **Decisión propuesta:** `commercial_agreements` y `commercial_agreement_versions` (globales, `yebo_platform`), inmutables al aprobarse (ADR-010). Prevalecen sobre los precios del plan; los módulos y límites siguen en el plan. Los cambios rigen desde una fecha futura o desde el período siguiente.
+- **Consecuencias:** `usage_period_calculations` guarda la copia de la versión del acuerdo; **ADR-016 no cambia**; la evolución de `price_override` se decide en la Fase 4.
+- **Dependencias:** ADR-010, ADR-016, D5; Fase 4.
+
+### ADR-032 · Comisión de plataforma por venta de pasajes (propuesto)
+- **Contexto:** YEBO cobra una comisión negociable (referencia: 1 %) con dos modalidades: todos los pasajes o solo los vendidos por canales de YEBO.
+- **Problema:** el acuerdo aplicable debe quedar fijado en cada venta, y las anulaciones y devoluciones deben reflejarse sin reescribir el pasado.
+- **Alternativas:** calcular al liquidar con el acuerdo vigente (recalcula el histórico: **descartada**); reutilizar `commission_accruals` de agencias (otro concepto: **descartada**); **devengo por línea con fotografía, en la transacción de la venta**.
+- **Decisión propuesta:**
+  - `platform_fee_accruals` (tabla de tenant, con RLS), escrita por el núcleo comercial (ADR-014) junto con la venta;
+  - se reversa con `SaleCancelled` y `RefundPaid`;
+  - un job de plataforma liquida por período (`platform_fee_settlements`) y genera la línea de `platform_invoices`;
+  - período cerrado inmutable; las correcciones van como ajuste en el período siguiente.
+- **Consecuencias:** un tipo de línea nuevo en `platform_invoices`; la atribución del canal (ADR-020) se amplía con la referencia del portal central.
+- **Dependencias:** ADR-010, 014, 020, 023, 031; Fases 8 y 11. Decisiones pendientes AMP-Q8 a Q13.
+
+### ADR-033 · Publicidad (propuesto)
+- **Contexto:** anuncios de negocios de destino en el portal central y quizá en las vitrinas.
+- **Problema:** monetizar sin comprometer el aislamiento, la privacidad de los pasajeros ni la CSP.
+- **Alternativas:** red publicitaria de terceros con scripts (**descartada**: privacidad, CSP, rendimiento); **servidor propio de creatividades**. El modelo de administración (YEBO, tenant o mixto) queda **pendiente (AMP-Q5)**.
+- **Decisión propuesta:**
+  - datos globales de plataforma con un rol dedicado y `yebo_app` sin permisos (patrón de ADR-028);
+  - segmentación solo contextual;
+  - creatividades moderadas y servidas por YEBO;
+  - impresiones en el servidor con filtrado de bots y clics por redirección;
+  - rótulo obligatorio «Patrocinado» o «Publicidad».
+- **Consecuencias:** iniciativa PUB-01; tablas globales nuevas; textos legales.
+- **Dependencias:** ADR-019, 028, 029; Fases 4, 11 y 13; D9.
