@@ -1,6 +1,6 @@
 # Estado del proyecto — YEBO
 
-**Última actualización:** 2026-11-05
+**Última actualización:** 2026-11-09
 
 ## Fase actual
 
@@ -52,6 +52,7 @@ Ninguno abierto.
 
 ## Próximas tareas
 
-1. Revisión del PR de la Fase 2 por el responsable del proyecto. El merge lo hace él.
-2. Tras el cierre: activar la protección de `main` exigiendo el check de CI.
-3. Fase 3 (multitenancy y seguridad), **solo después del cierre de la Fase 2**.
+1. Revisión de los PR abiertos por el responsable del proyecto; el merge lo hace él. Orden de integración previsto: #1 (Fase 2) → #3 (Impeccable) → #2 (MKT-01) → #4 (Fase 3.1, apilado sobre la rama de la Fase 2).
+2. Tras el cierre de la Fase 2: activar la protección de `main` exigiendo el check de CI.
+3. Revisión de la etapa 3.1 (PR #4).
+4. Etapa 3.2 (autenticación y sesiones), **solo con autorización expresa** tras la revisión de la 3.1.
