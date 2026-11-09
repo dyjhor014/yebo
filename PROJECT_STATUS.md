@@ -40,7 +40,7 @@
 - **Aprobado:**
   - ADR-027 (`apps/site`, amplía ADR-002);
   - ADR-028 (módulo global de prospectos, con condiciones);
-  - dominio `yebo.pe`;
+  - dominio `yebo.pe` (desde el 2026-11-09 el sitio comercial ocupa `yebo.pe/empresas`; AMP-D1);
   - subdominios reservados como requisito de la Fase 4;
   - Impeccable 4.8.0 instalada en el proyecto mediante el PR #3: npm con `--no-hooks`, `hook.enabled: false` y telemetría desactivada. Cualquier `impeccable update` debe usar `--no-hooks`. Ver [metodología §1.3](docs/design/design-methodology.md).
 - **No autorizado:**
@@ -51,6 +51,19 @@
   - propuesta de identidad visual (dirección preliminar: azul profundo, turquesa, blanco, inspiración amazónica);
   - verificación de titularidad y DNS de `yebo.pe`;
   - validación de las palabras clave.
+
+## Ampliación funcional (propuesta, 2026-11-09)
+
+Portal central de viajes, índice de publicación, publicidad, comisión por venta de pasajes, suscripción por usuario negociada y gestión comercial y financiera. **Solo planificación; nada implementado ni autorizado.**
+
+- Documentos: [marketplace.md](docs/modules/marketplace.md) · [platform-revenue.md](docs/modules/platform-revenue.md) · [advertising.md](docs/modules/advertising.md) · [roadmap §Ampliación funcional](docs/development/roadmap.md#ampliación-funcional-2026-11-09-propuesta).
+- **Aprobado (AMP-D1, 2026-11-09; ADR-029 aceptado):**
+  - distribución del dominio: `yebo.pe/` es el portal central de viajes, `yebo.pe/empresas` el sitio comercial y `<empresa>.yebo.pe` las vitrinas;
+  - aplicación compartida: `apps/site` sirve el portal y el sitio comercial con rutas y layouts diferenciados (sin `apps/marketplace`);
+  - reemplaza la asignación exclusiva de la raíz de ADR-027 y MKT-D5.
+- **No autorizado:** implementar el portal central o el sitio comercial, migraciones, cambios en Prisma o en la API.
+- **Propuesto:** ADR-030 a 033; adiciones a las Fases 4, 7, 8, 11, 13 y 15; iniciativa PUB-01.
+- **Pendiente:** decisiones AMP-Q2 a AMP-Q16.
 
 ## Supuestos y puntos por validar (no bloquean)
 

@@ -1,6 +1,6 @@
 # MKT-01 — Sitio web comercial de YEBO
 
-- **Estado:** ✅ Propuesta aprobada (2026-11-05): ADR-027 y ADR-028 aceptados y dominio `yebo.pe` aprobado (MKT-D1 a MKT-D6). **No hay nada implementado** y la implementación no está autorizada (etapas MKT-01.1 y siguientes).
+- **Estado:** ✅ Propuesta aprobada (2026-11-05): ADR-027 y ADR-028 aceptados y dominio `yebo.pe` aprobado (MKT-D1 a MKT-D6). **Desde el 2026-11-09 (AMP-D1, ADR-029) el sitio vive en `yebo.pe/empresas`**; la raíz es el portal central de viajes. El alcance y los objetivos comerciales no cambian. **No hay nada implementado** y la implementación no está autorizada (etapas MKT-01.1 y siguientes).
 - **Tipo:** iniciativa transversal e independiente. No es una fase del roadmap y no renumera ni modifica ninguna.
 - **No confundir con:**
   - el **White Label** (Fase 5): el sitio público de *cada empresa cliente*, en su propio dominio (`site_versions`);
@@ -68,7 +68,7 @@ Estado de partida de cada capacidad (se actualiza al cerrar cada fase):
 
 ```mermaid
 flowchart LR
-  V["Visitante<br/>(empresa de transporte)"] --> N["Nginx / CDN<br/>yebo.pe"]
+  V["Visitante<br/>(empresa de transporte)"] --> N["Nginx / CDN<br/>yebo.pe/empresas"]
   N --> S["apps/site<br/>Next.js · SSG/ISR<br/>sin sesión ni tenant"]
   S -->|"Server Action → POST /api/v1/public/leads<br/>(servidor a servidor)"| API["apps/api<br/>módulo commercial-leads (L0, ámbito plataforma)"]
   API --> PG[("PostgreSQL<br/>tablas globales sales_leads*<br/>solo yebo_platform")]
@@ -76,7 +76,7 @@ flowchart LR
   API -.->|"outbox (Fase 12)"| MG[Mailgun]
 ```
 
-- **Dominio:** `yebo.pe` como canónico (**aprobado**, MKT-D5), con `www.yebo.pe` redirigido (301). Antes del despliegue quedan por verificar la titularidad, la disponibilidad y la configuración DNS.
+- **Dominio:** `yebo.pe` como canónico (**aprobado**, MKT-D5), con `www.yebo.pe` redirigido (301). **Desde AMP-D1 (2026-11-09) el sitio comercial ocupa `yebo.pe/empresas`** y la raíz es del portal central ([marketplace §4](../modules/marketplace.md)); `apps/site` sirve las dos secciones con rutas y layouts separados (ADR-029, aceptado). Antes del despliegue quedan por verificar la titularidad, la disponibilidad y la configuración DNS.
 - **Renderizado:** React Server Components y generación estática. Solo es interactivo en el cliente el formulario de demostración.
 - **Contenido:** MDX en el repositorio (páginas y artículos) con revisión por PR. No se usa CMS al inicio; se reevaluará si el ritmo editorial lo exige.
 - **Reutilización:** `packages/ui` (tokens y primitivas accesibles) y `packages/contracts` (esquema Zod del prospecto, ADR-006). **No** reutiliza los layouts ni la navegación de los paneles.
@@ -98,20 +98,22 @@ Criterio: una página existe solo si responde a una **intención de búsqueda o 
 
 | URL | Propósito | Intención principal | Prioridad |
 |---|---|---|---|
-| `/` | Propuesta de valor, problemas, capacidades, modalidades, CTA | Navegacional y comercial | Lanzamiento |
-| `/transporte-terrestre` | Buses interprovinciales y urbanos: boletos, asientos, agencias, encomiendas en bodega | Comercial ("sistema de venta de pasajes") | Lanzamiento |
-| `/transporte-fluvial` | Embarcaciones: camarotes, zona libre, bodega, cubierta, tramos con paradas intermedias | Comercial (nicho con poca competencia) | Lanzamiento |
-| `/encomiendas` | Recepción, traslados, seguimiento, PIN de entrega | Comercial ("sistema de encomiendas") | Lanzamiento |
-| `/carga` | Carga general, vehículos y maquinaria con validación de capacidad | Comercial | Lanzamiento |
-| `/funcionalidades` | Catálogo completo con el estado de cada capacidad (§1) | Investigación | Lanzamiento |
-| `/demo` | Solicitud de demostración (§5) | Conversión | Lanzamiento |
-| `/demo/gracias` | Confirmación y próximos pasos (`noindex`) | — | Lanzamiento |
-| `/preguntas-frecuentes` | Dudas de compra: implantación, datos, facturación, conexión, soporte | Investigación | Lanzamiento |
-| `/privacidad`, `/terminos`, `/cookies` | Textos legales, validados por un asesor legal (Ley 29733) | — | Lanzamiento (obligatorias) |
-| `/precios` | Modelo de precios por usuarios (D5) | Comercial | **Cuando existan los planes publicados** (Fase 4). Antes: "precio según tamaño, solicita demo" |
-| `/recursos/<slug>` | Artículos informativos (§4.5) | Informacional | Tras el lanzamiento, de forma continua |
-| `/nosotros` | Equipo, misión, ubicación y contacto | Confianza | Cuando haya contenido real |
-| `/contacto` | **No se crea por separado:** el contacto general vive en `/demo` (con un motivo seleccionable) y en el pie de página | — | — |
+| `/empresas` | Propuesta de valor, problemas, capacidades, modalidades, CTA | Navegacional y comercial | Lanzamiento |
+| `/empresas/transporte-terrestre` | Buses interprovinciales y urbanos: boletos, asientos, agencias, encomiendas en bodega | Comercial ("sistema de venta de pasajes") | Lanzamiento |
+| `/empresas/transporte-fluvial` | Embarcaciones: camarotes, zona libre, bodega, cubierta, tramos con paradas intermedias | Comercial (nicho con poca competencia) | Lanzamiento |
+| `/empresas/encomiendas` | Recepción, traslados, seguimiento, PIN de entrega | Comercial ("sistema de encomiendas") | Lanzamiento |
+| `/empresas/carga` | Carga general, vehículos y maquinaria con validación de capacidad | Comercial | Lanzamiento |
+| `/empresas/funcionalidades` | Catálogo completo con el estado de cada capacidad (§1) | Investigación | Lanzamiento |
+| `/empresas/demo` | Solicitud de demostración (§5) | Conversión | Lanzamiento |
+| `/empresas/demo/gracias` | Confirmación y próximos pasos (`noindex`) | — | Lanzamiento |
+| `/empresas/preguntas-frecuentes` | Dudas de compra: implantación, datos, facturación, conexión, soporte | Investigación | Lanzamiento |
+| `/privacidad`, `/terminos`, `/cookies` (en la raíz, comunes al dominio) | Textos legales, validados por un asesor legal (Ley 29733); con secciones propias del portal (AMP-Q15) | — | Lanzamiento (obligatorias) |
+| `/empresas/precios` | Modelo de precios por usuarios (D5) | Comercial | **Cuando existan los planes publicados** (Fase 4). Antes: "precio según tamaño, solicita demo" |
+| `/empresas/recursos/<slug>` | Artículos informativos (§4.5) | Informacional | Tras el lanzamiento, de forma continua |
+| `/empresas/nosotros` | Equipo, misión, ubicación y contacto | Confianza | Cuando haya contenido real |
+| `/empresas/contacto` | **No se crea por separado:** el contacto general vive en `/empresas/demo` (con un motivo seleccionable) y en el pie de página | — | — |
+
+Todas las URL comerciales cuelgan de `/empresas` (AMP-D1). Las páginas legales son comunes al dominio y quedan en la raíz.
 
 Se descartan una página "Soluciones" independiente (es un menú, no una página) y las páginas por ciudad o país sin contenido diferenciado.
 
@@ -123,37 +125,39 @@ Se descartan una página "Soluciones" independiente (es un menú, no una página
 
 | Grupo | Términos semilla (es-PE) | Variantes LATAM | Página destino | Riesgo de intención |
 |---|---|---|---|---|
-| Terrestre | software para empresas de transporte, sistema de venta de pasajes, sistema de boletaje, software de transporte interprovincial | sistema de venta de boletos (MX, AR), venta de tiquetes (CO) | `/transporte-terrestre` | "venta de pasajes" sin "sistema" o "software" es intención de viajero (B2C): se excluye |
-| Fluvial | software para transporte fluvial, sistema para embarcaciones, venta de pasajes para lanchas | — | `/transporte-fluvial` | Búsquedas de rutas ("lancha Iquitos Yurimaguas") son B2C |
-| Encomiendas | sistema de encomiendas, software de encomiendas, gestión de encomiendas para agencias | paquetería (MX), envíos (CL, AR) | `/encomiendas` | "seguimiento de encomiendas" es del remitente: lo atienden los portales de cada empresa (Fase 13) |
-| Carga | software de gestión de carga, sistema de transporte de carga | — | `/carga` | Competencia con TMS de logística pesada |
-| Transversal | facturación electrónica para empresas de transporte, manifiesto de pasajeros, control de caja de agencias | — | `/funcionalidades`, `/recursos/*` | Contenido regulatorio: requiere validar S2, S5 y S6 |
+| Terrestre | software para empresas de transporte, sistema de venta de pasajes, sistema de boletaje, software de transporte interprovincial | sistema de venta de boletos (MX, AR), venta de tiquetes (CO) | `/empresas/transporte-terrestre` | "venta de pasajes" sin "sistema" o "software" es intención de viajero (B2C): corresponde al portal central de la raíz, no a esta sección |
+| Fluvial | software para transporte fluvial, sistema para embarcaciones, venta de pasajes para lanchas | — | `/empresas/transporte-fluvial` | Búsquedas de rutas ("lancha Iquitos Yurimaguas") son B2C: corresponden al portal central (`/rutas/...`, ruta propuesta sujeta a definición en la Fase 13) |
+| Encomiendas | sistema de encomiendas, software de encomiendas, gestión de encomiendas para agencias | paquetería (MX), envíos (CL, AR) | `/empresas/encomiendas` | "seguimiento de encomiendas" es del remitente: lo atienden las vitrinas de cada empresa (Fase 13) |
+| Carga | software de gestión de carga, sistema de transporte de carga | — | `/empresas/carga` | Competencia con TMS de logística pesada |
+| Transversal | facturación electrónica para empresas de transporte, manifiesto de pasajeros, control de caja de agencias | — | `/empresas/funcionalidades`, `/empresas/recursos/*` | Contenido regulatorio: requiere validar S2, S5 y S6 |
 
 Mercado: **Perú primero** (`es-PE`). Se añadirán `hreflang` y variantes por país solo cuando exista contenido realmente adaptado (moneda, normativa, terminología); traducir palabras sueltas no basta.
+
+> **Reparto con el portal central (AMP-D1):** las búsquedas de viajes, rutas y destinos son del portal (`yebo.pe/`); las de software y soluciones para empresas, de esta sección (`yebo.pe/empresas`). Reglas completas en [marketplace §4.2](../modules/marketplace.md).
 
 ### 4.2 SEO on-page
 
 - Un `<title>` y una `meta description` únicos por página, definidos en el archivo de contenido y validados en build (longitud y unicidad).
 - Un solo `h1` por página; la jerarquía de encabezados sigue el contenido.
 - URLs en español, en minúsculas, con guiones y sin parámetros (las de §3).
-- Enlazado interno: cada página vertical enlaza `/funcionalidades`, `/demo` y los artículos de su grupo.
+- Enlazado interno: cada página vertical enlaza `/empresas/funcionalidades`, `/empresas/demo` y los artículos de su grupo. El portal central enlaza esta sección desde el pie de página ("YEBO para empresas"), y esta sección enlaza al portal como muestra del producto.
 - `alt` descriptivo en las imágenes con contenido; vacío en las decorativas.
 
 ### 4.3 SEO técnico
 
 | Elemento | Implementación |
 |---|---|
-| Sitemap XML | `app/sitemap.ts`, generado del contenido; excluye las páginas `noindex` |
-| robots.txt | `app/robots.ts`. En los entornos que no son de producción, `Disallow: /` y además `X-Robots-Tag: noindex` |
-| Canonical | Absoluta en cada página, con el dominio canónico único |
+| Sitemap XML | `/empresas/sitemap.xml`, generado del contenido y referenciado desde el índice de sitemaps del dominio (compartido con el portal); excluye las páginas `noindex` |
+| robots.txt | Único para todo el dominio (`yebo.pe/robots.txt`, `app/robots.ts` de `apps/site`), con el índice de sitemaps de las dos secciones. En los entornos que no son de producción, `Disallow: /` y además `X-Robots-Tag: noindex` |
+| Canonical | Absoluta en cada página, con el dominio canónico único y la ruta `/empresas/...` (p. ej. `https://yebo.pe/empresas/transporte-fluvial`) |
 | Open Graph y X Cards | `metadata` por página e imagen OG generada (`opengraph-image`) con el título de la página |
-| Schema.org | `Organization` y `WebSite` en el inicio; `SoftwareApplication` en `/funcionalidades` (sin valoraciones ni precios inventados); `BreadcrumbList` en las verticales; `Article` en `/recursos/*`; `FAQPage` en preguntas frecuentes (válido como marcado, aunque Google hoy limita ese resultado enriquecido a sitios gubernamentales y de salud) |
+| Schema.org | `Organization` y `WebSite` en la raíz del dominio (la publica el portal, con `SearchAction`); `SoftwareApplication` en `/empresas/funcionalidades` (sin valoraciones ni precios inventados); `BreadcrumbList` en las verticales; `Article` en `/empresas/recursos/*`; `FAQPage` en `/empresas/preguntas-frecuentes` (válido como marcado, aunque Google hoy limita ese resultado enriquecido a sitios gubernamentales y de salud) |
 | Core Web Vitals | Objetivos en el percentil 75 móvil: LCP < 2,5 s, INP < 200 ms, CLS < 0,1. Presupuesto: ≤ 70 KB de JS en las páginas de contenido. Lighthouse CI en cada PR del sitio |
 | Imágenes | `next/image`, AVIF/WebP, dimensiones explícitas, `priority` solo en la imagen LCP y carga diferida en el resto |
 | Fuentes | Autoalojadas con `next/font` y subconjunto latino; como máximo 2 familias |
 | Accesibilidad | WCAG 2.2 AA; axe en CI; navegación completa por teclado |
 | Analítica | Herramienta respetuosa con la privacidad (sin cookies, o con consentimiento previo si usa cookies), eventos de conversión (`demo_started`, `demo_submitted`) y UTM. Se elige en la implementación |
-| Search Console | Verificación por DNS TXT, envío del sitemap y alertas de cobertura. También Bing Webmaster Tools |
+| Search Console | Verificación por DNS TXT (propiedad de dominio) y una propiedad de prefijo `https://yebo.pe/empresas/` para medir esta sección por separado; envío del sitemap y alertas de cobertura. También Bing Webmaster Tools |
 
 ### 4.4 Errores que se evitan
 
@@ -183,9 +187,9 @@ Ritmo propuesto: 1–2 artículos al mes después del lanzamiento. Cada uno llev
 flowchart LR
   A["Búsqueda / referencia / anuncio"] --> B["Página vertical o inicio"]
   B --> C{"CTA: Solicitar demostración"}
-  C --> D["/demo · paso 1: la empresa"]
+  C --> D["/empresas/demo · paso 1: la empresa"]
   D --> E["paso 2: contacto + consentimiento"]
-  E --> F["/demo/gracias<br/>qué pasará y cuándo"]
+  E --> F["/empresas/demo/gracias<br/>qué pasará y cuándo"]
   F --> G["Staff YEBO: nuevo prospecto en apps/platform"]
   G --> H["Calificación → demo → propuesta"]
   H --> I{"¿Gana?"}
@@ -245,11 +249,11 @@ Reglas:
 |---|---|---|
 | 2 · Fundación técnica (en PR) | Monorepo y CI donde vivirá `apps/site` | Requisito cumplido al cerrar el PR |
 | 3 · Multitenancy y seguridad | Rate limit, CAPTCHA y auditoría para el endpoint público de prospectos | **Bloqueante** para el formulario |
-| 4 · Superadmin y membresías | Gestión de prospectos en `apps/platform`; alta del tenant al ganar; planes para `/precios`; subdominios reservados (§2.3) | **Bloqueante** para el flujo comercial completo |
+| 4 · Superadmin y membresías | Gestión de prospectos en `apps/platform`; alta del tenant al ganar; planes para `/empresas/precios`; subdominios reservados (§2.3) | **Bloqueante** para el flujo comercial completo |
 | 5 · White label | Comparte `packages/ui`. Los tokens de YEBO y los temas de los tenants deben convivir ([metodología §4](../design/design-methodology.md)) | Coordinación |
 | 8, 9, 10 · Verticales | Capturas reales y paso de "Planificada" a "Disponible" | Contenido |
 | 12 · Mailgun | Aviso al staff y confirmación al prospecto por correo (antes, solo aviso en el panel) | Mejora |
-| 13 · Portales públicos y UX | Patrones públicos compartidos; **sin** solapamiento de dominios | Coordinación |
+| 13 · Portales públicos y UX | Patrones públicos compartidos; **sin** solapamiento de dominios. El portal central se construye en la Fase 13 como otra sección de `apps/site`, en la raíz (AMP-D1) | Coordinación |
 | 15 · Producción | Despliegue de `apps/site`, CDN, Search Console y monitorización | **Bloqueante** para publicar |
 
 Decisiones externas: hosting (D12; el dominio `yebo.pe` ya está aprobado, a falta de verificar titularidad y DNS), identidad de marca (solo hay una dirección preliminar, MKT-D4), textos legales validados por un asesor y validación de las palabras clave con datos reales.
@@ -263,6 +267,7 @@ Decisiones externas: hosting (D12; el dominio `yebo.pe` ya está aprobado, a fal
 | K3 | Las tablas de prospectos no figuran en la lista de tablas globales | multitenancy §4 (lista de tablas globales) | ADR-028 las añade como globales solo de plataforma | ✅ Resuelto: ADR-028 aceptado. La lista de multitenancy §4 se actualizará al implementarlas (Fase 4) |
 | K4 | Faltan subdominios reservados | `tenant_domains` (diccionario de datos) | Adición a la Fase 4 (§2.3) | ✅ Requisito aprobado de la Fase 4 (MKT-D6) |
 | K5 | Impeccable no estaba instalada | — | Ver [metodología §1](../design/design-methodology.md) | ✅ Instalada en el proyecto mediante el PR #3 (npm, `--no-hooks`, telemetría desactivada) |
+| K6 | **(2026-11-09)** El portal central de viajes pedía la raíz `yebo.pe`, asignada a este sitio por ADR-027 y MKT-D5. Además, el SEO de §4.1 excluía la intención de viajero, que es el público del portal | ADR-027 (dominio), MKT-D5, §4.1 | Portal en la raíz y este sitio en `/empresas`; reparto del SEO por intención | ✅ Resuelto: AMP-D1 y ADR-029, aceptado en sus dos decisiones: distribución del dominio y aplicación compartida `apps/site`. El contenido y el propósito de MKT-01 no cambian |
 
 Ningún ADR aceptado se modifica.
 
@@ -274,7 +279,7 @@ Ningún ADR aceptado se modifica.
 | **MKT-01.1 · Fundamentos de diseño** | Tokens y primitivas de `packages/ui`; Skill `yebo-design-system` | Tokens versionados; Skill en el repositorio | Contraste AA verificado automáticamente; tema de prueba de un tenant que no rompe la accesibilidad | Al inicio de la Fase 4 (primera UI real) |
 | **MKT-01.2 · Sitio y captación** | `apps/site` con las páginas de lanzamiento; formulario; módulo `commercial-leads`; gestión en `apps/platform` | Sitio en preproducción (`noindex`); pruebas E2E del formulario | LCP < 2,5 s, INP < 200 ms y CLS < 0,1 (p75 móvil, laboratorio); axe sin errores; metadatos únicos; sitemap válido; rate limit y CAPTCHA probados; ningún prospecto visible para `yebo_app`; **cada capacidad con estado correcto** | Tras cerrar la Fase 4 |
 | **MKT-01.3 · Lanzamiento** | Producción, Search Console, analítica y textos legales | Sitio público indexable | Sitemap enviado y sin errores de cobertura; textos legales aprobados por un asesor | Con la Fase 15 o un despliegue previo dedicado; idealmente cuando el piloto (D1) esté próximo |
-| **MKT-01.4 · Evolución** | Capturas reales, `/precios`, artículos, `/nosotros` | Contenido nuevo | Cada capacidad "Disponible" se respalda con una fase cerrada | Al cerrar las Fases 8–11, de forma continua |
+| **MKT-01.4 · Evolución** | Capturas reales, `/empresas/precios`, artículos, `/empresas/nosotros` | Contenido nuevo | Cada capacidad "Disponible" se respalda con una fase cerrada | Al cerrar las Fases 8–11, de forma continua |
 
 ## 9. Recomendación sobre el momento
 
