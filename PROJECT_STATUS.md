@@ -67,7 +67,7 @@ D1 (cliente piloto), D6 (propietarios), D7 (agencias), S2 (contrato de la API de
 
 ## Errores conocidos
 
-- **Intermitente, sin diagnosticar (2026-11-10):** en la integración completa, la prueba de 600 lecturas concurrentes de `isolation-e2e` (Fase 3.4) recibió un `500` en `GET /api/v1/roles` en 2 de 6 ejecuciones. La suite sola siempre pasa. Detalle e hipótesis en [phase-4-plan.md](docs/development/phase-4-plan.md) (4.3b, «Pendiente»).
+Ninguno abierto. El `500` intermitente bajo carga de `isolation-e2e` se corrigió el 2026-11-10 (aprobado y en un commit local): espera configurable `PG_TX_MAX_WAIT_MS` y `503` reintentable si se agota. Detalle en [phase-4-plan.md](docs/development/phase-4-plan.md) (4.3b, «Pendiente»).
 
 ## Próximas tareas
 

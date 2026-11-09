@@ -25,6 +25,7 @@ export class BackofficePrismaService implements OnModuleDestroy {
       connectionString: buildPostgresUrl(env, 'backoffice', env.PG_DATABASE),
       max: Math.max(2, Math.floor(env.PG_POOL_MAX / 2)),
       applicationName: 'yebo-backoffice',
+      txMaxWaitMs: env.PG_TX_MAX_WAIT_MS,
     });
   }
 

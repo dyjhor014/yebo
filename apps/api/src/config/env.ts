@@ -22,6 +22,8 @@ export const EnvSchema = z
     PG_PORT: port,
     PG_DATABASE: z.string().min(1),
     PG_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
+    /** Espera máxima (ms) para obtener conexión al iniciar una transacción; si se agota, la API responde 503. */
+    PG_TX_MAX_WAIT_MS: z.coerce.number().int().min(100).max(60000).default(10000),
     PG_APP_USER: z.string().min(1),
     PG_APP_PASSWORD: secret,
     PG_PLATFORM_USER: z.string().min(1),

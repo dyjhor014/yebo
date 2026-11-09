@@ -24,6 +24,7 @@ export class IdentityPrismaService implements OnModuleDestroy {
       connectionString: buildPostgresUrl(env, 'identity', env.PG_DATABASE),
       max: Math.max(2, Math.floor(env.PG_POOL_MAX / 2)),
       applicationName: 'yebo-identity',
+      txMaxWaitMs: env.PG_TX_MAX_WAIT_MS,
     });
   }
 

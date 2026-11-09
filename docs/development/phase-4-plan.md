@@ -310,10 +310,18 @@ La 4.3 se divide en dos partes, cada una con sus pruebas: **4.3a** (alta de empr
 
 ### Pendiente
 
-- **⚠️ Fallo intermitente en `isolation-e2e` (Fase 3.4):** la prueba de 600 lecturas concurrentes recibió un `500` en `GET /api/v1/roles` en 2 de 6 ejecuciones completas de la integración. Nunca falla al ejecutar la suite sola, ni en otras 2 ejecuciones completas con traza de los `500`.
-  - La ruta no cambia en la 4.3; PostgreSQL no registra errores relacionados.
-  - **Causa sin identificar.** Hipótesis: la espera por una conexión del pool supera el máximo de Prisma bajo carga (en la 4.2, `/auth/session` empezó a calcular también los módulos efectivos).
-  - **Pendiente de diagnosticar**; no se da por resuelto.
+- ✅ **Fallo intermitente en `isolation-e2e` (Fase 3.4): diagnosticado y corregido el 2026-11-10**, con autorización del responsable.
+  - **Síntoma:** la prueba de 600 lecturas concurrentes recibió un `500` en `GET /api/v1/roles` en 2 de 6 ejecuciones completas de la integración.
+  - **Causa:** el error P2028 de Prisma («Unable to start a transaction in the given time»). Cada petición abre sus transacciones con `yebo_app` (permisos en el guard, la lectura de la ruta y, desde la 4.2, los módulos efectivos en `/auth/session`). Con 600 peticiones sobre un pool de 10 conexiones, alguna esperaba más que la `maxWait` por defecto de Prisma (2 s), y el filtro global la convertía en `500`. Con `PG_POOL_MAX=2` fallaba siempre (396 errores P2028). **No era un fallo de aislamiento:** ninguna respuesta mezcló datos de dos empresas.
+  - **Corrección:**
+    1. Variable `PG_TX_MAX_WAIT_MS` (por defecto 10 s, entre 100 ms y 60 s): espera para iniciar una transacción en **todos** los clientes de Prisma (`createPrismaClient` la exige).
+    2. Si aun así se agota (P2028, o P2024 en una consulta suelta), la API responde **`503 SERVICE_UNAVAILABLE` con `Retry-After: 1`** y lo registra como aviso, no como error interno.
+  - **Pruebas:**
+    - `db-pool-pressure.int-spec`, con un pool de una conexión y 25 transacciones de 120 ms: sin errores con la espera por defecto (sin la corrección, falla de forma determinista); con 300 ms, P2028 traducido a `503`.
+    - Unitarias del filtro: traducción a `503` y cabecera `Retry-After`.
+    - `isolation-e2e` pasa con `PG_POOL_MAX=2`.
+    - Tres ejecuciones completas seguidas: 18 suites y 304 pruebas.
+  - **Mejora posterior (no hecha):** reunir en una sola transacción las consultas de permisos y de módulos de cada petición.
 - **Revisión visual de `/invitacion`** en el navegador (accesibilidad AA e Impeccable): con las pantallas de la 4.7. Compila y pasa typecheck y lint, pero no se ha recorrido en un navegador.
 - **Fase 12:** enviar el enlace por correo, dejar de mostrarlo a quien invita y verificar el correo. Así se elimina el riesgo residual.
 - ✅ **Migración aplicada a `yebo_dev`** el 2026-11-10 con autorización del responsable, tras una copia de la base (`pg_dump`). La API y el worker responden `ready`.

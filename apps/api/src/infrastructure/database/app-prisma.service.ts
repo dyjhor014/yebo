@@ -18,6 +18,7 @@ export class AppPrismaService implements OnModuleDestroy {
       connectionString: buildPostgresUrl(env, 'app', env.PG_DATABASE),
       max: env.PG_POOL_MAX,
       applicationName: 'yebo-app',
+      txMaxWaitMs: env.PG_TX_MAX_WAIT_MS,
     });
   }
 

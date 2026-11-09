@@ -64,6 +64,7 @@ async function main(): Promise<void> {
     connectionString: buildPostgresUrl(env, 'backoffice', env.PG_DATABASE),
     max: 1,
     applicationName: 'yebo-platform-bootstrap',
+    txMaxWaitMs: env.PG_TX_MAX_WAIT_MS,
   });
   try {
     await bootstrapSuperadmin(db, { email, fullName, passwordHash: await hasher.hash(password) });

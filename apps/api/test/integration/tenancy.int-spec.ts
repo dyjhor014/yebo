@@ -136,6 +136,7 @@ describe('Fase 3.1 · tenancy e identidad (PostgreSQL real, rol yebo_app)', () =
       connectionString: testBypassUrl(DB),
       max: 2,
       applicationName: 'yebo-test-seed',
+      txMaxWaitMs: 10_000,
     });
     await app.get(TenantResolverService).invalidate(HOST_A);
     await app.get(TenantResolverService).invalidate(HOST_B);

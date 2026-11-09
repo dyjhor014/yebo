@@ -162,6 +162,7 @@ describe('Fase 3.4 · medición del coste de una transacción por operación', (
       connectionString: testBypassUrl(DB),
       max: WORKERS,
       applicationName: 'yebo-bench-ref',
+      txMaxWaitMs: 10_000,
     });
     const member = memberships[0] ?? '';
     const reference = () =>

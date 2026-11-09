@@ -155,6 +155,7 @@ describe('Fase 4.1 · staff de YEBO (panel de administración)', () => {
       connectionString: testDbUrl('backoffice', DB),
       max: 1,
       applicationName: 't',
+      txMaxWaitMs: 10_000,
     });
     try {
       await bootstrapSuperadmin(backoffice, {
@@ -177,6 +178,7 @@ describe('Fase 4.1 · staff de YEBO (panel de administración)', () => {
       connectionString: testDbUrl('backoffice', DB),
       max: 1,
       applicationName: 't',
+      txMaxWaitMs: 10_000,
     });
     try {
       await expect(

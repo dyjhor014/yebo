@@ -1,8 +1,10 @@
-import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { NotFoundException, ServiceUnavailableException, type ArgumentsHost } from '@nestjs/common';
+import type { ClsService } from 'nestjs-cls';
+import type { RequestContextStore } from '../../infrastructure/context/request-context';
 import { ZodValidationException } from 'nestjs-zod';
 import { z } from 'zod';
 import { AppError } from './app-error';
-import { mapException } from './global-exception.filter';
+import { GlobalExceptionFilter, mapException } from './global-exception.filter';
 
 describe('mapException', () => {
   it('respeta el código y el estado de AppError', () => {
@@ -37,11 +39,65 @@ describe('mapException', () => {
     );
   });
 
+  it('la saturación del pool (P2028, P2024) es un 503 reintentable, no un 500', () => {
+    for (const code of ['P2028', 'P2024']) {
+      const error = Object.assign(new Error('Unable to start a transaction in the given time'), {
+        name: 'PrismaClientKnownRequestError',
+        code,
+      });
+      expect(mapException(error)).toEqual({
+        status: 503,
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'Servicio no disponible temporalmente',
+        retryAfterSeconds: 1,
+      });
+    }
+    // Otro error de Prisma (p. ej. P2002) no es transitorio: sigue siendo interno si nadie lo traduce.
+    const other = Object.assign(new Error('x'), { name: 'PrismaClientKnownRequestError', code: 'P2002' });
+    expect(mapException(other).status).toBe(500);
+  });
+
   it('oculta errores desconocidos tras INTERNAL_ERROR', () => {
     expect(mapException(new Error('password=secreto en SQL'))).toEqual({
       status: 500,
       code: 'INTERNAL_ERROR',
       message: 'Error interno',
     });
+  });
+});
+
+describe('GlobalExceptionFilter', () => {
+  function run(exception: unknown) {
+    const headers = new Map<string, string>();
+    const sent: { status?: number; body?: unknown } = {};
+    const response = {
+      getHeader: () => undefined,
+      setHeader: (k: string, v: string) => headers.set(k, v),
+      status(code: number) {
+        sent.status = code;
+        return this;
+      },
+      json(body: unknown) {
+        sent.body = body;
+      },
+    };
+    const host = { switchToHttp: () => ({ getResponse: () => response }) } as unknown as ArgumentsHost;
+    const cls = {
+      isActive: () => false,
+      getId: () => undefined,
+    } as unknown as ClsService<RequestContextStore>;
+    new GlobalExceptionFilter(cls).catch(exception, host);
+    return { headers, sent };
+  }
+
+  it('un 503 por saturación lleva Retry-After; un 500 no', () => {
+    const saturated = run(
+      Object.assign(new Error('x'), { name: 'PrismaClientKnownRequestError', code: 'P2028' }),
+    );
+    expect(saturated.sent.status).toBe(503);
+    expect(saturated.headers.get('Retry-After')).toBe('1');
+    const unknown = run(new Error('fallo'));
+    expect(unknown.sent.status).toBe(500);
+    expect(unknown.headers.has('Retry-After')).toBe(false);
   });
 });
