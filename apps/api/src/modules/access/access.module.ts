@@ -11,6 +11,7 @@ import { ModuleGuard } from './http/module.guard';
 import { PermissionGuard } from './http/permission.guard';
 import { TenantStatusGuard } from './http/tenant-status.guard';
 import { MembersService } from './members.service';
+import { OperationOverridesService } from './operation-overrides.service';
 import { PermissionsModule } from './permissions.module';
 import { RolesService } from './roles.service';
 
@@ -37,6 +38,7 @@ import { RolesService } from './roles.service';
     { provide: APP_GUARD, useClass: TenantStatusGuard },
     MembersService,
     RolesService,
+    OperationOverridesService,
   ],
   exports: [RolesService],
 })

@@ -83,6 +83,14 @@ export const EnvSchema = z
       .string()
       .regex(/^[a-z0-9.-]+$/)
       .default('admin.yebo.pe'),
+    /**
+     * Dominio base de los tenants (Fase 4.3): el subdominio por defecto de una empresa es `<slug>.<dominio base>`. El
+     * hub y el panel deben ser subdominios suyos, y sus etiquetas quedan reservadas.
+     */
+    TENANT_BASE_DOMAIN: z
+      .string()
+      .regex(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/)
+      .default('yebo.pe'),
     PLATFORM_SESSION_IDLE_MINUTES: z.coerce.number().int().min(5).max(240).default(30),
     PLATFORM_SESSION_ABSOLUTE_HOURS: z.coerce.number().int().min(1).max(24).default(12),
     /** Cifrado de campo (ADR-019): clave AES-256 en base64 (32 bytes). Opcional para el worker. */
@@ -138,6 +146,16 @@ export const EnvSchema = z
         path: ['PLATFORM_ADMIN_HOST'],
         message: 'el panel de administración y el hub de cuentas deben estar en hosts distintos',
       });
+    }
+    for (const key of ['AUTH_HUB_HOST', 'PLATFORM_ADMIN_HOST'] as const) {
+      const label = env[key].slice(0, -(env.TENANT_BASE_DOMAIN.length + 1));
+      if (!env[key].endsWith(`.${env.TENANT_BASE_DOMAIN}`) || !/^[a-z0-9-]+$/.test(label)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: 'debe ser un subdominio directo de TENANT_BASE_DOMAIN (su etiqueta queda reservada)',
+        });
+      }
     }
     if (env.PG_IDENTITY_USER === env.PG_APP_USER || env.PG_IDENTITY_USER === env.PG_PLATFORM_USER) {
       ctx.addIssue({

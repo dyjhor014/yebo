@@ -61,6 +61,8 @@ model Tenant {
   trialEndsAt     DateTime?    @map("trial_ends_at") @db.Timestamptz(6)
   activatedAt     DateTime?    @map("activated_at") @db.Timestamptz(6)
   cancelledAt     DateTime?    @map("cancelled_at") @db.Timestamptz(6)
+  /// Inicio del estado vigente (Fase 4.3): los días de gracia de PAST_DUE se cuentan desde aquí.
+  statusChangedAt DateTime     @default(now()) @map("status_changed_at") @db.Timestamptz(6)
   createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -71,6 +73,10 @@ model Tenant {
   authorizationCodes AuthorizationCode[]
   moduleOverrides    TenantModuleOverride[]
   subscriptions      Subscription[]
+  settings           TenantSetting?
+  services           TenantService[]
+  statusHistory      TenantStatusHistory[]
+  operationOverrides TenantOperationOverride[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -438,15 +444,18 @@ model PlatformUser {
   createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  createdBy        PlatformUser?          @relation("PlatformUserCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  created          PlatformUser[]         @relation("PlatformUserCreatedBy")
-  sessions         PlatformSession[]
-  setupTokens      PlatformSetupToken[]   @relation("SetupTokenFor")
-  issuedTokens     PlatformSetupToken[]   @relation("SetupTokenIssuedBy")
-  auditEntries     PlatformAuditLog[]
-  planVersions     PlanVersion[]
-  overridesGranted TenantModuleOverride[] @relation("OverrideGrantedBy")
-  overridesEnded   TenantModuleOverride[] @relation("OverrideEndedBy")
+  createdBy          PlatformUser?             @relation("PlatformUserCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  created            PlatformUser[]            @relation("PlatformUserCreatedBy")
+  sessions           PlatformSession[]
+  setupTokens        PlatformSetupToken[]      @relation("SetupTokenFor")
+  issuedTokens       PlatformSetupToken[]      @relation("SetupTokenIssuedBy")
+  auditEntries       PlatformAuditLog[]
+  planVersions       PlanVersion[]
+  overridesGranted   TenantModuleOverride[]    @relation("OverrideGrantedBy")
+  overridesEnded     TenantModuleOverride[]    @relation("OverrideEndedBy")
+  statusChanges      TenantStatusHistory[]
+  opOverridesGranted TenantOperationOverride[] @relation("OpOverrideGrantedBy")
+  opOverridesEnded   TenantOperationOverride[] @relation("OpOverrideEndedBy")
 
   @@map("platform_users")
 }
@@ -694,4 +703,109 @@ model Subscription {
   @@unique([tenantId, isCurrent])
   @@index([planVersionId])
   @@map("subscriptions")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 4.3a · Alta de empresas y máquina de estados del tenant (multitenancy §5; data-dictionary §1)
+// ---------------------------------------------------------------------------------------------------------------
+
+enum ServiceModality {
+  LAND
+  RIVER
+
+  @@map("service_modality")
+}
+
+enum TransportService {
+  PASSENGER
+  PARCEL
+  CARGO
+  VEHICLE_TRANSPORT
+
+  @@map("transport_service")
+}
+
+enum TenantOperationOverrideCategory {
+  USERS_ADD
+
+  @@map("tenant_operation_override_category")
+}
+
+/// Configuración operativa de la empresa (1:1). RLS de tenant.
+model TenantSetting {
+  tenantId                                   String   @id @map("tenant_id") @db.Uuid
+  requireDeliveryPin                         Boolean  @default(false) @map("require_delivery_pin")
+  deliveryPinMaxAttempts                     Int      @default(5) @map("delivery_pin_max_attempts")
+  bookingHoldMinutes                         Int      @default(15) @map("booking_hold_minutes")
+  allowPartialPayments                       Boolean  @default(false) @map("allow_partial_payments")
+  requireRecipientIdOnDelivery               Boolean  @default(true) @map("require_recipient_id_on_delivery")
+  exceptionalDeliveryEnabled                 Boolean  @default(false) @map("exceptional_delivery_enabled")
+  exceptionalDeliverySecondApprovalThreshold Decimal? @map("exceptional_delivery_second_approval_threshold") @db.Decimal(14, 2)
+  exceptionalDeliveryRequiredEvidence        String[] @default([]) @map("exceptional_delivery_required_evidence")
+  publicTrackingShowRecipientInitials        Boolean  @default(true) @map("public_tracking_show_recipient_initials")
+  settings                                   Json     @default("{}")
+  createdAt                                  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                                  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("tenant_settings")
+}
+
+/// Servicios y modalidades que la empresa opera. Los módulos de servicio del plan solo cuentan si están aquí.
+model TenantService {
+  id        String           @id @default(uuid(7)) @db.Uuid
+  tenantId  String           @map("tenant_id") @db.Uuid
+  modality  ServiceModality
+  service   TransportService
+  enabled   Boolean          @default(true)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, modality, service])
+  @@map("tenant_services")
+}
+
+/// Historial de estados del tenant. Append-only (trigger). `fromStatus` nulo = alta.
+model TenantStatusHistory {
+  id                  String        @id @default(uuid(7)) @db.Uuid
+  tenantId            String        @map("tenant_id") @db.Uuid
+  fromStatus          TenantStatus? @map("from_status")
+  toStatus            TenantStatus  @map("to_status")
+  reason              String
+  /// Nulo = transición automática (job de estados).
+  actorPlatformUserId String?       @map("actor_platform_user_id") @db.Uuid
+  occurredAt          DateTime      @map("occurred_at") @db.Timestamptz(6)
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor  PlatformUser? @relation(fields: [actorPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, occurredAt])
+  @@map("tenant_status_history")
+}
+
+/// Excepción temporal de YEBO a la matriz de estados (multitenancy §5.2, nota 2). Hoy solo USERS_ADD.
+model TenantOperationOverride {
+  id                      String                          @id @default(uuid(7)) @db.Uuid
+  tenantId                String                          @map("tenant_id") @db.Uuid
+  category                TenantOperationOverrideCategory
+  validFrom               DateTime                        @map("valid_from") @db.Timestamptz(6)
+  validTo                 DateTime                        @map("valid_to") @db.Timestamptz(6)
+  reason                  String
+  grantedByPlatformUserId String                          @map("granted_by_platform_user_id") @db.Uuid
+  endedAt                 DateTime?                       @map("ended_at") @db.Timestamptz(6)
+  endedByPlatformUserId   String?                         @map("ended_by_platform_user_id") @db.Uuid
+  createdAt               DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  grantedBy PlatformUser  @relation("OpOverrideGrantedBy", fields: [grantedByPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  endedBy   PlatformUser? @relation("OpOverrideEndedBy", fields: [endedByPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, category])
+  @@map("tenant_operation_overrides")
 }

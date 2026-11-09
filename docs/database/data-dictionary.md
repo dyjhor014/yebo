@@ -27,18 +27,22 @@ Los `enum` son cerrados; los `→ catálogo` son tablas extensibles.
 | timezone | text | Default `America/Lima` |
 | default_currency | char(3) | `PEN` |
 | trial_ends_at, activated_at, cancelled_at | timestamptz? | |
+| status_changed_at | timestamptz | Inicio del estado vigente; desde él se cuentan los días de gracia de `PAST_DUE` (Fase 4.3a) |
 
 ### 🌐 tenant_domains
 `tenant_id → tenants`, `host citext UNIQUE`, `kind enum SUBDOMAIN|CUSTOM`, `is_primary bool` (único parcial por tenant), `verification_status enum PENDING|VERIFIED|FAILED`, `verified_at?`.
 
 ### tenant_settings (1:1)
-`require_delivery_pin bool NOT NULL DEFAULT false` · `delivery_pin_max_attempts int DEFAULT 5` · `booking_hold_minutes int` · `allow_partial_payments bool` · `require_recipient_id_on_delivery bool` · `exceptional_delivery_enabled bool DEFAULT false` · `exceptional_delivery_second_approval_threshold numeric(14,2)?` · `exceptional_delivery_required_evidence text[]` · `public_tracking_show_recipient_initials bool` · `settings jsonb` (resto, validado por esquema).
+`require_delivery_pin bool NOT NULL DEFAULT false` · `delivery_pin_max_attempts int DEFAULT 5` · `booking_hold_minutes int` · `allow_partial_payments bool` · `require_recipient_id_on_delivery bool` · `exceptional_delivery_enabled bool DEFAULT false` · `exceptional_delivery_second_approval_threshold numeric(14,2)?` · `exceptional_delivery_required_evidence text[]` · `public_tracking_show_recipient_initials bool` · `settings jsonb` (resto, validado por esquema). PK `tenant_id`. Valores iniciales del alta en [phase-4-plan](../development/phase-4-plan.md) (4.3a).
 
 ### tenant_services
-`modality enum LAND|RIVER` · `service enum PASSENGER|PARCEL|CARGO|VEHICLE_TRANSPORT` · `enabled bool`. UNIQUE (tenant_id, modality, service). Nuevas modalidades = nuevo valor del enum vía migración (decisión consciente: la modalidad cambia reglas de negocio).
+`modality enum LAND|RIVER` · `service enum PASSENGER|PARCEL|CARGO|VEHICLE_TRANSPORT` · `enabled bool`. UNIQUE (tenant_id, modality, service). Nuevas modalidades = nuevo valor del enum vía migración (decisión consciente: la modalidad cambia reglas de negocio). Un módulo de servicio del plan solo es efectivo si la empresa opera ese servicio (multitenancy §6).
 
 ### tenant_status_history
-`from_status`, `to_status`, `reason text`, `actor_platform_user_id?`, `occurred_at`. Append-only.
+`from_status?` (nulo = alta), `to_status`, `reason text`, `actor_platform_user_id?` (nulo = job de estados), `occurred_at`. Append-only (trigger). RLS de tenant.
+
+### tenant_operation_overrides
+`category enum USERS_ADD`, `valid_from`, `valid_to` (obligatorio; como mucho 30 días), `reason`, `granted_by_platform_user_id`, `ended_at?`, `ended_by_platform_user_id?`. Excepción temporal de YEBO a la matriz de estados (multitenancy §5.2, nota 2), solo en `SUSPENDED` y `EXPIRED`. Decisión del 2026-11-10 (Fase 4.3a).
 
 ### 🌐 modules
 `code text UNIQUE` (`PASSENGERS`, `PARCELS`, `CARGO`, `VEHICLE_TRANSPORT`, `EINVOICING`, `AGENCIES`, `OWNER_SETTLEMENTS`, `WHITE_LABEL`, `OFFLINE_OPS`…), `name`, `description`, `is_active`.

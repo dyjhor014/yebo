@@ -30,3 +30,16 @@ export const MODULE_CATALOG = {
 
 export type ModuleCode = keyof typeof MODULE_CATALOG;
 export const MODULE_CODES = Object.keys(MODULE_CATALOG) as ModuleCode[];
+
+/**
+ * Módulos de SERVICIO (multitenancy §6): un módulo del plan solo es efectivo si la empresa opera ese servicio en
+ * alguna modalidad (`tenant_services` habilitado). Los demás módulos no dependen de los servicios.
+ */
+export const SERVICE_OF_MODULE: Readonly<
+  Partial<Record<ModuleCode, 'PASSENGER' | 'PARCEL' | 'CARGO' | 'VEHICLE_TRANSPORT'>>
+> = {
+  PASSENGERS: 'PASSENGER',
+  PARCELS: 'PARCEL',
+  CARGO: 'CARGO',
+  VEHICLE_TRANSPORT: 'VEHICLE_TRANSPORT',
+};

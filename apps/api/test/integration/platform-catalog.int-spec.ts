@@ -330,6 +330,13 @@ describe('Fase 4.2 · catálogo comercial y módulos efectivos', () => {
          VALUES (gen_random_uuid(), $1, $2, 'ACTIVE', '2026-11-01', '2026-12-01', true, now())`,
         [A, published],
       );
+      // Servicios de la empresa (4.3a): los módulos de servicio del plan solo cuentan si la empresa los opera.
+      await seed.query(
+        `INSERT INTO tenant_services (id, tenant_id, modality, service, updated_at) VALUES
+           (gen_random_uuid(), $1, 'LAND', 'PASSENGER', now()),
+           (gen_random_uuid(), $1, 'RIVER', 'PARCEL', now())`,
+        [A],
+      );
     });
 
     it('sin excepciones: los módulos del plan', async () => {

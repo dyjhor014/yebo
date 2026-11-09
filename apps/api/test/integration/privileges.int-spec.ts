@@ -33,7 +33,12 @@ const EXPECTED_TABLE_GRANTS = [
   'yebo_app subscriptions SELECT',
   'yebo_app tenant_memberships SELECT',
   'yebo_app tenant_module_overrides SELECT',
+  'yebo_app tenant_operation_overrides SELECT',
+  'yebo_app tenant_services SELECT',
+  'yebo_app tenant_settings SELECT',
+  'yebo_app tenant_status_history SELECT',
   'yebo_backoffice modules SELECT',
+  'yebo_backoffice permissions SELECT',
   'yebo_backoffice plan_version_modules DELETE,INSERT,SELECT',
   'yebo_backoffice plan_versions INSERT,SELECT,UPDATE',
   'yebo_backoffice plans INSERT,SELECT,UPDATE',
@@ -41,9 +46,17 @@ const EXPECTED_TABLE_GRANTS = [
   'yebo_backoffice platform_sessions INSERT,SELECT,UPDATE',
   'yebo_backoffice platform_setup_tokens INSERT,SELECT,UPDATE',
   'yebo_backoffice platform_users INSERT,SELECT,UPDATE',
-  'yebo_backoffice subscriptions SELECT',
+  'yebo_backoffice role_permissions INSERT',
+  'yebo_backoffice role_templates SELECT',
+  'yebo_backoffice roles INSERT,SELECT',
+  'yebo_backoffice subscriptions INSERT,SELECT',
+  'yebo_backoffice tenant_domains INSERT,SELECT',
   'yebo_backoffice tenant_module_overrides INSERT,SELECT,UPDATE',
-  'yebo_backoffice tenants SELECT',
+  'yebo_backoffice tenant_operation_overrides INSERT,SELECT,UPDATE',
+  'yebo_backoffice tenant_services INSERT,SELECT',
+  'yebo_backoffice tenant_settings INSERT,SELECT',
+  'yebo_backoffice tenant_status_history INSERT,SELECT',
+  'yebo_backoffice tenants INSERT,SELECT',
   'yebo_identity authorization_codes INSERT,SELECT,UPDATE',
   'yebo_identity identity_sessions INSERT,SELECT,UPDATE',
   'yebo_identity refresh_tokens INSERT,SELECT,UPDATE',
@@ -60,6 +73,15 @@ const EXPECTED_COLUMN_GRANTS = [
   'yebo_app tenant_memberships.permissions_version UPDATE',
   'yebo_app tenant_memberships.status UPDATE',
   'yebo_app tenant_memberships.updated_at UPDATE',
+  // Fase 4.3a: transiciones de estado del tenant y de su suscripción vigente.
+  'yebo_backoffice subscriptions.status UPDATE',
+  'yebo_backoffice subscriptions.updated_at UPDATE',
+  'yebo_backoffice tenants.activated_at UPDATE',
+  'yebo_backoffice tenants.cancelled_at UPDATE',
+  'yebo_backoffice tenants.status UPDATE',
+  'yebo_backoffice tenants.status_changed_at UPDATE',
+  'yebo_backoffice tenants.trial_ends_at UPDATE',
+  'yebo_backoffice tenants.updated_at UPDATE',
 ];
 
 function walk(dir: string): string[] {
@@ -203,7 +225,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
       expect(rows.map((r) => r.line)).toEqual(EXPECTED_TABLE_GRANTS);
     });
 
-    it('privilegios de columna explícitos: solo el UPDATE de membresías de la 3.3', async () => {
+    it('privilegios de columna explícitos: membresías (3.3) y estados del tenant (4.3a)', async () => {
       const { rows } = await owner.query<{ line: string }>(
         `SELECT r.rolname || ' ' || c.relname || '.' || att.attname || ' ' || a.privilege_type AS line
            FROM pg_attribute att JOIN pg_class c ON c.oid = att.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace,

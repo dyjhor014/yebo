@@ -1,6 +1,6 @@
 # Fase 4 — Superadmin SaaS y membresías: plan de trabajo
 
-- **Estado:** ✅ Plan **aprobado** por el responsable el 2026-11-10, con las decisiones F4-Q1 a F4-Q6 tal como se recomendaron. Etapa **4.1 implementada**, pendiente de revisión; etapa **4.2 aprobada** (2026-11-10).
+- **Estado:** ✅ Plan **aprobado** por el responsable el 2026-11-10, con las decisiones F4-Q1 a F4-Q6 tal como se recomendaron. Etapa **4.1 implementada**, pendiente de revisión; etapa **4.2 aprobada** (2026-11-10); etapa **4.3a aprobada** (2026-11-10).
 - **Rama:** `fase-4/plan`, apilada sobre `fase-3/adr-034-privilegios` (`d21b591`). La Fase 3 sigue en revisión.
 - **Criterio de aceptación (roadmap):** crear empresa, asignar plan, medir usuarios y calcular el importe.
 - **Decisiones que se implementan:**
@@ -162,3 +162,79 @@ Dos de ellas sobrevivían a la primera versión de la suite (sin consumo atómic
 - **`tenant_services`** y su intersección con los módulos del plan: etapa 4.3.
 - **Límites del plan** (sucursales, vehículos, almacenamiento): se guardan y validan como datos; su aplicación al crear recursos llega con cada módulo que los cree.
 - **`config` de `plan_version_modules`:** la columna existe, pero la API aún no la expone.
+
+## Etapa 4.3a · Alta de empresas y máquina de estados (implementada y aprobada el 2026-11-10)
+
+La 4.3 se divide en dos partes, cada una con sus pruebas: **4.3a** (alta de empresas, servicios, estados y la excepción de `USERS_ADD`) y **4.3b** (invitaciones y aceptación en el hub, con la invitación del primer administrador).
+
+### Decisiones del responsable (2026-11-10)
+
+| Pregunta | Decisión |
+|---|---|
+| ¿Dónde se guarda la excepción temporal de `USERS_ADD` (multitenancy §5.2, nota 2), que no encaja en `tenant_module_overrides`? | Tabla propia `tenant_operation_overrides` (categoría, inicio, fin obligatorio, motivo, quién la otorga y quién la termina), con RLS de tenant |
+| ¿Cómo se ejecuta el job de transiciones? | Job repetible de BullMQ en el worker cada 15 minutos (ADR-008), idempotente |
+| ¿De dónde sale el dominio del subdominio por defecto? | Variable nueva `TENANT_BASE_DOMAIN`; el hub y el panel deben ser subdominios suyos y sus etiquetas quedan reservadas |
+
+### Decisiones de implementación
+
+| Tema | Decisión | Motivo |
+|---|---|---|
+| Alta | `POST /platform/tenants` (`platform.tenants.manage`). **Una** transacción con `yebo_backoffice`: tenant, subdominio `<slug>.<TENANT_BASE_DOMAIN>` (`SUBDOMAIN`, principal y `VERIFIED`), y con el contexto del tenant fijado: `tenant_settings`, `tenant_services`, roles de sistema desde **todas** las plantillas de la base, suscripción vigente, primera fila del historial y auditoría. Después del commit se invalida la caché del resolvedor (también la negativa) | Nada queda a medias, y el dominio resuelve en la petición siguiente |
+| Slug | Normalizado (minúsculas, sin espacios), 3–40 caracteres, `^[a-z0-9]+(-[a-z0-9]+)*$` (sin guiones al borde ni dobles, así que tampoco `xn--`). Slug o documento repetidos → `409`, también en una carrera (restricción única) | — |
+| Subdominios reservados | Los 13 de MKT-D6 más 28 nombres internos (`yebo`, `empresas`, `auth`, `login`, `soporte`, `cdn`, `smtp`, `ns1`, `staging`, `sandbox`…), en `tenancy/reserved-subdomains.ts`, y siempre las etiquetas de `AUTH_HUB_HOST` y `PLATFORM_ADMIN_HOST`. Reservado → `400` | MKT-D6 |
+| Plan y trial | Solo una versión **publicada** (`FOR SHARE`: una retirada simultánea espera). Con `trial_days > 0`: tenant `TRIAL` con `trial_ends_at` y suscripción `TRIALING`; con 0: `ACTIVE` desde el alta | — |
+| Período | Empieza el día local de la empresa en su zona horaria (IANA validada) y dura el intervalo del plan; PostgreSQL ajusta el fin de mes (31 ene + 1 mes = 28 feb) | billing §2.2 |
+| `tenant_settings` | Valores iniciales: PIN de entrega desactivado, 5 intentos, 15 min de reserva, sin pagos parciales, documento del destinatario exigido, entrega excepcional desactivada, iniciales en el seguimiento público. Los cambia la empresa en fases posteriores | Valores conservadores; no son decisiones comerciales |
+| Módulos efectivos | `((plan ∩ servicios) ∪ GRANT) − REVOKE`. Un módulo de **servicio** del plan (`PASSENGERS`, `PARCELS`, `CARGO`, `VEHICLE_TRANSPORT`) solo cuenta si la empresa opera ese servicio en alguna modalidad; los demás (`EINVOICING`, `AGENCIES`…) no dependen de los servicios. Una GRANT no exige el servicio | multitenancy §6 |
+| Transiciones manuales | `POST /platform/tenants/:id/status` con motivo. TRIAL → ACTIVE, EXPIRED o CANCELLED; ACTIVE → PAST_DUE o CANCELLED; PAST_DUE → ACTIVE, SUSPENDED o CANCELLED; SUSPENDED y EXPIRED → ACTIVE o CANCELLED. CANCELLED es final. Otra → `409`. Fuente única: `platform-admin/tenant-lifecycle.ts` | multitenancy §5.2 |
+| Cada transición | Con el tenant bloqueado (`FOR UPDATE`) y en una transacción: estado y `status_changed_at`, `activated_at` o `cancelled_at`, estado de la suscripción vigente (TRIAL → `TRIALING`…), fila del historial y auditoría. Después, invalidación de la caché de todos sus dominios: la matriz aplica el estado nuevo en la petición siguiente | «Se refleja en la matriz sin esperar a la caché» |
+| Job de estados | `TRIAL → EXPIRED` al llegar `trial_ends_at`; `PAST_DUE → SUSPENDED` tras los días de gracia de la versión de plan vigente (7 por defecto), contados desde `status_changed_at`. Repetible cada 15 min (`upsertJobScheduler`, uno solo entre réplicas). Cada transición vuelve a comprobarse con el tenant bloqueado (mismo estado y mismo `status_changed_at`), así que dos ejecuciones simultáneas o una evaluación obsoleta no hacen nada. Actor nulo en el historial | El job puede ejecutarse tarde, dos veces o en paralelo |
+| Excepción de `USERS_ADD` | Temporal (fin obligatorio, como mucho 30 días, `CHECK`), con motivo, terminable y auditada. El guard de estado solo la consulta **cuando la matriz ya ha denegado**, y solo en `SUSPENDED` y `EXPIRED`; nunca en `CANCELLED` ni para otras categorías | multitenancy §5.2, nota 2 |
+| `status_changed_at` | Columna nueva en `tenants`: inicio del estado vigente | El job no necesita leer el historial, que es de tenant (RLS) |
+| Worker | `TenantLifecycleWorkerModule` sin controladores (el worker solo expone su health). Usa `yebo_backoffice` como el panel; el worker necesita `PG_BACKOFFICE_PASSWORD` | — |
+
+### Base de datos
+
+- **Migración `20261110190000_fase4_3a_tenant_onboarding`:**
+  - crea `tenant_settings` (1:1), `tenant_services`, `tenant_status_history` y `tenant_operation_overrides`, todas con RLS forzado;
+  - añade `tenants.status_changed_at`;
+  - incluye los `CHECK` de rangos, motivo, ventana de 30 días y coherencia del fin;
+  - añade un trigger que hace el historial append-only también para el propietario (salvo `TRUNCATE` de mantenimiento);
+  - la reversión está en su cabecera.
+- **Privilegios (lista blanca, ADR-034):**
+  - `yebo_backoffice`:
+    - INSERT en `tenants` y UPDATE solo de las columnas de estado;
+    - SELECT e INSERT en `tenant_domains`, `tenant_settings`, `tenant_services` y `tenant_status_history`;
+    - SELECT, INSERT y UPDATE en `tenant_operation_overrides`;
+    - INSERT en `subscriptions` y UPDATE de su estado;
+    - SELECT en `role_templates` y `permissions`, SELECT e INSERT en `roles` e INSERT en `role_permissions`.
+  - `yebo_app`: SELECT, con RLS, en las cuatro tablas nuevas.
+- ✅ **Aplicada a `yebo_dev`** el 2026-11-10 con autorización del responsable, tras una copia de la base (`pg_dump`). La API y el worker arrancan y responden `ready` contra `yebo_dev`.
+
+### Pruebas
+
+| Suite | Contenido | Resultado |
+|---|---|---|
+| Unitarias: `reserved-subdomains.spec` (5) y `tenant-lifecycle.spec` (6) | Lista MKT-D6, mayúsculas y espacios, etiquetas de los hosts configurados, formato del slug, zona horaria IANA. CANCELLED final, reactivaciones, estado de la suscripción, vencimiento exacto del trial, gracia por defecto y del plan, estados que nunca cambian solos | ✅ |
+| `platform-tenants.int-spec` (18) | **Alta:** dominio resoluble aunque estuviera en la caché negativa; configuración, servicios, rol de sistema con todos sus permisos, suscripción, historial y auditoría; período en la zona de la empresa con ajuste de fin de mes; plan sin trial → ACTIVE; reservados → 400; slug y documento repetidos, versión no publicada → 409; carrera de dos altas; permisos del VIEWER. **Módulos efectivos ∩ servicios.** **Estados:** cada transición aplicada en la petición siguiente; excepción de USERS_ADD vigente, terminada o vencida; la excepción no vale para CONFIGURE ni en CANCELLED; ventana de 30 días; transiciones no permitidas; historial completo y append-only. **Job:** gracia del plan exacta, vencimiento del trial, ejecuciones simultáneas, evaluación obsoleta, planificador único en el worker | ✅ |
+| `privileges`, `tenancy`, `migration-paths`, `platform-catalog` | Matriz versionada con los permisos nuevos; las cuatro tablas en la cobertura de RLS; la empresa de la 4.2 con sus servicios | ✅ |
+| Integración completa | 16 suites y 285 pruebas | ✅ |
+| Unitarias, lint, typecheck, formato y build | 128 unitarias | ✅ |
+
+**Mutaciones (17):**
+- **Detectadas por la integración (15):**
+  - en el alta: sin reservados, sin invalidar la caché, versión no publicada aceptada, período en UTC, sin roles de sistema;
+  - en las transiciones: sin tabla de transiciones, sin invalidar la caché, la suscripción no acompaña, sin historial;
+  - en el job: sin volver a comprobar el estado;
+  - en las excepciones: válida en cualquier fase, terminada o vencida que siguen contando, sin el límite de 30 días;
+  - en los módulos: sin la intersección con los servicios.
+- **Detectada por la unitaria (1):** sin las etiquetas de los hosts de la plataforma. `cuentas` y `admin` también están en la lista fija, así que la integración no puede distinguirla.
+- **Equivalente (1):** sin la lista de categorías admitidas en `OperationOverridesService`. La consulta ya filtra por una columna enum que solo admite `USERS_ADD`.
+
+«Excepción vencida» y «sin volver a comprobar el estado» sobrevivían a la primera versión de la suite. Se añadieron sus pruebas y ahora se detectan.
+
+### Pendiente
+
+- **4.3b:** `membership_invitations`, invitación del primer administrador en el alta, aceptación autenticada en el hub sin revelar si el correo existía, e invitar como operación `USERS_ADD` de la empresa.
+- **`cancelledClosingDays` del plan:** el periodo de cierre sigue siendo la constante de 30 días de `tenant-operation.ts`; leerlo de la política del plan exige llevar la versión de plan al resolvedor.
+- **Dominios propios (`CUSTOM`) y su verificación**, y cambiar el plan de una suscripción: fuera de la 4.3.

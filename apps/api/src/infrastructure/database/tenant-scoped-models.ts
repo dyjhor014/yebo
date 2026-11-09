@@ -15,6 +15,10 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set<string>([
   'MembershipRole',
   'TenantModuleOverride',
   'Subscription',
+  'TenantSetting',
+  'TenantService',
+  'TenantStatusHistory',
+  'TenantOperationOverride',
 ]);
 
 /** Nombres de tabla de TENANT_SCOPED_MODELS, para las verificaciones sobre el catálogo de PostgreSQL. */
@@ -25,6 +29,10 @@ export const TENANT_SCOPED_TABLES: readonly string[] = [
   'membership_roles',
   'tenant_module_overrides',
   'subscriptions',
+  'tenant_settings',
+  'tenant_services',
+  'tenant_status_history',
+  'tenant_operation_overrides',
 ];
 
 /**

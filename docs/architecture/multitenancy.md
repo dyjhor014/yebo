@@ -120,6 +120,8 @@ CREATE POLICY tenant_isolation ON shipments
 > - Las sesiones (`identity_sessions`, `tenant_sessions`, `refresh_tokens`) son **exclusivas del rol `yebo_identity`**; ni `yebo_app` ni `yebo_platform` tienen acceso.
 > - `tenant_sessions` y `tenant_domains` son las **excepciones globales con `tenant_id`** (sin RLS de tenant), declaradas en el registro de modelos y en la prueba de cobertura de RLS.
 >
+> **Precisión de la Fase 4.3a (2026-11-10):** las transiciones (manuales y del job cada 15 minutos) están en `platform-admin/tenant-lifecycle.ts`. Los días de gracia de `PAST_DUE` se leen de la política del plan; el periodo de cierre sigue siendo la constante de 30 días.
+>
 > **Precisión de la Fase 3.3 (2026-11-10):** `yebo_app` puede actualizar **solo** `status`, `permissions_version` y `updated_at` de `tenant_memberships` (privilegio por columna, con RLS forzado), para suspender y reactivar membresías y versionar permisos sin usar `yebo_platform`. No puede insertar ni borrar membresías, ni cambiar `billable`, `user_id` ni `tenant_id`.
 
 ## 5. Estados del tenant y operaciones permitidas
@@ -165,7 +167,7 @@ Cada endpoint de negocio se etiqueta con **una** categoría (`@TenantOperation(.
 | Notificaciones a clientes finales sobre operaciones existentes | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
 
 1. Los operadores necesitan entrar para embarcar, recibir y entregar. Lo que pueden hacer dentro lo limita la matriz, no el login.
-2. Si hace falta reemplazar a un operador para cumplir obligaciones (p. ej., el único almacenero), YEBO puede otorgar una excepción temporal auditada (`tenant_module_overrides`).
+2. Si hace falta reemplazar a un operador para cumplir obligaciones (p. ej., el único almacenero), YEBO puede otorgar una excepción temporal auditada (`tenant_module_overrides`). **Precisión de la Fase 4.3a (2026-11-10):** la excepción se guarda en una tabla propia, `tenant_operation_overrides`, porque `tenant_module_overrides` va ligada a un módulo.
 
 **Transiciones:**
 - `TRIAL` → `EXPIRED` al vencer el trial sin pago.
