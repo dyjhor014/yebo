@@ -10,6 +10,7 @@ import {
 import type { Request, Response } from 'express';
 import { AppError } from '../../../common/errors/app-error';
 import { normalizeHost } from '../../tenancy/host';
+import { Public } from '../../access/route-policy';
 import { TenantResolverService } from '../../tenancy/tenant-resolver.service';
 import { AuthorizationCodeService } from '../authorization-code.service';
 import { Clock } from '../clock';
@@ -29,6 +30,7 @@ const CSRF_MAX_AGE_SECONDS = 2 * 60 * 60;
  */
 @ApiTags('hub')
 @Controller({ path: 'hub', version: '1' })
+@Public('hub')
 @UseGuards(HubHostGuard)
 export class HubController {
   constructor(

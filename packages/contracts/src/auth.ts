@@ -63,5 +63,7 @@ export const AuthSessionResponseSchema = z.object({
   tenantId: z.string(),
   membershipId: z.string(),
   accessTokenExpiresAt: z.iso.datetime(),
+  /** Permisos efectivos de la membresía en esta empresa (la autoridad sigue siendo el backend). */
+  permissions: z.array(z.string()),
 });
 export type AuthSessionResponse = z.infer<typeof AuthSessionResponseSchema>;

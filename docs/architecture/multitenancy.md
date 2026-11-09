@@ -114,6 +114,8 @@ CREATE POLICY tenant_isolation ON shipments
 > **Precisión de la Fase 3.2a (2026-11-09):**
 > - Las sesiones (`identity_sessions`, `tenant_sessions`, `refresh_tokens`) son **exclusivas del rol `yebo_identity`**; ni `yebo_app` ni `yebo_platform` tienen acceso.
 > - `tenant_sessions` y `tenant_domains` son las **excepciones globales con `tenant_id`** (sin RLS de tenant), declaradas en el registro de modelos y en la prueba de cobertura de RLS.
+>
+> **Precisión de la Fase 3.3 (2026-11-10):** `yebo_app` puede actualizar **solo** `status`, `permissions_version` y `updated_at` de `tenant_memberships` (privilegio por columna, con RLS forzado), para suspender y reactivar membresías y versionar permisos sin usar `yebo_platform`. No puede insertar ni borrar membresías, ni cambiar `billable`, `user_id` ni `tenant_id`.
 
 ## 5. Estados del tenant y operaciones permitidas
 
@@ -181,6 +183,8 @@ Así, una operación "de cumplimiento" que intente generar ingresos nuevos (p. e
 ### 5.4 Configuración
 
 La matriz es el **default** de `plan_versions.suspension_policy` (JSON validado por esquema): días de gracia, duración del periodo de cierre y excepciones. YEBO puede ajustarla por plan; los tenants no. Cada denegación queda en la auditoría con la categoría y el estado del tenant, para poder atender reclamos con evidencia.
+
+> **Precisión de la Fase 3.3 (2026-11-10):** hasta que existan los planes (Fase 4), la matriz por defecto vive en código (`apps/api/src/modules/access/tenant-operation.ts`), y una prueba la contrasta celda a celda con la tabla de §5.2. Las denegaciones quedan en el log estructurado (`tenant_operation_denied`) hasta que exista la tabla de auditoría.
 
 **Aprobado el 2026-11-05:** 7 días de gracia en `PAST_DUE` y 30 días de cierre en `CANCELLED`. En `SUSPENDED`, `EXPIRED` y `CANCELLED` **no** se aceptan nuevos envíos, no se venden nuevos pasajes y no se contratan nuevos servicios de carga. Sí se completan las obligaciones existentes: embarcar boletos vendidos, completar viajes, recibir encomiendas en tránsito y registrar su recepción en agencias y almacenes, entregar, cobrar saldos, devolver lo autorizado, emitir comprobantes pendientes y consultarlos o descargarlos. `USERS_ADD` en `SUSPENDED` solo mediante una excepción de YEBO.
 

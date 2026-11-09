@@ -1,6 +1,6 @@
 # Estado del proyecto — YEBO
 
-**Última actualización:** 2026-11-09
+**Última actualización:** 2026-11-10
 
 ## Fase actual
 
@@ -11,7 +11,9 @@
 - sucesor cifrado;
 - rol dedicado `yebo_identity`.
 
-La **3.2b** (hub de cuentas y flujo OAuth propio + PKCE S256, con sus pantallas) está **implementada y pendiente de revisión** en la misma rama; su migración no se aplicó a ninguna base del proyecto. Plan: [phase-3-plan.md](docs/development/phase-3-plan.md).
+La **3.2b** (hub de cuentas y flujo OAuth propio + PKCE S256, con sus pantallas y la identidad visual YEBO v1.0) está **implementada y pendiente de revisión**. La 3.2 completa está en un **commit local** (`83df1c1`, rama `fase-3/3.2-sesiones`, sin push).
+
+La **3.3** (autorización y estado del tenant: guards globales con denegación por defecto, permisos, matriz de estados y gestión mínima de accesos) está **implementada y pendiente de revisión** en la rama `fase-3/3.3-autorizacion`, sin commit. `support_access_grants` pasa a la Fase 4. Sus migraciones no se aplicaron a ninguna base del proyecto. Plan: [phase-3-plan.md](docs/development/phase-3-plan.md).
 
 La Fase 2 sigue en revisión mediante el PR #1, sin merge. Orden de integración previsto: #1 → #3 → #2.
 
@@ -63,5 +65,5 @@ Ninguno abierto.
 2. Tras el cierre de la Fase 2: activar la protección de `main` exigiendo el check de CI.
 3. Revisión de la etapa 3.1 (PR #4) y de la etapa 3.2a.
 4. Revisión del SQL de **ADR-034** (separación de privilegios: `yebo_platform` sin BYPASSRLS; rol `yebo_test_bypass` solo para pruebas), propuesto en [phase-3-plan](docs/development/phase-3-plan.md). Dirección aprobada; **no implementado**.
-5. Para migrar `yebo_dev` tras aprobar la 3.2a: `scripts/dev/create-identity-role.sh` y después `pnpm --filter @yebo/api db:migrate:deploy` (reversión en [phase-3-plan](docs/development/phase-3-plan.md)).
-6. Revisión de la 3.2b. La 3.3 (diseño aceptado) **solo con autorización expresa**.
+5. Para migrar `yebo_dev` tras aprobar la 3.2 y la 3.3: `scripts/dev/create-identity-role.sh` y después `pnpm --filter @yebo/api db:migrate:deploy` (reversiones en [phase-3-plan](docs/development/phase-3-plan.md)).
+6. Revisión de la 3.2b (commit local `83df1c1`) y de la **3.3** (rama `fase-3/3.3-autorizacion`, sin commit). La 3.4 (cierre de la Fase 3) **solo con autorización expresa**.

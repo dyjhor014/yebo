@@ -3,11 +3,13 @@ import { ApiOkResponse, ApiServiceUnavailableResponse, ApiTags } from '@nestjs/s
 import { HealthResponseSchema } from '@yebo/contracts';
 import type { Response } from 'express';
 import { createZodDto } from 'nestjs-zod';
+import { Public } from '../access/route-policy';
 import { HealthService } from './health.service';
 
 class HealthResponseDto extends createZodDto(HealthResponseSchema) {}
 
 @ApiTags('health')
+@Public('none')
 @Controller({ path: 'health', version: '1' })
 export class HealthController {
   constructor(private readonly health: HealthService) {}

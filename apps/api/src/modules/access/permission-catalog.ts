@@ -1,0 +1,32 @@
+/**
+ * Catálogo global de permisos (security.md §2) y plantillas de roles de la plataforma.
+ *
+ * FUENTE ÚNICA en código. La migración `20261110120000_fase3_3_access` siembra exactamente estos valores y
+ * una prueba de integración compara la base con este archivo. Fase 3.3 (decisión del 2026-11-10): solo los
+ * permisos de lo que existe (gestión de accesos) y la plantilla Administrador. Cada fase añade sus permisos
+ * y completa las plantillas (Cajero, Almacenero, Embarque, Contador...) con su propia migración.
+ */
+export const PERMISSION_CATALOG = {
+  'members.read': { module: 'ACCESS', sensitive: false, description: 'Ver los miembros de la empresa' },
+  'members.suspend': { module: 'ACCESS', sensitive: true, description: 'Suspender el acceso de un miembro' },
+  'members.reactivate': {
+    module: 'ACCESS',
+    sensitive: true,
+    description: 'Reactivar el acceso de un miembro',
+  },
+  'members.sessions.revoke': {
+    module: 'ACCESS',
+    sensitive: true,
+    description: 'Cerrar las sesiones de un miembro en esta empresa',
+  },
+  'roles.read': { module: 'ACCESS', sensitive: false, description: 'Ver los roles de la empresa' },
+  'roles.assign': { module: 'ACCESS', sensitive: true, description: 'Asignar roles a los miembros' },
+} as const satisfies Record<string, { module: string; sensitive: boolean; description: string }>;
+
+export type PermissionCode = keyof typeof PERMISSION_CATALOG;
+
+export const PERMISSION_CODES = Object.keys(PERMISSION_CATALOG) as PermissionCode[];
+
+export const ROLE_TEMPLATES = {
+  ADMIN: { name: 'Administrador', permissions: PERMISSION_CODES },
+} as const satisfies Record<string, { name: string; permissions: readonly PermissionCode[] }>;

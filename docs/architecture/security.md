@@ -21,6 +21,7 @@
 - **Ámbito de sucursal**: una membresía puede limitarse a ciertas sucursales y almacenes (`membership_branch_scopes`). Los servicios filtran por ese ámbito además del tenant.
 - **Superadmin**: permisos de plataforma separados (`platform.tenants.suspend`...), sin acceso a datos operativos de tenants salvo mediante `support_access_grants`.
 - Guard por endpoint con `@RequirePermission(...)`. Las reglas de pertenencia (p. ej., "solo el cajero que abrió la caja puede cerrarla") se aplican en los servicios.
+- **Fase 3.3 (2026-11-10): denegar por defecto.** Una cadena de guards globales (host → autenticación → permiso → estado del tenant) protege toda ruta sin `@Public(...)`. Las rutas públicas están en una lista blanca versionada y ESLint impide declararlas fuera de los módulos autorizados. Asignar roles exige tener todos los permisos de los roles asignados y retirados (anti-escalada), y nadie puede cambiar sus propios roles ni suspenderse. Detalle en [phase-3-plan](../development/phase-3-plan.md).
 
 ## 3. Protecciones de plataforma
 
