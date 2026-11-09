@@ -18,7 +18,7 @@ export class PermissionGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const policy = routePolicyForContext(this.reflector, context);
-    if (policy.kind === 'public' || policy.permission === null) return true;
+    if (policy.kind !== 'protected' || policy.permission === null) return true;
     if (!(await this.permissions.current()).has(policy.permission)) {
       throw new AppError('FORBIDDEN', 'No tienes permiso para realizar esta operación', 403);
     }

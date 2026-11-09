@@ -20,11 +20,14 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set<string>([
  * - tenant_sessions: se consulta para validar el token ANTES de abrir el contexto de tenant (ADR-009);
  *   la gestiona identidad con yebo_identity (Fase 3.2).
  * - authorization_codes: se canjea antes de que exista la sesión de empresa (Fase 3.2b); solo yebo_identity.
+ * - platform_audit_logs: auditoría del staff de YEBO (Fase 4.1); `tenant_id` indica la empresa afectada. Solo
+ *   yebo_backoffice, que no tiene contexto de tenant.
  */
 export const GLOBAL_MODELS_WITH_TENANT_ID: ReadonlySet<string> = new Set<string>([
   'TenantDomain',
   'TenantSession',
   'AuthorizationCode',
+  'PlatformAuditLog',
 ]);
 
 /** Nombres de tabla equivalentes, para las verificaciones sobre el catálogo de PostgreSQL. */
@@ -32,4 +35,5 @@ export const GLOBAL_TABLES_WITH_TENANT_ID: readonly string[] = [
   'tenant_domains',
   'tenant_sessions',
   'authorization_codes',
+  'platform_audit_logs',
 ];

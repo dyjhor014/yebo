@@ -17,7 +17,8 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
     "calibrate:argon2": "node scripts/calibrate-argon2.mjs",
-    "bench": "jest -c jest.bench.config.js --runInBand"
+    "bench": "jest -c jest.bench.config.js --runInBand",
+    "platform:bootstrap": "node dist/modules/platform-admin/cli/bootstrap.js"
   },
   "dependencies": {
     "@nestjs/bullmq": "11.0.5",

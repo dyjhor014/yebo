@@ -29,6 +29,9 @@ export const EnvSchema = z
     // Rol dedicado de identidad (Fase 3.2a): solo lo usa el módulo identity. Opcional para el worker.
     PG_IDENTITY_USER: z.string().min(1).default('yebo_identity'),
     PG_IDENTITY_PASSWORD: secret.optional(),
+    // Rol del superadmin (Fase 4, F4-Q2): solo el módulo platform-admin. Opcional para el worker.
+    PG_BACKOFFICE_USER: z.string().min(1).default('yebo_backoffice'),
+    PG_BACKOFFICE_PASSWORD: secret.optional(),
     // Credenciales de propietario: solo para migraciones. Opcionales para la API en ejecución.
     PG_OWNER_USER: z.string().min(1).optional(),
     PG_OWNER_PASSWORD: secret.optional(),
@@ -73,6 +76,21 @@ export const EnvSchema = z
     /** Cálculos de Argon2id simultáneos por proceso y cola máxima (hallazgo M6): el exceso responde 503. */
     ARGON2_MAX_CONCURRENT: z.coerce.number().int().min(1).max(64).default(4),
     ARGON2_MAX_QUEUE: z.coerce.number().int().min(0).max(10000).default(64),
+
+    // Panel de administración de YEBO (Fase 4.1)
+    /** Host del panel y de la API de plataforma (F4-Q4). Reservado: ningún tenant puede registrarlo. */
+    PLATFORM_ADMIN_HOST: z
+      .string()
+      .regex(/^[a-z0-9.-]+$/)
+      .default('admin.yebo.pe'),
+    PLATFORM_SESSION_IDLE_MINUTES: z.coerce.number().int().min(5).max(240).default(30),
+    PLATFORM_SESSION_ABSOLUTE_HOURS: z.coerce.number().int().min(1).max(24).default(12),
+    /** Cifrado de campo (ADR-019): clave AES-256 en base64 (32 bytes). Opcional para el worker. */
+    FIELD_ENCRYPTION_KEY: z
+      .string()
+      .refine((v) => Buffer.from(v, 'base64').length === 32, 'debe ser una clave de 32 bytes en base64')
+      .optional(),
+    FIELD_ENCRYPTION_KEY_VERSION: z.coerce.number().int().min(1).max(32767).default(1),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && env.LOG_PRETTY) {
@@ -86,7 +104,13 @@ export const EnvSchema = z
       });
     }
     // ADR-034: el rol exclusivo de pruebas (salta RLS) nunca puede ser la identidad de un servicio de ejecución.
-    for (const key of ['PG_APP_USER', 'PG_PLATFORM_USER', 'PG_IDENTITY_USER', 'PG_OWNER_USER'] as const) {
+    for (const key of [
+      'PG_APP_USER',
+      'PG_PLATFORM_USER',
+      'PG_IDENTITY_USER',
+      'PG_BACKOFFICE_USER',
+      'PG_OWNER_USER',
+    ] as const) {
       if (env[key]?.toLowerCase().includes('bypass')) {
         ctx.addIssue({
           code: 'custom',
@@ -94,6 +118,26 @@ export const EnvSchema = z
           message: 'un rol que salta RLS no puede usarse en la API, el worker ni las migraciones (ADR-034)',
         });
       }
+    }
+    const runtimeUsers = [
+      env.PG_APP_USER,
+      env.PG_PLATFORM_USER,
+      env.PG_IDENTITY_USER,
+      env.PG_BACKOFFICE_USER,
+    ];
+    if (new Set(runtimeUsers).size !== runtimeUsers.length) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['PG_BACKOFFICE_USER'],
+        message: 'cada servicio de ejecución usa un rol de PostgreSQL distinto (ADR-034)',
+      });
+    }
+    if (env.PLATFORM_ADMIN_HOST === env.AUTH_HUB_HOST) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['PLATFORM_ADMIN_HOST'],
+        message: 'el panel de administración y el hub de cuentas deben estar en hosts distintos',
+      });
     }
     if (env.PG_IDENTITY_USER === env.PG_APP_USER || env.PG_IDENTITY_USER === env.PG_PLATFORM_USER) {
       ctx.addIssue({

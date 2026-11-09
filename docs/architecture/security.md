@@ -11,7 +11,7 @@
 | Transporte en web | Cookies `httpOnly`, `Secure`, `SameSite=Lax`, ligadas al host. Protección CSRF con *double submit token* en mutaciones (decisión D10). |
 | Transporte en PWA operativa e integraciones | `Authorization: Bearer`. Dispositivos registrados (`devices`) para operación offline. |
 | Cuentas de servicio | `service_accounts` por tenant con API keys hasheadas, alcances explícitos y sin facturación (D5). |
-| MFA | TOTP opcional por usuario; obligatorio para staff de plataforma y configurable por tenant para roles administrativos. |
+| MFA | TOTP opcional por usuario; obligatorio para staff de plataforma y configurable por tenant para roles administrativos. **Staff implementado en la Fase 4.1:** TOTP RFC 6238 obligatorio, secreto cifrado (ADR-019) y código de un solo uso. |
 | Fuerza bruta | Rate limit por IP + identificador (Redis), bloqueo progresivo, misma respuesta para usuario inexistente o contraseña errónea. |
 | Revocación | Surte efecto en toda verificación que empiece tras su COMMIT: el estado de la sesión se verifica **en PostgreSQL** en cada request (precisión de la Fase 3.2a: sin caché positiva en Redis). Matriz de eventos en [identity-and-sessions.md §8](identity-and-sessions.md#8-revocación). |
 

@@ -76,6 +76,7 @@ Los `enum` son cerrados; los `→ catálogo` son tablas extensibles.
 
 ### 🌐 platform_users / support_access_grants
 - **platform_users:** `email citext UNIQUE`, `password_hash`, `mfa_secret enc`, `status`, `platform_role` (o una tabla de roles de plataforma).
+  - *Fase 4.1 (2026-11-10):* `role enum SUPERADMIN|BILLING|SUPPORT|VIEWER` (permisos `platform.*` en código), `status enum ACTIVE|DISABLED`, `password_hash?` (nulo hasta usar el enlace de configuración), `mfa_secret_ciphertext` + `mfa_key_version` (AES-256-GCM), `mfa_enabled_at?`, `mfa_last_step?` (anti-reutilización TOTP), `created_by_id?`. Tablas nuevas: **`platform_sessions`** (hash SHA-256 del token opaco, caducidades, revocación), **`platform_setup_tokens`** (enlace de un solo uso, ≤ 72 h) y **`platform_audit_logs`** (append-only; `tenant_id?` de la empresa afectada). Solo `yebo_backoffice`.
 - **support_access_grants:** `tenant_id`, `platform_user_id`, `reason`, `incident_id?`, `scope enum READ_ONLY|FULL`, `starts_at`, `expires_at`, `revoked_at?`, `approved_by_membership_id?` (si la empresa exige aprobación).
 
 ## 2. Identidad y acceso

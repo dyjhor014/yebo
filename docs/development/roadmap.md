@@ -8,7 +8,7 @@ Se trabaja una fase a la vez. No se avanza con errores críticos, decisiones blo
 | 1 | Arquitectura y diseño | Documento de arquitectura, C4, ER, diccionario y ADR revisables | ✅ Aprobada (2026-11-05) |
 | 2 | Fundación técnica | El proyecto levanta de forma reproducible y supera las pruebas iniciales | ✅ Aprobada para cierre mediante PR ([resultados](phase-2-results.md)) |
 | 3 | Multitenancy y seguridad | Pruebas demuestran aislamiento total entre tenants | 🚧 Implementada (3.1–3.4), pendiente de revisión · criterio cumplido ([plan](phase-3-plan.md), [resultados](phase-3-results.md)) |
-| 4 | Superadmin SaaS y membresías | Crear empresa, asignar plan, medir usuarios y calcular el importe | Pendiente |
+| 4 | Superadmin SaaS y membresías | Crear empresa, asignar plan, medir usuarios y calcular el importe | 🚧 En curso · plan aprobado ([plan](phase-4-plan.md)) |
 | 5 | White label | Dos portales visualmente distintos sin duplicar apps | Pendiente |
 | 6 | Ubicaciones, agencias, flota y capacidades | Embarcación con camarotes, zona libre, bodega y cubierta; bus con asientos y bodega | Pendiente |
 | 7 | Rutas, programación y viajes | Ruta multiparada con capacidad correcta por tramo | Pendiente |

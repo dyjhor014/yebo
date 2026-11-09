@@ -26,7 +26,8 @@ export class TenantHostGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const policy = routePolicyForContext(this.reflector, context);
-    if (policy.kind === 'public' && policy.scope !== 'tenant') return true;
+    // Host de empresa: rutas de empresa y públicas de empresa. Hub, panel de administración y health, no.
+    if (policy.kind === 'platform' || (policy.kind === 'public' && policy.scope !== 'tenant')) return true;
     const request = context.switchToHttp().getRequest<Request>();
     const tenant = await this.resolver.resolve(request.hostname);
     if (!tenant) throw new AppError('NOT_FOUND', 'Recurso no encontrado', 404);

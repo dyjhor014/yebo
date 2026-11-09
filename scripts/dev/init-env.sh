@@ -54,9 +54,27 @@ add_missing_adr034() {
   fi
 }
 
+# Fase 4.1: rol yebo_backoffice (F4-Q2) y clave de cifrado de campo (ADR-019).
+add_missing_phase41() {
+  if [[ -f "$INFRA_ENV" ]] && ! grep -q '^PG_BACKOFFICE_PASSWORD=' "$INFRA_ENV"; then
+    local pass
+    pass=$(openssl rand -hex 24)
+    printf 'PG_BACKOFFICE_PASSWORD=%s\n' "$pass" >> "$INFRA_ENV"
+    if [[ -f "$API_ENV" ]] && ! grep -q '^PG_BACKOFFICE_PASSWORD=' "$API_ENV"; then
+      printf '\n# Rol del superadmin (añadido por init-env.sh)\nPG_BACKOFFICE_USER=yebo_backoffice\nPG_BACKOFFICE_PASSWORD=%s\n' "$pass" >> "$API_ENV"
+    fi
+    echo "Añadida PG_BACKOFFICE_PASSWORD. En un volumen existente: scripts/dev/harden-roles.sh --test-role"
+  fi
+  if [[ -f "$API_ENV" ]] && ! grep -q '^FIELD_ENCRYPTION_KEY=' "$API_ENV"; then
+    printf 'FIELD_ENCRYPTION_KEY=%s\nFIELD_ENCRYPTION_KEY_VERSION=1\n' "$(openssl rand -base64 32)" >> "$API_ENV"
+    echo "Añadida FIELD_ENCRYPTION_KEY a apps/api/.env."
+  fi
+}
+
 if [[ -f "$INFRA_ENV" && "$FORCE" != "--force" ]]; then
   add_missing_phase32
   add_missing_adr034
+  add_missing_phase41
   echo "Ya existe $INFRA_ENV (usa --force para regenerar)."; exit 0
 fi
 
@@ -64,6 +82,7 @@ rnd() { openssl rand -hex 24; }
 PG_SUPERUSER_PASSWORD=$(rnd); PG_OWNER_PASSWORD=$(rnd); PG_APP_PASSWORD=$(rnd); PG_PLATFORM_PASSWORD=$(rnd); REDIS_PASSWORD=$(rnd)
 PG_IDENTITY_PASSWORD=$(rnd)
 TEST_PG_BYPASS_PASSWORD=$(rnd)
+PG_BACKOFFICE_PASSWORD=$(rnd)
 
 umask 077
 cat > "$INFRA_ENV" <<ENV
@@ -76,6 +95,7 @@ PG_PLATFORM_PASSWORD=$PG_PLATFORM_PASSWORD
 PG_IDENTITY_PASSWORD=$PG_IDENTITY_PASSWORD
 REDIS_PASSWORD=$REDIS_PASSWORD
 TEST_PG_BYPASS_PASSWORD=$TEST_PG_BYPASS_PASSWORD
+PG_BACKOFFICE_PASSWORD=$PG_BACKOFFICE_PASSWORD
 ENV
 write_test_env "$TEST_PG_BYPASS_PASSWORD"
 
@@ -83,6 +103,8 @@ sed -e "s|^PG_OWNER_PASSWORD=.*|PG_OWNER_PASSWORD=$PG_OWNER_PASSWORD|" \
     -e "s|^PG_APP_PASSWORD=.*|PG_APP_PASSWORD=$PG_APP_PASSWORD|" \
     -e "s|^PG_PLATFORM_PASSWORD=.*|PG_PLATFORM_PASSWORD=$PG_PLATFORM_PASSWORD|" \
     -e "s|^PG_IDENTITY_PASSWORD=.*|PG_IDENTITY_PASSWORD=$PG_IDENTITY_PASSWORD|" \
+    -e "s|^PG_BACKOFFICE_PASSWORD=.*|PG_BACKOFFICE_PASSWORD=$PG_BACKOFFICE_PASSWORD|" \
+    -e "s|^FIELD_ENCRYPTION_KEY=.*|FIELD_ENCRYPTION_KEY=$(openssl rand -base64 32)|" \
     -e "s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=$REDIS_PASSWORD|" \
     -e "s|^AUTH_JWT_PRIVATE_KEY=.*|AUTH_JWT_PRIVATE_KEY=$(auth_key)|" \
     -e "s|^AUTH_COOKIE_SECRET=.*|AUTH_COOKIE_SECRET=$(openssl rand -hex 32)|" \

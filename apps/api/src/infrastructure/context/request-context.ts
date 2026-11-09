@@ -1,4 +1,5 @@
 import type { ClsStore } from 'nestjs-cls';
+import type { PlatformPrincipal } from '../../modules/platform-admin/platform-auth.service';
 import type { ResolvedTenant } from '../../modules/tenancy/tenant-resolver.service';
 
 /** Contexto por request (AsyncLocalStorage vía nestjs-cls). */
@@ -13,6 +14,8 @@ export interface RequestContextStore extends ClsStore {
   principal?: Principal;
   /** Permisos efectivos de la membresía, cargados una sola vez por request (PermissionService). */
   permissions?: ReadonlySet<string>;
+  /** Miembro del staff de YEBO verificado en este request (PlatformGuard, Fase 4.1). Nunca coexiste con `principal`. */
+  platformPrincipal?: PlatformPrincipal;
 }
 
 /** Quién hace la petición: usuario, membresía y sesión de empresa, todos del tenant del host. */

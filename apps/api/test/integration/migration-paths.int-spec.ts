@@ -12,6 +12,7 @@ import { cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Pool } from 'pg';
+import { GLOBAL_TABLES_WITH_TENANT_ID } from '../../src/infrastructure/database/tenant-scoped-models';
 import { grantTestBypass, testBypassPool, testPool } from '../support/db';
 
 const API_ROOT = resolve(__dirname, '..', '..');
@@ -168,7 +169,8 @@ const SETS: MigrationSet[] = [
     schema: 'prisma/schema.prisma',
     migrations: 'prisma/migrations',
     tenantTables: ['tenant_memberships', 'roles', 'role_permissions', 'membership_roles'],
-    globalTablesWithTenantId: ['tenant_domains', 'tenant_sessions', 'authorization_codes'],
+    // Del registro de modelos: una excepción global nueva no puede olvidarse aquí.
+    globalTablesWithTenantId: [...GLOBAL_TABLES_WITH_TENANT_ID],
     extensions: ['btree_gist', 'citext'],
     // Esquema anterior = el de la etapa 3.1, con datos. Prueba que la migración de sesiones (3.2) se aplica
     // sobre membresías existentes (añade un índice único compuesto a tenant_memberships).

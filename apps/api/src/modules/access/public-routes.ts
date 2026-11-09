@@ -26,4 +26,11 @@ export const PUBLIC_ROUTES: readonly string[] = [
   'GET /api/v1/auth/csrf',
   'POST /api/v1/auth/refresh',
   'POST /api/v1/auth/logout',
+  // Panel de administración (solo en PLATFORM_ADMIN_HOST; Fase 4.1): login en dos pasos y enlace de configuración.
+  'GET /api/v1/platform/auth/csrf',
+  'POST /api/v1/platform/auth/login',
+  'POST /api/v1/platform/auth/mfa/enroll',
+  'POST /api/v1/platform/auth/mfa/activate',
+  'POST /api/v1/platform/auth/mfa/verify',
+  'POST /api/v1/platform/auth/setup',
 ];

@@ -39,6 +39,14 @@ import { UserDirectoryService } from './user-directory.service';
     HubHostGuard,
     UserDirectoryService,
   ],
-  exports: [Clock, PasswordHasher, AccessTokenService, SessionService, UserDirectoryService],
+  exports: [
+    Clock,
+    PasswordHasher,
+    AccessTokenService,
+    SessionService,
+    UserDirectoryService,
+    RateLimiterService,
+    CookieSigner,
+  ],
 })
 export class IdentityModule {}

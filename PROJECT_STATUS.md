@@ -1,6 +1,6 @@
 # Estado del proyecto — YEBO
 
-**Última actualización:** 2026-11-10 (ADR-034)
+**Última actualización:** 2026-11-10 (Fase 4.1)
 
 ## Fase actual
 
@@ -18,6 +18,8 @@ La **3.3** (autorización y estado del tenant: guards globales con denegación p
 La **3.4** (cierre: aislamiento de extremo a extremo y medición del coste de una transacción por operación) está en un **commit local** (`da999d8`, rama `fase-3/3.4-cierre`). **Criterio de aceptación de la Fase 3 cumplido**; resultados en [phase-3-results.md](docs/development/phase-3-results.md).
 
 **ADR-034 aplicado** y **regla de §4.2 adoptada** (2026-11-10), en la rama `fase-3/adr-034-privilegios`, sin commit. `yebo_platform` ya no salta RLS. El clúster de desarrollo está endurecido y **`yebo_dev` migrada** (7 migraciones).
+
+**Fase 4 en curso** (rama `fase-4/plan`). El plan de 8 etapas está **aprobado** (F4-Q1 a Q6) y la **etapa 4.1 (staff de YEBO con MFA)** está implementada, pendiente de revisión. Su migración y el rol `yebo_backoffice` ya están **aplicados** al clúster de desarrollo. [phase-4-plan.md](docs/development/phase-4-plan.md).
 
 La Fase 2 sigue en revisión mediante el PR #1, sin merge. Orden de integración previsto: #1 → #3 → #2.
 

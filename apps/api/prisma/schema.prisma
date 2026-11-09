@@ -382,3 +382,122 @@ model AuthorizationCode {
   @@index([tenantSessionId])
   @@map("authorization_codes")
 }
+
+// ============================================================================
+// Fase 4.1 · Staff de YEBO (realm de plataforma, separado de la identidad de clientes). Tablas globales 🌐,
+// exclusivas del rol yebo_backoffice (ADR-034, decisión F4-Q2). Nadie más tiene acceso.
+// ============================================================================
+
+enum PlatformRole {
+  /// Todo, incluida la gestión del staff.
+  SUPERADMIN
+  /// Planes, suscripciones, períodos, facturas y pagos; lectura de empresas.
+  BILLING
+  /// Lectura de empresas y accesos de soporte (4.6).
+  SUPPORT
+  /// Solo lectura.
+  VIEWER
+
+  @@map("platform_role")
+}
+
+enum PlatformUserStatus {
+  ACTIVE
+  DISABLED
+
+  @@map("platform_user_status")
+}
+
+enum PlatformSessionRevokeReason {
+  LOGOUT
+  USER_DISABLED
+  ADMIN_REVOKED
+
+  @@map("platform_session_revoke_reason")
+}
+
+model PlatformUser {
+  id                  String             @id @default(uuid(7)) @db.Uuid
+  email               String             @unique @db.Citext
+  fullName            String             @map("full_name")
+  /// Nulo hasta que la persona fija su contraseña con el enlace de configuración.
+  passwordHash        String?            @map("password_hash")
+  role                PlatformRole
+  status              PlatformUserStatus @default(ACTIVE)
+  /// Secreto TOTP cifrado (ADR-019: AES-256-GCM, IV + etiqueta incluidos) y versión de la clave.
+  mfaSecretCiphertext Bytes?             @map("mfa_secret_ciphertext")
+  mfaKeyVersion       Int?               @map("mfa_key_version")
+  mfaEnabledAt        DateTime?          @map("mfa_enabled_at") @db.Timestamptz(6)
+  /// Último paso TOTP aceptado: un código no puede reutilizarse (RFC 6238 §5.2).
+  mfaLastStep         BigInt?            @map("mfa_last_step")
+  passwordChangedAt   DateTime?          @map("password_changed_at") @db.Timestamptz(6)
+  lastLoginAt         DateTime?          @map("last_login_at") @db.Timestamptz(6)
+  createdById         String?            @map("created_by_id") @db.Uuid
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdBy    PlatformUser?        @relation("PlatformUserCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  created      PlatformUser[]       @relation("PlatformUserCreatedBy")
+  sessions     PlatformSession[]
+  setupTokens  PlatformSetupToken[] @relation("SetupTokenFor")
+  issuedTokens PlatformSetupToken[] @relation("SetupTokenIssuedBy")
+  auditEntries PlatformAuditLog[]
+
+  @@map("platform_users")
+}
+
+model PlatformSession {
+  id                String                       @id @default(uuid(7)) @db.Uuid
+  platformUserId    String                       @map("platform_user_id") @db.Uuid
+  /// SHA-256 del token opaco de la cookie. El token nunca se guarda.
+  tokenHash         Bytes                        @unique @map("token_hash")
+  ip                String?                      @db.Inet
+  userAgent         String?                      @map("user_agent")
+  lastSeenAt        DateTime                     @map("last_seen_at") @db.Timestamptz(6)
+  idleExpiresAt     DateTime                     @map("idle_expires_at") @db.Timestamptz(6)
+  absoluteExpiresAt DateTime                     @map("absolute_expires_at") @db.Timestamptz(6)
+  revokedAt         DateTime?                    @map("revoked_at") @db.Timestamptz(6)
+  revokeReason      PlatformSessionRevokeReason? @map("revoke_reason")
+  createdAt         DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  platformUser PlatformUser @relation(fields: [platformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([platformUserId])
+  @@map("platform_sessions")
+}
+
+/// Enlace de un solo uso para que un miembro del staff fije su contraseña (alta o restablecimiento).
+model PlatformSetupToken {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  platformUserId String    @map("platform_user_id") @db.Uuid
+  tokenHash      Bytes     @unique @map("token_hash")
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt     DateTime? @map("consumed_at") @db.Timestamptz(6)
+  issuedById     String?   @map("issued_by_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  platformUser PlatformUser  @relation("SetupTokenFor", fields: [platformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  issuedBy     PlatformUser? @relation("SetupTokenIssuedBy", fields: [issuedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([platformUserId])
+  @@map("platform_setup_tokens")
+}
+
+/// Auditoría de las acciones del staff (append-only: el rol de ejecución solo puede insertar y leer).
+model PlatformAuditLog {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  platformUserId String?  @map("platform_user_id") @db.Uuid
+  action         String
+  targetType     String?  @map("target_type")
+  targetId       String?  @map("target_id")
+  tenantId       String?  @map("tenant_id") @db.Uuid
+  detail         Json     @default("{}")
+  ip             String?  @db.Inet
+  occurredAt     DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  platformUser PlatformUser? @relation(fields: [platformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([platformUserId, occurredAt])
+  @@index([tenantId, occurredAt])
+  @@map("platform_audit_logs")
+}

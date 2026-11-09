@@ -97,6 +97,7 @@ CREATE POLICY tenant_isolation ON shipments
 | `yebo_app` | API y worker en contexto de tenant | **Aplica** |
 | `yebo_platform` | Resolver de dominios y health check. En la Fase 4, superadmin y jobs entre tenants con permisos explícitos | **Aplica** (sin BYPASSRLS desde ADR-034). Solo SELECT sobre `tenants` y `tenant_domains`; credenciales y *pool* separados |
 | `yebo_identity` | **Solo el módulo identity** (Fase 3.2a): sesiones y tokens; lectura de `users`, `tenant_memberships` y `tenant_domains` | **Aplica** (sin BYPASSRLS); política propia de solo lectura sobre `tenant_memberships`. Permisos explícitos, nunca por defecto. Detalle en [phase-3-plan](../development/phase-3-plan.md) |
+| `yebo_backoffice` | **Solo la API del superadmin** (Fase 4.1, F4-Q2): staff, sesiones, enlaces y auditoría de plataforma; en etapas posteriores, planes, suscripciones y facturación | **Aplica** (sin BYPASSRLS). Permisos explícitos por migración; nunca toca datos de tenant sin contexto de tenant |
 
 > **ADR-034 (aplicado el 2026-11-10):** ningún rol de ejecución salta RLS, hereda privilegios ni pertenece a otro rol. Los permisos sobre tablas son una **lista blanca** que concede cada migración (sin privilegios por defecto), y una prueba compara la foto de privilegios con una matriz versionada. Solo las pruebas usan un rol con BYPASSRLS (`yebo_test_bypass`), que no existe en producción ni tiene acceso a `yebo_dev`. Ver [ADR-034](architecture-decisions.md) y [phase-3-plan](../development/phase-3-plan.md#adr-034--implementación-2026-11-10).
 

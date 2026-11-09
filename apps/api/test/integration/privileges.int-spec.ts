@@ -14,11 +14,12 @@ import { AppModule } from '../../src/app.module';
 import { AppPrismaService } from '../../src/infrastructure/database/app-prisma.service';
 import { PlatformPrismaService } from '../../src/infrastructure/database/platform-prisma.service';
 import { IdentityPrismaService } from '../../src/modules/identity/identity-prisma.service';
+import { BackofficePrismaService } from '../../src/modules/platform-admin/backoffice-prisma.service';
 import { testBypassUrl, testDbUrl, testPool } from '../support/db';
 
 const DB = 'yebo_test';
 const API_ROOT = resolve(__dirname, '..', '..');
-const RUNTIME = ['yebo_app', 'yebo_platform', 'yebo_identity'] as const;
+const RUNTIME = ['yebo_app', 'yebo_platform', 'yebo_identity', 'yebo_backoffice'] as const;
 
 /** Matriz esperada de privilegios de TABLA (explícitos) de los roles de ejecución en el esquema public. */
 const EXPECTED_TABLE_GRANTS = [
@@ -28,6 +29,10 @@ const EXPECTED_TABLE_GRANTS = [
   'yebo_app role_templates SELECT',
   'yebo_app roles DELETE,INSERT,SELECT,UPDATE',
   'yebo_app tenant_memberships SELECT',
+  'yebo_backoffice platform_audit_logs INSERT,SELECT',
+  'yebo_backoffice platform_sessions INSERT,SELECT,UPDATE',
+  'yebo_backoffice platform_setup_tokens INSERT,SELECT,UPDATE',
+  'yebo_backoffice platform_users INSERT,SELECT,UPDATE',
   'yebo_identity authorization_codes INSERT,SELECT,UPDATE',
   'yebo_identity identity_sessions INSERT,SELECT,UPDATE',
   'yebo_identity refresh_tokens INSERT,SELECT,UPDATE',
@@ -85,6 +90,10 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
         user: 'yebo_identity',
         bypass: false,
       });
+      expect(await whoami(app.get(BackofficePrismaService, { strict: false }).client)).toEqual({
+        user: 'yebo_backoffice',
+        bypass: false,
+      });
     });
   });
 
@@ -93,7 +102,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
       const { rows } = await owner.query(
         `SELECT rolname, rolbypassrls, rolinherit, rolsuper, rolcreaterole, rolreplication,
                 (rolname <> 'yebo_owner' AND rolcreatedb) AS creates_db
-           FROM pg_roles WHERE rolname IN ('yebo_owner', 'yebo_app', 'yebo_platform', 'yebo_identity') ORDER BY rolname`,
+           FROM pg_roles WHERE rolname IN ('yebo_owner', 'yebo_app', 'yebo_platform', 'yebo_identity', 'yebo_backoffice') ORDER BY rolname`,
       );
       for (const r of rows) {
         expect(r).toEqual({
@@ -106,7 +115,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
           creates_db: false,
         });
       }
-      expect(rows).toHaveLength(4);
+      expect(rows).toHaveLength(5);
     });
 
     it('el rol de pruebas salta RLS pero no hereda, no es superusuario ni crea roles', async () => {
@@ -139,9 +148,16 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
           .map((r) => r.grantee)
           .sort();
       expect(access('yebo_shadow')).toEqual(['yebo_owner']);
-      expect(access('yebo_dev')).toEqual(['yebo_app', 'yebo_identity', 'yebo_owner', 'yebo_platform']);
+      expect(access('yebo_dev')).toEqual([
+        'yebo_app',
+        'yebo_backoffice',
+        'yebo_identity',
+        'yebo_owner',
+        'yebo_platform',
+      ]);
       expect(access('yebo_test')).toEqual([
         'yebo_app',
+        'yebo_backoffice',
         'yebo_identity',
         'yebo_owner',
         'yebo_platform',
@@ -232,10 +248,18 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
           'SELECT 1 FROM refresh_tokens',
           'SELECT 1 FROM authorization_codes',
           'SELECT 1 FROM _prisma_migrations',
+          'SELECT 1 FROM platform_users',
+          'SELECT 1 FROM platform_sessions',
         ]) {
           await expect(platform.query(sql)).rejects.toMatchObject({ code: '42501' });
         }
-        for (const role of ['yebo_app', 'yebo_owner', 'yebo_test_bypass', 'yebo_identity']) {
+        for (const role of [
+          'yebo_app',
+          'yebo_owner',
+          'yebo_test_bypass',
+          'yebo_identity',
+          'yebo_backoffice',
+        ]) {
           await expect(platform.query(`SET ROLE ${role}`)).rejects.toMatchObject({ code: '42501' });
         }
       } finally {

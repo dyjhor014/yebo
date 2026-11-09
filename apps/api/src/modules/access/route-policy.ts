@@ -2,6 +2,7 @@ import { SetMetadata, applyDecorators } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
 import type { ExecutionContext } from '@nestjs/common';
 import { AppError } from '../../common/errors/app-error';
+import type { PlatformPermission } from '../platform-admin/platform-permissions';
 import type { PermissionCode } from './permission-catalog';
 import type { TenantOperationCategory } from './tenant-operation';
 
@@ -14,15 +15,17 @@ const PUBLIC = 'yebo:access:public';
 const PERMISSION = 'yebo:access:permission';
 const AUTHENTICATED_ONLY = 'yebo:access:authenticated-only';
 const OPERATION = 'yebo:access:operation';
+const PLATFORM = 'yebo:access:platform';
 
 /**
  * Dónde vive una ruta pública:
  * - `tenant`: en el dominio de una empresa (el host se resuelve, pero no se exige sesión);
  * - `hub`: en el hub de cuentas (su propio guard valida el host);
+ * - `admin`: en el host del panel de administración (Fase 4.1), sin sesión del staff (login, MFA, enlace);
  * - `none`: sin host de empresa (health).
  * Cada ruta pública debe figurar además en `PUBLIC_ROUTES` (public-routes.ts).
  */
-export type PublicScope = 'tenant' | 'hub' | 'none';
+export type PublicScope = 'tenant' | 'hub' | 'admin' | 'none';
 
 export const Public = (scope: PublicScope): MethodDecorator & ClassDecorator => SetMetadata(PUBLIC, scope);
 
@@ -42,8 +45,20 @@ export const TenantOperation = (category: TenantOperationCategory): MethodDecora
 export const Protected = (code: PermissionCode, category: TenantOperationCategory) =>
   applyDecorators(RequirePermission(code), TenantOperation(category));
 
+/**
+ * Ruta de PLATAFORMA (Fase 4.1): host del panel, sesión del staff con MFA y un permiso de plataforma. Nunca acepta
+ * la sesión de una empresa, y las rutas de empresa nunca aceptan la del staff.
+ */
+export const PlatformProtected = (permission: PlatformPermission): MethodDecorator & ClassDecorator =>
+  SetMetadata(PLATFORM, { permission });
+
+/** Ruta de plataforma para la que basta con la sesión del staff (p. ej., consultar la propia sesión). */
+export const PlatformAuthenticated = (): MethodDecorator & ClassDecorator =>
+  SetMetadata(PLATFORM, { permission: null });
+
 export type RoutePolicy =
   | { kind: 'public'; scope: PublicScope }
+  | { kind: 'platform'; permission: PlatformPermission | null }
   | {
       kind: 'protected';
       /** `null` si la ruta es `@AuthenticatedOnly()`. */
@@ -72,6 +87,17 @@ export function routePolicyOf(
   const authenticatedOnly =
     reflector.getAllAndOverride<boolean | undefined>(AUTHENTICATED_ONLY, targets) === true;
   const operation = reflector.getAllAndOverride<TenantOperationCategory | undefined>(OPERATION, targets);
+  const platform = reflector.getAllAndOverride<{ permission: PlatformPermission | null } | undefined>(
+    PLATFORM,
+    targets,
+  );
+  if (platform) {
+    // Una ruta de plataforma no puede ser también pública ni de empresa.
+    if (scope || permission || authenticatedOnly || operation) {
+      throw new MissingRoutePolicyError(routeName, 'es de plataforma y a la vez pública o de empresa');
+    }
+    return { kind: 'platform', permission: platform.permission };
+  }
   if (scope) {
     // Un @Public de clase no debe volver pública en silencio una ruta que declara permiso: es una contradicción.
     if (permission || authenticatedOnly || operation) {

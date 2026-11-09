@@ -34,7 +34,8 @@ export class AuthenticationGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    if (routePolicyForContext(this.reflector, context).kind === 'public') return true;
+    // Solo rutas de EMPRESA: las públicas y las de plataforma (sesión del staff) no usan el access token de empresa.
+    if (routePolicyForContext(this.reflector, context).kind !== 'protected') return true;
     const request = context.switchToHttp().getRequest<Request>();
     const tenantId = this.cls.get('tenantId');
     if (!tenantId) throw new Error('TenantHostGuard no fijó el tenant antes de AuthenticationGuard');

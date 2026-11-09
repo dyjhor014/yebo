@@ -38,7 +38,7 @@ export class TenantStatusGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const policy = routePolicyForContext(this.reflector, context);
-    if (policy.kind === 'public') return true;
+    if (policy.kind !== 'protected') return true;
     const tenant = this.cls.get('tenant');
     if (!tenant) throw new Error('TenantHostGuard no fijó el tenant antes de TenantStatusGuard');
     const phase = tenantPhase(tenant, this.clock.now());
