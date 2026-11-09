@@ -107,7 +107,7 @@ Empresa en Lima, día 10/11/2026 (hora local):
 
 ## 4. Snapshots diarios
 
-- Un job horario (rol `yebo_platform`) busca, por empresa, los días **ya terminados en su zona horaria** (+15 min de margen) que aún no tienen snapshot `FINAL`, y los calcula. Es idempotente: `UNIQUE (tenant_id, usage_date)` + `UPSERT`.
+- Un job horario (rol `yebo_metering` desde la Fase 4.4, con el contexto de cada empresa; F4-Q2) busca, por empresa, los días **ya terminados en su zona horaria** (+15 min de margen) que aún no tienen snapshot `FINAL`, y los calcula. Es idempotente: `UNIQUE (tenant_id, usage_date)` + `UPSERT`.
 - Como el historial no puede modificarse hacia atrás, un día terminado no puede cambiar: el snapshot `FINAL` es definitivo.
 - El panel muestra el valor del día en curso calculado al vuelo (`PROVISIONAL`, sin guardar).
 - Cada snapshot guarda `timezone`, `day_range`, `algorithm_version`, ambas medidas y el detalle (IDs de las membresías contadas) para la auditoría.

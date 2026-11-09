@@ -7,6 +7,8 @@
 #   yebo_identity → solo el módulo identity: sesiones y tokens (Fase 3.2a). SIN BYPASSRLS.
 #   yebo_backoffice → solo la API del superadmin (Fase 4, F4-Q2): tablas de plataforma con permisos explícitos.
 #                   SIN BYPASSRLS.
+#   yebo_metering → jobs de medición y cierre (Fase 4.4, F4-Q2): historial y snapshots con el contexto de cada
+#                   tenant. SIN BYPASSRLS ni políticas entre tenants.
 #   yebo_test_bypass → SOLO desarrollo y CI (si YEBO_TEST_BYPASS_PASSWORD está definida): siembra de datos en las
 #                   pruebas. BYPASSRLS, sin acceso a yebo_dev ni a yebo_shadow. Nunca en producción.
 # Ningún rol de ejecución hereda privilegios ni tiene pertenencias. Sus permisos sobre tablas los conceden las
@@ -20,6 +22,7 @@ CREATE ROLE yebo_app      LOGIN PASSWORD '${YEBO_APP_PASSWORD}'      NOSUPERUSER
 CREATE ROLE yebo_platform LOGIN PASSWORD '${YEBO_PLATFORM_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
 CREATE ROLE yebo_identity LOGIN PASSWORD '${YEBO_IDENTITY_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
 CREATE ROLE yebo_backoffice LOGIN PASSWORD '${YEBO_BACKOFFICE_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
+CREATE ROLE yebo_metering LOGIN PASSWORD '${YEBO_METERING_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
 SQL
 
 TEST_ROLE=false
@@ -37,7 +40,7 @@ for db in yebo_dev yebo_test yebo_poc_tenancy yebo_poc_inventory yebo_shadow yeb
   case "$db" in
     yebo_shadow) runtime="" ;;
     yebo_poc_*) runtime="yebo_app" ;;
-    *) runtime="yebo_app, yebo_platform, yebo_identity, yebo_backoffice" ;;
+    *) runtime="yebo_app, yebo_platform, yebo_identity, yebo_backoffice, yebo_metering" ;;
   esac
   psql -v ON_ERROR_STOP=1 --username postgres --dbname postgres -c "CREATE DATABASE ${db} OWNER yebo_owner;"
   psql -v ON_ERROR_STOP=1 --username postgres --dbname "${db}" <<SQL

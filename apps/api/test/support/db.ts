@@ -9,7 +9,8 @@ import { buildPostgresUrl, type DbConnectionEnv, type DbRole } from '../../src/c
 export const RESET_TENANT_DATA =
   'TRUNCATE authorization_codes, refresh_tokens, tenant_sessions, identity_sessions, membership_roles, ' +
   'role_permissions, roles, tenant_memberships, tenant_module_overrides, subscriptions, tenant_settings, ' +
-  'tenant_services, tenant_status_history, tenant_operation_overrides, membership_invitations, users, ' +
+  'tenant_services, tenant_status_history, tenant_operation_overrides, membership_invitations, membership_status_history, ' +
+  'usage_daily_snapshots, users, ' +
   'permissions, ' +
   'role_templates, tenant_domains, tenants';
 

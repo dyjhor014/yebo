@@ -19,12 +19,13 @@ import { testBypassUrl, testDbUrl, testPool } from '../support/db';
 
 const DB = 'yebo_test';
 const API_ROOT = resolve(__dirname, '..', '..');
-const RUNTIME = ['yebo_app', 'yebo_platform', 'yebo_identity', 'yebo_backoffice'] as const;
+const RUNTIME = ['yebo_app', 'yebo_platform', 'yebo_identity', 'yebo_backoffice', 'yebo_metering'] as const;
 
 /** Matriz esperada de privilegios de TABLA (explícitos) de los roles de ejecución en el esquema public. */
 const EXPECTED_TABLE_GRANTS = [
   'yebo_app membership_invitations INSERT,SELECT',
   'yebo_app membership_roles DELETE,INSERT,SELECT,UPDATE',
+  'yebo_app membership_status_history INSERT,SELECT',
   'yebo_app modules SELECT',
   'yebo_app permissions SELECT',
   'yebo_app plan_version_modules SELECT',
@@ -38,7 +39,9 @@ const EXPECTED_TABLE_GRANTS = [
   'yebo_app tenant_services SELECT',
   'yebo_app tenant_settings SELECT',
   'yebo_app tenant_status_history SELECT',
+  'yebo_app usage_daily_snapshots SELECT',
   'yebo_backoffice membership_invitations INSERT,SELECT',
+  'yebo_backoffice membership_status_history SELECT',
   'yebo_backoffice modules SELECT',
   'yebo_backoffice permissions SELECT',
   'yebo_backoffice plan_version_modules DELETE,INSERT,SELECT',
@@ -59,10 +62,12 @@ const EXPECTED_TABLE_GRANTS = [
   'yebo_backoffice tenant_settings INSERT,SELECT',
   'yebo_backoffice tenant_status_history INSERT,SELECT',
   'yebo_backoffice tenants INSERT,SELECT',
+  'yebo_backoffice usage_daily_snapshots SELECT',
   'yebo_identity authorization_codes INSERT,SELECT,UPDATE',
   'yebo_identity identity_sessions INSERT,SELECT,UPDATE',
   'yebo_identity membership_invitations SELECT',
   'yebo_identity membership_roles INSERT,SELECT',
+  'yebo_identity membership_status_history INSERT,SELECT',
   'yebo_identity refresh_tokens INSERT,SELECT,UPDATE',
   'yebo_identity roles SELECT',
   'yebo_identity tenant_domains SELECT',
@@ -70,6 +75,11 @@ const EXPECTED_TABLE_GRANTS = [
   'yebo_identity tenant_operation_overrides SELECT',
   'yebo_identity tenant_sessions INSERT,SELECT,UPDATE',
   'yebo_identity users INSERT,SELECT',
+  'yebo_metering membership_status_history SELECT',
+  'yebo_metering plan_versions SELECT',
+  'yebo_metering subscriptions SELECT',
+  'yebo_metering tenants SELECT',
+  'yebo_metering usage_daily_snapshots INSERT,SELECT',
   'yebo_platform tenant_domains SELECT',
   'yebo_platform tenants SELECT',
 ];
@@ -77,6 +87,7 @@ const EXPECTED_TABLE_GRANTS = [
 /** Privilegios de COLUMNA explícitos (Fase 3.3). */
 const EXPECTED_COLUMN_GRANTS = [
   'yebo_app membership_invitations.revoked_at UPDATE',
+  'yebo_app membership_status_history.valid_to UPDATE',
   'yebo_app tenant_memberships.permissions_version UPDATE',
   'yebo_app tenant_memberships.status UPDATE',
   'yebo_app tenant_memberships.updated_at UPDATE',
@@ -92,6 +103,7 @@ const EXPECTED_COLUMN_GRANTS = [
   // Fase 4.3b: aceptar invitaciones en el hub.
   'yebo_identity membership_invitations.accepted_at UPDATE',
   'yebo_identity membership_invitations.accepted_membership_id UPDATE',
+  'yebo_identity membership_status_history.valid_to UPDATE',
   'yebo_identity tenant_memberships.permissions_version UPDATE',
   'yebo_identity tenant_memberships.status UPDATE',
   'yebo_identity tenant_memberships.updated_at UPDATE',
@@ -148,7 +160,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
       const { rows } = await owner.query(
         `SELECT rolname, rolbypassrls, rolinherit, rolsuper, rolcreaterole, rolreplication,
                 (rolname <> 'yebo_owner' AND rolcreatedb) AS creates_db
-           FROM pg_roles WHERE rolname IN ('yebo_owner', 'yebo_app', 'yebo_platform', 'yebo_identity', 'yebo_backoffice') ORDER BY rolname`,
+           FROM pg_roles WHERE rolname IN ('yebo_owner', 'yebo_app', 'yebo_platform', 'yebo_identity', 'yebo_backoffice', 'yebo_metering') ORDER BY rolname`,
       );
       for (const r of rows) {
         expect(r).toEqual({
@@ -161,7 +173,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
           creates_db: false,
         });
       }
-      expect(rows).toHaveLength(5);
+      expect(rows).toHaveLength(6);
     });
 
     it('el rol de pruebas salta RLS pero no hereda, no es superusuario ni crea roles', async () => {
@@ -198,6 +210,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
         'yebo_app',
         'yebo_backoffice',
         'yebo_identity',
+        'yebo_metering',
         'yebo_owner',
         'yebo_platform',
       ]);
@@ -205,6 +218,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
         'yebo_app',
         'yebo_backoffice',
         'yebo_identity',
+        'yebo_metering',
         'yebo_owner',
         'yebo_platform',
         'yebo_test_bypass',
@@ -238,7 +252,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
       expect(rows.map((r) => r.line)).toEqual(EXPECTED_TABLE_GRANTS);
     });
 
-    it('privilegios de columna explícitos: membresías (3.3), estados del tenant (4.3a) e invitaciones (4.3b)', async () => {
+    it('privilegios de columna explícitos: membresías (3.3), estados (4.3a), invitaciones (4.3b) e historial (4.4)', async () => {
       const { rows } = await owner.query<{ line: string }>(
         `SELECT r.rolname || ' ' || c.relname || '.' || att.attname || ' ' || a.privilege_type AS line
            FROM pg_attribute att JOIN pg_class c ON c.oid = att.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace,
@@ -305,6 +319,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
           'yebo_test_bypass',
           'yebo_identity',
           'yebo_backoffice',
+          'yebo_metering',
         ]) {
           await expect(platform.query(`SET ROLE ${role}`)).rejects.toMatchObject({ code: '42501' });
         }

@@ -1,11 +1,13 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Req, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
   ChangeTenantStatusRequestSchema,
   CreateTenantRequestSchema,
   OperationOverrideInputSchema,
+  TenantUsageQuerySchema,
   type CreateTenantResponse,
   type PlatformTenantRolesResponse,
+  type TenantUsageResponse,
   type OperationOverride,
   type OperationOverridesResponse,
   type TenantDetail,
@@ -15,6 +17,7 @@ import type { Request, Response } from 'express';
 import { ClsService } from 'nestjs-cls';
 import { createZodDto } from 'nestjs-zod';
 import type { RequestContextStore } from '../../../infrastructure/context/request-context';
+import { AppError } from '../../../common/errors/app-error';
 import { PlatformProtected } from '../../access/route-policy';
 import { TenantsService } from '../tenants.service';
 import { meta, noStore } from './platform-auth.controller';
@@ -48,6 +51,19 @@ export class TenantsController {
   ): Promise<CreateTenantResponse> {
     noStore(res); // puede llevar el enlace de invitación, que se muestra una sola vez
     return this.tenants.create(this.actor(), body, meta(req));
+  }
+
+  @Get(':tenantId/usage')
+  @PlatformProtected('platform.billing.read')
+  async usage(
+    @Param('tenantId') tenantId: string,
+    @Query() query: Record<string, unknown>,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<TenantUsageResponse> {
+    noStore(res);
+    const parsed = TenantUsageQuerySchema.safeParse(query);
+    if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'Indica from y to (AAAA-MM-DD)', 400);
+    return this.tenants.usage(tenantId, parsed.data.from, parsed.data.to);
   }
 
   @Get(':tenantId/roles')

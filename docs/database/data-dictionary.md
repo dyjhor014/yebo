@@ -62,7 +62,7 @@ Los `enum` son cerrados; los `→ catálogo` son tablas extensibles.
 `subscription_id`, `period_start date`, `period_end date` (fechas locales), `timezone text` (copiada del tenant al abrir; fija durante el período), `status enum OPEN|CLOSING|CLOSED`. UNIQUE (subscription_id, period_start). Tras `CLOSED`, un trigger bloquea cambios en el período, sus snapshots y su cálculo.
 
 ### usage_daily_snapshots
-`usage_date date`, `timezone text`, `day_range tstzrange`, `peak_concurrent int`, `distinct_active int`, `status enum PROVISIONAL|FINAL`, `algorithm_version int`, `detail jsonb` (IDs de membresías contadas e intervalos), `computed_at`. UNIQUE (tenant_id, usage_date). Ver [billing.md](../modules/billing.md).
+`usage_date date`, `timezone text`, `day_range tstzrange`, `peak_concurrent int`, `distinct_active int`, `status enum PROVISIONAL|FINAL`, `algorithm_version int`, `detail jsonb` (IDs de membresías contadas e intervalos), `computed_at`. UNIQUE (tenant_id, usage_date). Ver [billing.md](../modules/billing.md). Fase 4.4: solo se guardan los `FINAL` (inmutables por trigger); el día en curso se calcula al vuelo como `PROVISIONAL`. `detail` = intervalos recortados al día y `minActiveSeconds` aplicado.
 
 ### usage_period_calculations
 `billing_period_id UNIQUE`, `usage_metric`, `daily_aggregation`, `metric_value int` (p. ej. pico), `included_users`, `extra_users`, `base_amount`, `extra_amount`, `total_amount`, `currency`, `plan_version_snapshot snap`, `daily_series jsonb`, `computed_at`. Inmutable.
@@ -92,7 +92,7 @@ Los `enum` son cerrados; los `→ catálogo` son tablas extensibles.
 `user_id → users`, `status enum INVITED|ACTIVE|SUSPENDED|REVOKED`, `kind enum HUMAN` (reservado para extensiones), `billable bool DEFAULT true` (solo modificable por la plataforma), `display_name?`, `default_branch_id?`, `permissions_version int`, `agency_id?` (si es usuario de agencia externa). UNIQUE (tenant_id, user_id).
 
 ### membership_status_history
-`membership_id`, `status`, `billable bool`, `user_active bool`, `effective_billable bool` (ACTIVE ∧ billable ∧ usuario activo), `valid_from timestamptz` (siempre `now()` del servidor), `valid_to timestamptz?`, `changed_by_kind`, `changed_by_id`, `reason?`. **Fuente de la medición D5.** `EXCLUDE USING gist (membership_id WITH =, tstzrange(valid_from, valid_to) WITH &&)`; un trigger impide fechas retroactivas, `DELETE` y cualquier `UPDATE` que no sea cerrar `valid_to` de la fila vigente.
+`membership_id`, `status`, `billable bool`, `user_active bool`, `effective_billable bool` (ACTIVE ∧ billable ∧ usuario activo), `valid_from timestamptz` (siempre `now()` del servidor), `valid_to timestamptz?`, `user_id`. **Fuente de la medición D5.** Implementado en la Fase 4.4: la escriben triggers `SECURITY INVOKER` en `tenant_memberships` y `users`, en la misma transacción que el cambio; `effective_billable` lo garantiza un `CHECK`. `changed_by_kind`, `changed_by_id` y `reason` **no se implementaron** (un trigger no conoce al autor; decisión pendiente, ver phase-4-plan 4.4). `EXCLUDE USING gist (membership_id WITH =, tstzrange(valid_from, valid_to) WITH &&)`; un trigger impide fechas retroactivas, `DELETE` y cualquier `UPDATE` que no sea cerrar `valid_to` de la fila vigente.
 
 ### roles / role_permissions / membership_roles / 🌐 role_templates / 🌐 permissions
 - **permissions 🌐:** `code text UNIQUE` (`shipments.deliver`), `module_code`, `description`, `is_sensitive bool`.

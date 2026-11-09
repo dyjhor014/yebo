@@ -2,7 +2,7 @@
  * Construcción de cadenas de conexión a PostgreSQL por rol (ADR-003).
  * Se comparte entre la API, el worker, la configuración de Prisma CLI y las pruebas.
  */
-export type DbRole = 'app' | 'platform' | 'owner' | 'identity' | 'backoffice';
+export type DbRole = 'app' | 'platform' | 'owner' | 'identity' | 'backoffice' | 'metering';
 
 export interface DbConnectionEnv {
   PG_HOST: string;
@@ -17,6 +17,8 @@ export interface DbConnectionEnv {
   PG_IDENTITY_PASSWORD?: string | undefined;
   PG_BACKOFFICE_USER?: string | undefined;
   PG_BACKOFFICE_PASSWORD?: string | undefined;
+  PG_METERING_USER?: string | undefined;
+  PG_METERING_PASSWORD?: string | undefined;
 }
 
 export function buildPostgresUrl(env: DbConnectionEnv, role: DbRole, database: string): string {
@@ -26,6 +28,7 @@ export function buildPostgresUrl(env: DbConnectionEnv, role: DbRole, database: s
     owner: [env.PG_OWNER_USER, env.PG_OWNER_PASSWORD],
     identity: [env.PG_IDENTITY_USER, env.PG_IDENTITY_PASSWORD],
     backoffice: [env.PG_BACKOFFICE_USER, env.PG_BACKOFFICE_PASSWORD],
+    metering: [env.PG_METERING_USER, env.PG_METERING_PASSWORD],
   };
   const [user, password] = credentials[role];
   if (!user || !password) {

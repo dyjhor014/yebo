@@ -7,6 +7,7 @@ import type {
   OperationOverrideInput,
   TenantDetail,
   TenantSummary,
+  TenantUsageResponse,
 } from '@yebo/contracts';
 import { z } from 'zod';
 import { AppError } from '../../common/errors/app-error';
@@ -15,6 +16,7 @@ import type { Env } from '../../config/env';
 import { Prisma } from '../../generated/prisma/client';
 import { Clock } from '../identity/clock';
 import { INVITATION_TTL_MS, invitationLink, newInvitationToken } from '../identity/invitation-token';
+import { computeUsageDay, minActiveSecondsOf } from '../metering/usage-calculation';
 import { isReservedSlug } from '../tenancy/reserved-subdomains';
 import { BackofficePrismaService } from './backoffice-prisma.service';
 import { PlatformAuditService } from './platform-audit.service';
@@ -215,6 +217,50 @@ export class TenantsService {
         throw new AppError('VALIDATION_FAILED', 'Algún rol no existe en esta empresa', 400);
       }
       return this.invite(tx, actor, tenantId, email, [...roleIds], now, meta);
+    });
+  }
+
+  /**
+   * Consumo diario (Fase 4.4; billing §4): los días cerrados salen de los snapshots FINAL y, si el rango incluye el
+   * día en curso de la empresa, se calcula al vuelo como PROVISIONAL (sin guardarlo). Como mucho 93 días.
+   */
+  async usage(tenantId: string, from: string, to: string): Promise<TenantUsageResponse> {
+    await this.requireTenant(tenantId);
+    if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > 92) {
+      throw new AppError('VALIDATION_FAILED', 'Consulta como mucho 93 días', 400);
+    }
+    const tenant = await this.db.client.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: { timezone: true },
+    });
+    const now = this.clock.now();
+    return this.db.withTenant(tenantId, async (tx) => {
+      const finals = await tx.$queryRaw<{ d: string; peak: number; distinct_active: number }[]>`
+        SELECT to_char(usage_date, 'YYYY-MM-DD') AS d, peak_concurrent AS peak, distinct_active
+          FROM usage_daily_snapshots WHERE usage_date BETWEEN ${from}::date AND ${to}::date ORDER BY usage_date`;
+      const days: TenantUsageResponse['days'] = finals.map((f) => ({
+        date: f.d,
+        peakConcurrent: f.peak,
+        distinctActive: f.distinct_active,
+        status: 'FINAL',
+      }));
+      const [today] = await tx.$queryRaw<{ d: string }[]>`
+        SELECT to_char((${now}::timestamptz AT TIME ZONE ${tenant.timezone})::date, 'YYYY-MM-DD') AS d`;
+      if (today && today.d >= from && today.d <= to && !days.some((x) => x.date === today.d)) {
+        const day = await computeUsageDay(tx, {
+          tenantId,
+          date: today.d,
+          timezone: tenant.timezone,
+          minActiveSeconds: await minActiveSecondsOf(tx),
+        });
+        days.push({
+          date: today.d,
+          peakConcurrent: day.peakConcurrent,
+          distinctActive: day.distinctActive,
+          status: 'PROVISIONAL',
+        });
+      }
+      return { timezone: tenant.timezone, days };
     });
   }
 

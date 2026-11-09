@@ -78,6 +78,7 @@ model Tenant {
   statusHistory      TenantStatusHistory[]
   operationOverrides TenantOperationOverride[]
   invitations        MembershipInvitation[]
+  usageSnapshots     UsageDailySnapshot[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -144,9 +145,10 @@ model User {
   createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  memberships      TenantMembership[]
-  identitySessions IdentitySession[]
-  tenantSessions   TenantSession[]
+  memberships       TenantMembership[]
+  membershipHistory MembershipStatusHistory[]
+  identitySessions  IdentitySession[]
+  tenantSessions    TenantSession[]
 
   @@map("users")
 }
@@ -166,12 +168,13 @@ model TenantMembership {
   createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  tenant              Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  user                User                   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  tenant              Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   roles               MembershipRole[]
   tenantSessions      TenantSession[]
-  invitationsSent     MembershipInvitation[] @relation("InvitationInvitedBy")
-  invitationsAccepted MembershipInvitation[] @relation("InvitationAcceptedAs")
+  invitationsSent     MembershipInvitation[]    @relation("InvitationInvitedBy")
+  invitationsAccepted MembershipInvitation[]    @relation("InvitationAcceptedAs")
+  statusHistory       MembershipStatusHistory[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, userId])
@@ -842,4 +845,60 @@ model MembershipInvitation {
   @@unique([tenantId, id])
   @@index([tenantId, createdAt])
   @@map("membership_invitations")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 4.4 · Medición de usuarios (billing §1–4; D5; ADR-016)
+// ---------------------------------------------------------------------------------------------------------------
+
+enum UsageSnapshotStatus {
+  PROVISIONAL
+  FINAL
+
+  @@map("usage_snapshot_status")
+}
+
+/// Intervalos de cada membresía con sus factores de facturación. La escriben TRIGGERS en la misma transacción que el
+/// cambio de la membresía o del usuario; nunca la aplicación. EXCLUDE (sin solapes), guarda (sin fechas retroactivas,
+/// sin DELETE, solo se cierra la vigente) y CHECK de effective_billable, en SQL.
+model MembershipStatusHistory {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String           @map("tenant_id") @db.Uuid
+  membershipId      String           @map("membership_id") @db.Uuid
+  userId            String           @map("user_id") @db.Uuid
+  status            MembershipStatus
+  billable          Boolean
+  userActive        Boolean          @map("user_active")
+  effectiveBillable Boolean          @map("effective_billable")
+  validFrom         DateTime         @map("valid_from") @db.Timestamptz(6)
+  validTo           DateTime?        @map("valid_to") @db.Timestamptz(6)
+
+  membership TenantMembership @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, validFrom])
+  @@index([membershipId, validTo])
+  @@map("membership_status_history")
+}
+
+/// Valor de un día terminado (FINAL, inmutable por trigger). Lo escribe el job de medición con yebo_metering.
+model UsageDailySnapshot {
+  id               String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String                   @map("tenant_id") @db.Uuid
+  usageDate        DateTime                 @map("usage_date") @db.Date
+  timezone         String
+  dayRange         Unsupported("tstzrange") @map("day_range")
+  peakConcurrent   Int                      @map("peak_concurrent")
+  distinctActive   Int                      @map("distinct_active")
+  status           UsageSnapshotStatus
+  algorithmVersion Int                      @map("algorithm_version")
+  detail           Json
+  computedAt       DateTime                 @map("computed_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, usageDate])
+  @@map("usage_daily_snapshots")
 }

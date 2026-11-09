@@ -34,6 +34,9 @@ export const EnvSchema = z
     // Rol del superadmin (Fase 4, F4-Q2): solo el módulo platform-admin. Opcional para el worker.
     PG_BACKOFFICE_USER: z.string().min(1).default('yebo_backoffice'),
     PG_BACKOFFICE_PASSWORD: secret.optional(),
+    /** Rol de la medición (Fase 4.4): solo el worker lo usa; la API arranca sin él. */
+    PG_METERING_USER: z.string().min(1).default('yebo_metering'),
+    PG_METERING_PASSWORD: secret.optional(),
     // Credenciales de propietario: solo para migraciones. Opcionales para la API en ejecución.
     PG_OWNER_USER: z.string().min(1).optional(),
     PG_OWNER_PASSWORD: secret.optional(),
@@ -119,6 +122,7 @@ export const EnvSchema = z
       'PG_PLATFORM_USER',
       'PG_IDENTITY_USER',
       'PG_BACKOFFICE_USER',
+      'PG_METERING_USER',
       'PG_OWNER_USER',
     ] as const) {
       if (env[key]?.toLowerCase().includes('bypass')) {
@@ -134,6 +138,7 @@ export const EnvSchema = z
       env.PG_PLATFORM_USER,
       env.PG_IDENTITY_USER,
       env.PG_BACKOFFICE_USER,
+      env.PG_METERING_USER,
     ];
     if (new Set(runtimeUsers).size !== runtimeUsers.length) {
       ctx.addIssue({

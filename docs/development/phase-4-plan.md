@@ -1,6 +1,6 @@
 # Fase 4 — Superadmin SaaS y membresías: plan de trabajo
 
-- **Estado:** ✅ Plan **aprobado** por el responsable el 2026-11-10, con las decisiones F4-Q1 a F4-Q6 tal como se recomendaron. Etapa **4.1 implementada**, pendiente de revisión; etapa **4.2 aprobada** (2026-11-10); etapa **4.3a aprobada** (2026-11-10). Etapa **4.3b aprobada** (2026-11-10).
+- **Estado:** ✅ Plan **aprobado** por el responsable el 2026-11-10, con las decisiones F4-Q1 a F4-Q6 tal como se recomendaron. Etapa **4.1 implementada**, pendiente de revisión; etapa **4.2 aprobada** (2026-11-10); etapa **4.3a aprobada** (2026-11-10). Etapa **4.3b aprobada** (2026-11-10). Etapa **4.4 aprobada** (2026-11-10).
 - **Rama:** `fase-4/plan`, apilada sobre `fase-3/adr-034-privilegios` (`d21b591`). La Fase 3 sigue en revisión.
 - **Criterio de aceptación (roadmap):** crear empresa, asignar plan, medir usuarios y calcular el importe.
 - **Decisiones que se implementan:**
@@ -325,3 +325,76 @@ La 4.3 se divide en dos partes, cada una con sus pruebas: **4.3a** (alta de empr
 - **Revisión visual de `/invitacion`** en el navegador (accesibilidad AA e Impeccable): con las pantallas de la 4.7. Compila y pasa typecheck y lint, pero no se ha recorrido en un navegador.
 - **Fase 12:** enviar el enlace por correo, dejar de mostrarlo a quien invita y verificar el correo. Así se elimina el riesgo residual.
 - ✅ **Migración aplicada a `yebo_dev`** el 2026-11-10 con autorización del responsable, tras una copia de la base (`pg_dump`). La API y el worker responden `ready`.
+
+## Etapa 4.4 · Medición de usuarios (implementada y aprobada el 2026-11-10)
+
+### Decisiones del responsable (2026-11-10)
+
+| Pregunta | Decisión |
+|---|---|
+| ¿Quién escribe `membership_status_history` en la misma transacción que cada cambio? (El repositorio prohíbe `SECURITY DEFINER`) | **Triggers `SECURITY INVOKER`** en `tenant_memberships` y `users`: se ejecutan con el rol y el contexto de quien hace el cambio. Ningún servicio puede olvidarlo |
+| Rol `yebo_metering`: ¿política de lectura entre tenants (F4-Q2) o contexto por tenant? | **Contexto por tenant:** el job recorre las empresas y fija el contexto de cada una. Sin políticas entre tenants (menos privilegio que lo aprobado en F4-Q2) |
+| Crear el rol en el clúster de desarrollo | Autorizado: copia de `yebo_dev`, `init-env.sh` y `harden-roles.sh --test-role` |
+
+### Decisiones de implementación
+
+| Tema | Decisión | Motivo |
+|---|---|---|
+| Historial | Una fila por intervalo con `status`, `billable`, `user_active` y `effective_billable`. Un `CHECK` impone que `effective_billable` = `ACTIVE` ∧ `billable` ∧ usuario activo, en lugar de una columna generada (Prisma no las representa) | billing §1 |
+| Trigger de membresías | `AFTER INSERT OR UPDATE OF status, billable`. Cierra la fila vigente (`valid_to = now()`) y abre otra (`valid_from = now()`). En un cambio, el estado del usuario se **arrastra** de la fila vigente, porque `yebo_app` no lee `users`; en un alta lo lee de `users`, porque solo dan de alta `yebo_identity` y el rol de pruebas. Un UPDATE que no cambia nada no escribe | Misma transacción, sin servicios que lo olviden |
+| Trigger de usuarios | `AFTER UPDATE OF status`. Recorre **todas** las membresías del usuario fijando el contexto de cada empresa, y al final restaura el contexto anterior. Leer las membresías de todas las empresas exige la política de `yebo_identity`: solo ese rol debe cambiar `users.status` | billing §2.1 |
+| Dos cambios en una transacción | La fila intermedia dura 0 (rango vacío): no solapa ni cuenta | `CHECK valid_to >= valid_from` |
+| Guarda | `INSERT` solo vigente y con `valid_from` del servidor (±1 min); `UPDATE` solo para cerrar la vigente, ahora y sin tocar nada más; `DELETE` prohibido. `EXCLUDE` impide solapes por membresía | billing §2.1 |
+| Arranque | La migración abre la fila vigente de cada membresía existente: la medición empieza en ese momento | No hay historia anterior fiable |
+| Valor diario | La consulta de billing §3 (barrido de eventos con las salidas antes que las entradas en el mismo instante), en `metering/usage-calculation.ts`. `min_active_seconds` del plan ignora las filas cerradas más cortas | billing §3 y §7 |
+| Snapshots | Solo `FINAL`, inmutables por trigger, con la zona horaria, el rango del día, `algorithm_version = 1` y el detalle (intervalos recortados al día y el `min_active_seconds` aplicado). El día en curso se calcula al vuelo como `PROVISIONAL` sin guardarlo | billing §4 |
+| Job | Horario en el worker (BullMQ, planificador único). Por empresa, con su contexto: calcula los días entre el primer día con historial y el último terminado hace 15 min en su zona horaria que no tienen snapshot (`ON CONFLICT DO NOTHING`). Un job caído o dos ejecuciones simultáneas dan el mismo resultado | billing §4 |
+| Zona horaria | La de la empresa. Desde la 4.5, la del período (fija mientras dura) | billing §2.2 |
+| Panel | `GET /platform/tenants/:id/usage?from&to` (`platform.billing.read`, como mucho 93 días): días `FINAL` y el día en curso `PROVISIONAL` | Pantalla de consumo de la 4.7 |
+| `yebo_metering` | Rol nuevo, sin `BYPASSRLS`. SELECT en `tenants`, `membership_status_history`, `subscriptions` y `plan_versions`; SELECT e INSERT en `usage_daily_snapshots`. Lo usan solo el worker y la frontera 5 de ESLint (`MeteringPrismaService`, solo en `modules/metering`). La API arranca sin su contraseña | F4-Q2 |
+
+### Desviación pendiente de decisión
+
+El diccionario de datos prevé `changed_by_kind`, `changed_by_id` y `reason` en `membership_status_history`. **No se implementaron:** un trigger no conoce al autor del cambio. Para registrarlo habría que pasar el actor por una variable de transacción (como `app.tenant_id`) desde cada servicio, que es justo lo que los triggers evitan olvidar. Hoy el autor queda en los registros de cada operación (auditoría del staff, logs de la empresa).
+
+### Base de datos
+
+- **Migración `20261110230000_fase4_4_usage_metering`:**
+  - crea `membership_status_history` y `usage_daily_snapshots` (de tenant, con RLS forzado);
+  - `EXCLUDE`, `CHECK`, la guarda del historial, los dos triggers de escritura y la inmutabilidad de los snapshots, todo `SECURITY INVOKER`;
+  - abre la fila vigente de las membresías existentes.
+
+  La reversión está en su cabecera.
+- **Privilegios:**
+  - `yebo_app` y `yebo_identity`: SELECT e INSERT en el historial y UPDATE de `valid_to` (los usan los triggers).
+  - `yebo_app`: SELECT en `usage_daily_snapshots` (su consumo, para la 4.5).
+  - `yebo_backoffice`: SELECT en el historial y los snapshots.
+  - `yebo_metering`: el de la tabla anterior.
+- **Clúster de desarrollo:** ✅ rol `yebo_metering` creado el 2026-11-10 con autorización, tras una copia de `yebo_dev`. Reversión: `DROP OWNED BY yebo_metering` en cada base y `DROP ROLE yebo_metering`. **La migración no está aplicada a `yebo_dev`**; hasta aplicarla, el job de medición del worker registra un error en cada ciclo.
+
+### Pruebas
+
+| Suite | Contenido | Resultado |
+|---|---|---|
+| `metering.int-spec` (20) | **Valor diario:** el ejemplo de §3.1 da 3 y 4; reemplazo en el mismo instante sin doble conteo; días de 23 y 25 horas (Madrid), con la hora repetida contada; dos tramos de una misma membresía cuentan una vez; no cuentan suspendidos, no facturables, usuarios deshabilitados ni el staff; `min_active_seconds`; RLS de `yebo_metering`. **Snapshots:** job caído 3 días igual que a tiempo, margen de 15 min, repetir no crea nada, ejecuciones simultáneas, inmutables, planificador único en el worker. **Triggers:** alta, cambio con `yebo_app` sin leer `users`, deshacer, dos cambios en una transacción, UPDATE sin cambios, deshabilitar al usuario en todas sus empresas restaurando el contexto, alta de un usuario deshabilitado, historial inmodificable y `CHECK` de coherencia. **Panel:** días `FINAL` y `PROVISIONAL` | ✅ |
+| `privileges`, `boundaries`, `tenancy` y `migration-paths` | Rol nuevo en la foto de roles, bases y privilegios; frontera 5; las dos tablas en la cobertura de RLS | ✅ |
+| Integración completa | 19 suites y 329 pruebas | ✅ |
+| Unitarias, lint, typecheck, formato y build | 137 unitarias | ✅ |
+
+**Mutaciones (18):** 10 en el código y 8 en las funciones de los triggers, estas sustituidas temporalmente en `yebo_test` y restauradas después.
+- **Detectadas (16):**
+  - en el cálculo: entradas antes que salidas, sin recortar al día, sin filtro de facturable, sin `min_active_seconds`, zona UTC, `COUNT` sin `DISTINCT`;
+  - en el job: sin margen de 15 min, cerrar el día en curso;
+  - en la guarda: `DELETE` permitido, cualquier UPDATE, fechas retroactivas;
+  - en los triggers: alta sin leer el estado del usuario, sin arrastrar `user_active`, sin restaurar el contexto, escribir sin cambios;
+  - en los snapshots: modificables.
+- **Equivalentes (2):**
+  - contar la salida que coincide con el fin del día: es posterior a todo lo demás y no cambia el máximo;
+  - quitar el filtro de tenant explícito del cálculo: el RLS ya lo aplica (defensa en profundidad).
+- **Sobrevivían a la primera versión de la suite y ahora se detectan (5):** sin recortar al día, `COUNT` sin `DISTINCT`, alta sin leer el usuario, sin restaurar el contexto (la prueba fijaba un contexto que podía coincidir por azar) y escribir sin cambios.
+
+### Pendiente
+
+- Decidir la desviación del autor del cambio (sección anterior).
+- Aplicar la migración a `yebo_dev`, con autorización y copia previa.
+- 4.5: la zona horaria del período sustituye a la de la empresa.

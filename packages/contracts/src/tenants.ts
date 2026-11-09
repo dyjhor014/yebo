@@ -152,3 +152,22 @@ export const CreateTenantResponseSchema = TenantDetailSchema.extend({
     .nullable(),
 });
 export type CreateTenantResponse = z.infer<typeof CreateTenantResponseSchema>;
+
+/** Consumo diario de una empresa (Fase 4.4; billing §3–4): días cerrados (FINAL) y el día en curso (PROVISIONAL). */
+export const TenantUsageQuerySchema = z
+  .object({ from: z.iso.date(), to: z.iso.date() })
+  .refine((q) => q.from <= q.to, { message: 'from debe ser anterior o igual a to' });
+export type TenantUsageQuery = z.infer<typeof TenantUsageQuerySchema>;
+
+export const TenantUsageResponseSchema = z.object({
+  timezone: z.string(),
+  days: z.array(
+    z.object({
+      date: z.iso.date(),
+      peakConcurrent: z.number().int(),
+      distinctActive: z.number().int(),
+      status: z.enum(['PROVISIONAL', 'FINAL']),
+    }),
+  ),
+});
+export type TenantUsageResponse = z.infer<typeof TenantUsageResponseSchema>;
