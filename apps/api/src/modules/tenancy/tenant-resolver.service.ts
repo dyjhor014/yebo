@@ -74,6 +74,34 @@ export class TenantResolverService {
     return new Map(rows.map((r) => [r.id, r.tradeName]));
   }
 
+  /**
+   * Estado y dominio principal de un tenant por su id, SIN caché (Fase 4.3b: aceptar una invitación decide con el
+   * estado vigente). Lectura con yebo_platform: el rol de identidad no accede a `tenants`.
+   */
+  async byId(tenantId: string): Promise<(ResolvedTenant & { primaryHost: string }) | null> {
+    const t = await this.platform.client.tenant.findUnique({
+      where: { id: tenantId },
+      select: {
+        id: true,
+        slug: true,
+        tradeName: true,
+        status: true,
+        cancelledAt: true,
+        domains: { where: { isPrimary: true, verificationStatus: 'VERIFIED' }, select: { host: true } },
+      },
+    });
+    const primaryHost = t?.domains[0]?.host;
+    if (!t || !primaryHost) return null;
+    return {
+      id: t.id,
+      slug: t.slug,
+      tradeName: t.tradeName,
+      status: t.status,
+      cancelledAt: t.cancelledAt?.toISOString() ?? null,
+      primaryHost,
+    };
+  }
+
   /** Para la Fase 4: al cambiar un dominio o el estado de un tenant, se invalida su entrada. */
   async invalidate(rawHost: string): Promise<void> {
     const host = normalizeHost(rawHost);

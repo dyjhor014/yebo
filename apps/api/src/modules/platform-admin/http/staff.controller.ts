@@ -1,23 +1,21 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Req, Res } from '@nestjs/common';
+import { Controller, Get, HttpCode, Param, Post, Req, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
-  CreatePlatformStaffRequestSchema,
-  type CreatePlatformStaffResponse,
   type DisablePlatformStaffResponse,
   type PlatformSetupLinkResponse,
   type PlatformStaffListResponse,
 } from '@yebo/contracts';
 import type { Request, Response } from 'express';
 import { ClsService } from 'nestjs-cls';
-import { createZodDto } from 'nestjs-zod';
 import type { RequestContextStore } from '../../../infrastructure/context/request-context';
 import { PlatformProtected } from '../../access/route-policy';
 import { StaffService } from '../staff.service';
 import { meta, noStore } from './platform-auth.controller';
 
-class CreatePlatformStaffRequestDto extends createZodDto(CreatePlatformStaffRequestSchema) {}
-
-/** Gestión del staff de YEBO (solo SUPERADMIN: `platform.staff.manage`). */
+/**
+ * Gestión del staff de YEBO (solo SUPERADMIN: `platform.staff.manage`). Las altas se hacen desde «Invitar usuario»
+ * (`POST /platform/invitations`, destino `STAFF`; decisión del 2026-11-10), que usa el mismo StaffService.
+ */
 @ApiTags('platform')
 @Controller({ path: 'platform/staff', version: '1' })
 @PlatformProtected('platform.staff.manage')
@@ -31,17 +29,6 @@ export class StaffController {
   async list(@Res({ passthrough: true }) res: Response): Promise<PlatformStaffListResponse> {
     noStore(res);
     return { staff: await this.staff.list() };
-  }
-
-  /** Alta con enlace de configuración de un solo uso, que se muestra UNA vez a quien la hace (F4-Q3). */
-  @Post()
-  async create(
-    @Body() body: CreatePlatformStaffRequestDto,
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<CreatePlatformStaffResponse> {
-    noStore(res);
-    return this.staff.create(this.actor(), body, meta(req));
   }
 
   @Post(':platformUserId/setup-link')

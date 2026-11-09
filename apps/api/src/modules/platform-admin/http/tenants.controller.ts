@@ -4,6 +4,8 @@ import {
   ChangeTenantStatusRequestSchema,
   CreateTenantRequestSchema,
   OperationOverrideInputSchema,
+  type CreateTenantResponse,
+  type PlatformTenantRolesResponse,
   type OperationOverride,
   type OperationOverridesResponse,
   type TenantDetail,
@@ -39,8 +41,19 @@ export class TenantsController {
 
   @Post()
   @PlatformProtected('platform.tenants.manage')
-  create(@Body() body: CreateTenantRequestDto, @Req() req: Request): Promise<TenantDetail> {
+  create(
+    @Body() body: CreateTenantRequestDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<CreateTenantResponse> {
+    noStore(res); // puede llevar el enlace de invitación, que se muestra una sola vez
     return this.tenants.create(this.actor(), body, meta(req));
+  }
+
+  @Get(':tenantId/roles')
+  @PlatformProtected('platform.tenants.read')
+  async roles(@Param('tenantId') tenantId: string): Promise<PlatformTenantRolesResponse> {
+    return { roles: await this.tenants.listRoles(tenantId) };
   }
 
   @Get(':tenantId')

@@ -32,6 +32,13 @@ const HOST_A = 'acceso-a.yebo.test';
 const HOST_B = 'acceso-b.yebo.test';
 const CSRF = 'csrf-de-prueba-0123456789abcdef';
 const MIGRATION = resolve(__dirname, '../../prisma/migrations/20261110120000_fase3_3_access/migration.sql');
+/** Permisos que añaden migraciones posteriores (4.3b: members.invite): se toma su bloque de siembra tal cual. */
+const LATER_SEEDS = [
+  resolve(__dirname, '../../prisma/migrations/20261110210000_fase4_3b_membership_invitations/migration.sql'),
+].map((file) => {
+  const sql = readFileSync(file, 'utf8');
+  return sql.slice(sql.indexOf('INSERT INTO "permissions"'), sql.indexOf('-- Roles ya creados'));
+});
 
 interface Route {
   method: string;
@@ -100,6 +107,7 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
     await owner.query(RESET_TENANT_DATA);
     // Otras suites vacían el catálogo: se vuelve a aplicar la migración (idempotente) para probar su contenido.
     await owner.query(readFileSync(MIGRATION, 'utf8'));
+    for (const seed of LATER_SEEDS) await owner.query(seed);
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     const nest = moduleRef.createNestApplication<NestExpressApplication>({ bufferLogs: true });

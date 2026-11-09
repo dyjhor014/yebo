@@ -5,6 +5,7 @@ import { AccessTokenService } from './access-token.service';
 import { AuthorizationCodeService } from './authorization-code.service';
 import { ClockModule } from './clock.module';
 import { HubAuthService } from './hub-auth.service';
+import { InvitationAcceptanceService } from './invitation-acceptance.service';
 import { AuthController } from './http/auth.controller';
 import { CookieSigner } from './http/cookie-signer';
 import { HubController } from './http/hub.controller';
@@ -37,6 +38,7 @@ import { UserDirectoryService } from './user-directory.service';
     CookieSigner,
     HubHostGuard,
     UserDirectoryService,
+    InvitationAcceptanceService,
   ],
   exports: [
     PasswordHasher,

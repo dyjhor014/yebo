@@ -56,26 +56,12 @@ export type PlatformStaffMember = z.infer<typeof PlatformStaffMemberSchema>;
 export const PlatformStaffListResponseSchema = z.object({ staff: z.array(PlatformStaffMemberSchema) });
 export type PlatformStaffListResponse = z.infer<typeof PlatformStaffListResponseSchema>;
 
-export const CreatePlatformStaffRequestSchema = z
-  .object({
-    email: z.email().max(254),
-    fullName: z.string().trim().min(1).max(200),
-    role: PlatformRoleSchema,
-  })
-  .strict();
-export type CreatePlatformStaffRequest = z.infer<typeof CreatePlatformStaffRequestSchema>;
-
 export const PlatformSetupLinkResponseSchema = z.object({
   /** Enlace de un solo uso. El token va en el fragmento (#): no llega al servidor ni al Referer. */
   setupUrl: z.string(),
   setupExpiresAt: z.iso.datetime(),
 });
 export type PlatformSetupLinkResponse = z.infer<typeof PlatformSetupLinkResponseSchema>;
-
-export const CreatePlatformStaffResponseSchema = PlatformSetupLinkResponseSchema.extend({
-  platformUserId: z.string(),
-});
-export type CreatePlatformStaffResponse = z.infer<typeof CreatePlatformStaffResponseSchema>;
 
 export const DisablePlatformStaffResponseSchema = z.object({
   revokedSessions: z.number().int().nonnegative(),

@@ -21,6 +21,8 @@ export const PERMISSION_CATALOG = {
   },
   'roles.read': { module: 'ACCESS', sensitive: false, description: 'Ver los roles de la empresa' },
   'roles.assign': { module: 'ACCESS', sensitive: true, description: 'Asignar roles a los miembros' },
+  // Fase 4.3b: invitar es USERS_ADD (aumenta el consumo facturable).
+  'members.invite': { module: 'ACCESS', sensitive: true, description: 'Invitar personas a la empresa' },
 } as const satisfies Record<string, { module: string; sensitive: boolean; description: string }>;
 
 export type PermissionCode = keyof typeof PERMISSION_CATALOG;

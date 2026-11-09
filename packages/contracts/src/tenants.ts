@@ -60,6 +60,8 @@ export const CreateTenantRequestSchema = z
       .refine((s) => new Set(s.map((x) => `${x.modality}:${x.service}`)).size === s.length, {
         message: 'Servicios repetidos',
       }),
+    /** Primer administrador: se le invita con el rol Administrador y el enlace se devuelve una vez (F4-Q3). */
+    firstAdminEmail: z.string().trim().toLowerCase().pipe(z.email().max(254)).optional(),
   })
   .strict();
 export type CreateTenantRequest = z.infer<typeof CreateTenantRequestSchema>;
@@ -143,3 +145,10 @@ export const OperationOverrideSchema = z.object({
 export type OperationOverride = z.infer<typeof OperationOverrideSchema>;
 export const OperationOverridesResponseSchema = z.object({ overrides: z.array(OperationOverrideSchema) });
 export type OperationOverridesResponse = z.infer<typeof OperationOverridesResponseSchema>;
+
+export const CreateTenantResponseSchema = TenantDetailSchema.extend({
+  firstAdminInvitation: z
+    .object({ id: z.string(), email: z.string(), expiresAt: z.iso.datetime(), link: z.string() })
+    .nullable(),
+});
+export type CreateTenantResponse = z.infer<typeof CreateTenantResponseSchema>;

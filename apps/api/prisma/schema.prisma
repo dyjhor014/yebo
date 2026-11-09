@@ -77,6 +77,7 @@ model Tenant {
   services           TenantService[]
   statusHistory      TenantStatusHistory[]
   operationOverrides TenantOperationOverride[]
+  invitations        MembershipInvitation[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -165,10 +166,12 @@ model TenantMembership {
   createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  user           User             @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  roles          MembershipRole[]
-  tenantSessions TenantSession[]
+  tenant              Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  roles               MembershipRole[]
+  tenantSessions      TenantSession[]
+  invitationsSent     MembershipInvitation[] @relation("InvitationInvitedBy")
+  invitationsAccepted MembershipInvitation[] @relation("InvitationAcceptedAs")
 
   @@unique([tenantId, id])
   @@unique([tenantId, userId])
@@ -456,6 +459,7 @@ model PlatformUser {
   statusChanges      TenantStatusHistory[]
   opOverridesGranted TenantOperationOverride[] @relation("OpOverrideGrantedBy")
   opOverridesEnded   TenantOperationOverride[] @relation("OpOverrideEndedBy")
+  invitationsSent    MembershipInvitation[]
 
   @@map("platform_users")
 }
@@ -808,4 +812,34 @@ model TenantOperationOverride {
   @@unique([tenantId, id])
   @@index([tenantId, category])
   @@map("tenant_operation_overrides")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 4.3b · Invitaciones de membresía (multitenancy §1.1; F4-Q3)
+// ---------------------------------------------------------------------------------------------------------------
+
+/// Invitación de un solo uso. RLS de tenant: el token del enlace lleva el id del tenant para fijar el contexto antes
+/// de buscar el hash. Solo se guarda el SHA-256 del secreto.
+model MembershipInvitation {
+  id                      String    @id @default(uuid(7)) @db.Uuid
+  tenantId                String    @map("tenant_id") @db.Uuid
+  email                   String    @db.Citext
+  roleIds                 String[]  @map("role_ids") @db.Uuid
+  tokenHash               Bytes     @unique @map("token_hash")
+  expiresAt               DateTime  @map("expires_at") @db.Timestamptz(6)
+  invitedByMembershipId   String?   @map("invited_by_membership_id") @db.Uuid
+  invitedByPlatformUserId String?   @map("invited_by_platform_user_id") @db.Uuid
+  acceptedAt              DateTime? @map("accepted_at") @db.Timestamptz(6)
+  acceptedMembershipId    String?   @map("accepted_membership_id") @db.Uuid
+  revokedAt               DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt               DateTime  @map("created_at") @db.Timestamptz(6)
+
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  invitedBy         TenantMembership? @relation("InvitationInvitedBy", fields: [tenantId, invitedByMembershipId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  acceptedAs        TenantMembership? @relation("InvitationAcceptedAs", fields: [tenantId, acceptedMembershipId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  invitedByPlatform PlatformUser?     @relation(fields: [invitedByPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, createdAt])
+  @@map("membership_invitations")
 }

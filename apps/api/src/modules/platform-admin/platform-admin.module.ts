@@ -6,6 +6,7 @@ import { BackofficePrismaService } from './backoffice-prisma.service';
 import { CatalogService } from './catalog.service';
 import { CatalogController } from './http/catalog.controller';
 import { PlatformAuthController } from './http/platform-auth.controller';
+import { PlatformInvitationsController } from './http/platform-invitations.controller';
 import { PlatformGuard } from './http/platform.guard';
 import { StaffController } from './http/staff.controller';
 import { TenantsController } from './http/tenants.controller';
@@ -22,7 +23,13 @@ import { TenantsService } from './tenants.service';
  */
 @Module({
   imports: [IdentityModule, TenancyModule],
-  controllers: [PlatformAuthController, StaffController, CatalogController, TenantsController],
+  controllers: [
+    PlatformAuthController,
+    StaffController,
+    CatalogController,
+    TenantsController,
+    PlatformInvitationsController,
+  ],
   providers: [
     BackofficePrismaService,
     FieldEncryption,

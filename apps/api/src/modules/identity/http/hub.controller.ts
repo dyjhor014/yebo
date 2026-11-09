@@ -2,7 +2,11 @@ import { Body, Controller, Get, HttpCode, Post, Query, Req, Res, UseGuards } fro
 import { ApiTags } from '@nestjs/swagger';
 import {
   HubAuthorizeQuerySchema,
+  HubInvitationRegisterSchema,
+  HubInvitationTokenSchema,
   HubLoginRequestSchema,
+  type HubInvitationAccepted,
+  type HubInvitationPreview,
   type CsrfResponse,
   type HubBrandingResponse,
   type HubMembershipsResponse,
@@ -15,6 +19,7 @@ import { TenantResolverService } from '../../tenancy/tenant-resolver.service';
 import { AuthorizationCodeService } from '../authorization-code.service';
 import { Clock } from '../clock';
 import { HubAuthService } from '../hub-auth.service';
+import { InvitationAcceptanceService } from '../invitation-acceptance.service';
 import { SessionService } from '../session.service';
 import { CookieSigner } from './cookie-signer';
 import { COOKIE, clearCookie, readCookie, setCookie } from './cookies';
@@ -40,6 +45,7 @@ export class HubController {
     private readonly tenants: TenantResolverService,
     private readonly signer: CookieSigner,
     private readonly clock: Clock,
+    private readonly invitations: InvitationAcceptanceService,
   ) {}
 
   @Get('csrf')
@@ -141,6 +147,64 @@ export class HubController {
     return { memberships: await this.hub.listMemberships(identity.userId) };
   }
 
+  // -------------------------------------------------------------------------------------------------------------
+  // Invitaciones (Fase 4.3b). El token viaja en el cuerpo (en la página, en el fragmento #), nunca en la URL.
+  // -------------------------------------------------------------------------------------------------------------
+
+  /** Empresa, correo invitado y caducidad. No revela si existe una cuenta con ese correo. */
+  @Post('invitations/preview')
+  @HttpCode(200)
+  async previewInvitation(
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<HubInvitationPreview> {
+    noStore(res);
+    assertCsrf(req);
+    const parsed = HubInvitationTokenSchema.safeParse(body);
+    return this.invitations.preview(parsed.success ? parsed.data.token : null, ip(req));
+  }
+
+  /** Acepta con la sesión del hub de este navegador. */
+  @Post('invitations/accept')
+  @HttpCode(200)
+  async acceptInvitation(
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<HubInvitationAccepted> {
+    noStore(res);
+    assertCsrf(req);
+    const parsed = HubInvitationTokenSchema.safeParse(body);
+    const identitySessionId = this.signer.verify(HUB_COOKIE_PURPOSE, readCookie(req, COOKIE.hub));
+    return this.invitations.accept(identitySessionId, parsed.success ? parsed.data.token : null, ip(req));
+  }
+
+  /** Crea la cuenta del correo invitado, acepta y abre la sesión del hub (decisión del 2026-11-10). */
+  @Post('invitations/register')
+  @HttpCode(200)
+  async registerInvitation(
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<HubInvitationAccepted> {
+    noStore(res);
+    assertCsrf(req);
+    const parsed = HubInvitationRegisterSchema.safeParse(body);
+    if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'Revisa tu nombre y tu contraseña', 400);
+    const result = await this.invitations.register({
+      ...parsed.data,
+      ip: ip(req),
+      ...(typeof req.headers['user-agent'] === 'string' && { userAgent: req.headers['user-agent'] }),
+    });
+    setCookie(res, COOKIE.hub, this.signer.sign(HUB_COOKIE_PURPOSE, result.identitySessionId), {
+      maxAgeSeconds: (result.absoluteExpiresAt.getTime() - this.clock.now().getTime()) / 1000,
+      httpOnly: true,
+      sameSite: 'Lax',
+    });
+    return { tradeName: result.tradeName, tenantHost: result.tenantHost };
+  }
+
   /** Nombre de la empresa desde la que se inicia el acceso (la pantalla de login lleva su marca, D3.1). */
   @Get('branding')
   async branding(@Query('tenant_host') tenantHost: unknown): Promise<HubBrandingResponse> {
@@ -153,4 +217,8 @@ export class HubController {
 function noStore(res: Response): void {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Referrer-Policy', 'no-referrer');
+}
+
+function ip(req: Request): string {
+  return req.ip ?? 'desconocida';
 }

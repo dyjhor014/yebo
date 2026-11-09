@@ -1,6 +1,6 @@
 # Fase 4 — Superadmin SaaS y membresías: plan de trabajo
 
-- **Estado:** ✅ Plan **aprobado** por el responsable el 2026-11-10, con las decisiones F4-Q1 a F4-Q6 tal como se recomendaron. Etapa **4.1 implementada**, pendiente de revisión; etapa **4.2 aprobada** (2026-11-10); etapa **4.3a aprobada** (2026-11-10).
+- **Estado:** ✅ Plan **aprobado** por el responsable el 2026-11-10, con las decisiones F4-Q1 a F4-Q6 tal como se recomendaron. Etapa **4.1 implementada**, pendiente de revisión; etapa **4.2 aprobada** (2026-11-10); etapa **4.3a aprobada** (2026-11-10). Etapa **4.3b aprobada** (2026-11-10).
 - **Rama:** `fase-4/plan`, apilada sobre `fase-3/adr-034-privilegios` (`d21b591`). La Fase 3 sigue en revisión.
 - **Criterio de aceptación (roadmap):** crear empresa, asignar plan, medir usuarios y calcular el importe.
 - **Decisiones que se implementan:**
@@ -27,7 +27,7 @@ Cada etapa termina con sus pruebas y se presenta para revisión antes de empezar
 | **4.4 · Medición de usuarios** | `membership_status_history` con `EXCLUDE USING gist` y trigger (sin fechas retroactivas, sin `DELETE`, solo se cierra la fila vigente), escrito **en la misma transacción** que cada cambio de membresía o de usuario. `usage_daily_snapshots` (job horario idempotente, `PROVISIONAL` y `FINAL`, `algorithm_version`, detalle auditable) | Las de billing §8: ejemplo de §3.1 = 3 y 4; reemplazo en el mismo instante sin doble conteo; días de 23 y 25 horas; job caído 3 días = mismo resultado; historial inmodificable; staff y cuentas de servicio nunca cuentan |
 | **4.5 · Períodos, importe y cobro** | `billing_periods` (zona horaria fija por período), cierre `OPEN → CLOSING → CLOSED` sin días faltantes; `usage_period_calculations` con la copia del plan; `platform_invoices`, líneas y `subscription_payments` (registro manual, sin pagos simulados); triggers de inmutabilidad. Vista del tenant «Obligaciones con YEBO» (`BILLING_SELF`) | La fórmula de billing §5 con las tres métricas; período cerrado inmodificable; revocar usuarios tras el cierre no altera la factura; un pago registrado actualiza el saldo y el estado |
 | **4.6 · Acceso de soporte** | `support_access_grants`: temporal, con motivo, visible para el tenant, con aprobación opcional de la empresa y revocable. El guard de empresa acepta la sesión del staff **solo** con un grant vigente para ese tenant, con ámbito `READ_ONLY` o `FULL`, y todo queda auditado | Sin grant → `401`; grant vencido o revocado → `401`; `READ_ONLY` no escribe; el tenant ve quién accedió y cuándo |
-| **4.7 · Panel de superadmin** (`apps/platform`) | Pantallas mínimas: login del staff con MFA, empresas (alta, estado, dominios, invitación del primer administrador), planes y versiones, suscripción, consumo diario, períodos, facturas y pagos. Identidad YEBO v1.0 con los mismos componentes y tokens de la 3.2b | Recorrido completo en el navegador; accesibilidad AA; revisión visual con Impeccable |
+| **4.7 · Panel de superadmin** (`apps/platform`) | Pantallas mínimas: login del staff con MFA, empresas (alta, estado, dominios, invitación del primer administrador), **«Invitar usuario» con el destino a elegir: staff de YEBO o una empresa (con sus roles)**, planes y versiones, suscripción, consumo diario, períodos, facturas y pagos. Identidad YEBO v1.0 con los mismos componentes y tokens de la 3.2b | Recorrido completo en el navegador; accesibilidad AA; revisión visual con Impeccable |
 | **4.8 · Cierre** | Prueba de extremo a extremo del criterio: crear empresa → asignar plan → medir usuarios durante varios días → cerrar el período → importe correcto. Resultados en `phase-4-results.md` | Criterio del roadmap en CI |
 
 ## Privilegios de base de datos (ADR-034)
@@ -235,6 +235,85 @@ La 4.3 se divide en dos partes, cada una con sus pruebas: **4.3a** (alta de empr
 
 ### Pendiente
 
-- **4.3b:** `membership_invitations`, invitación del primer administrador en el alta, aceptación autenticada en el hub sin revelar si el correo existía, e invitar como operación `USERS_ADD` de la empresa.
+- **4.3b:** ✅ implementada (sección siguiente).
 - **`cancelledClosingDays` del plan:** el periodo de cierre sigue siendo la constante de 30 días de `tenant-operation.ts`; leerlo de la política del plan exige llevar la versión de plan al resolvedor.
 - **Dominios propios (`CUSTOM`) y su verificación**, y cambiar el plan de una suscripción: fuera de la 4.3.
+
+## Etapa 4.3b · Invitaciones de membresía (implementada y aprobada el 2026-11-10)
+
+### Decisiones del responsable (2026-11-10)
+
+| Pregunta | Decisión |
+|---|---|
+| ¿Cómo entra una persona invitada que aún no tiene cuenta? Todavía no hay registro ni correo (Fase 12), y el enlace lo ve también quien invita (F4-Q3) | **Crea la cuenta al aceptar.** El enlace (un solo uso, 72 h) sirve como prueba provisional y la cuenta queda con el correo **sin verificar**. **Riesgo residual aceptado:** quien tenga el enlace puede crear esa cuenta y saber si el correo ya tenía una. Se elimina en la Fase 12, cuando el enlace se envíe por correo y deje de mostrarse a quien invita |
+| ¿Cómo se comprueban las contraseñas filtradas? | **Lista local**, sin llamadas externas: entre 10 y 128 caracteres; fuera de la lista de filtradas; sin el correo, su parte local, las palabras del nombre ni «yebo» |
+| ¿Se puede invitar desde el panel del staff? | **Sí.** Una sola acción, «Invitar usuario», en la que se elige si la persona va al **staff de YEBO** o a **una empresa** |
+
+### Decisiones de implementación
+
+| Tema | Decisión | Motivo |
+|---|---|---|
+| Token | `<id del tenant>.<secreto de 256 bits>`. En la base, solo el SHA-256 del secreto. El enlace es `https://<AUTH_HUB_HOST>/invitacion#<token>`: el token va en el fragmento, que no llega al servidor ni al Referer, y la página lo quita de la barra de direcciones al leerlo | El id del tenant permite al hub fijar el contexto (RLS) **antes** de buscar el hash. Así la tabla conserva el RLS, sin excepción global |
+| Caducidad | 72 h; `CHECK` de un máximo de 7 días | F4-Q3: caducidad corta |
+| Invitar desde la empresa | `POST /api/v1/invitations` (`members.invite`, categoría `USERS_ADD`); también listar (`members.read`) y revocar (`members.invite`, `USERS_REDUCE`). Los roles deben ser de la empresa. **No se consulta si el correo tiene cuenta:** la respuesta es idéntica | multitenancy §1.1 |
+| Primer administrador | `firstAdminEmail` en el alta (misma transacción, rol Administrador). El enlace se devuelve **una vez** (`Cache-Control: no-store`). La auditoría guarda el id de la invitación, no el correo | F4-Q3; datos personales fuera de la auditoría |
+| «Invitar usuario» en el panel | `POST /platform/invitations` con el destino en el cuerpo:<br>• **`STAFF`:** correo, nombre y rol de plataforma; reutiliza el alta de la 4.1 (enlace de configuración, MFA obligatoria) y exige `platform.staff.manage`. Es la **única** forma de dar de alta al staff: `POST /platform/staff` de la 4.1 se retiró (decisión del 2026-11-10) y sus pruebas usan esta ruta.<br>• **`TENANT`:** empresa, correo y roles **de esa empresa** (`GET /platform/tenants/:id/roles` alimenta el selector); se acepta en el hub y exige `platform.tenants.manage`.<br>La ruta exige la sesión del staff y el permiso se comprueba según el destino. Los realms siguen separados: una invitación al staff no crea cuenta ni invitación de empresa, y al revés | Decisión del responsable (2026-11-10) |
+| Permiso `members.invite` | Nuevo en el catálogo y en la plantilla Administrador. La migración lo añade a los roles Administrador existentes, tenant a tenant (por el RLS forzado), e incrementa la versión de permisos de sus membresías | — |
+| Aceptar (hub) | `POST /hub/invitations/preview`, `/accept` (con la sesión del hub; el correo debe ser el invitado) y `/register` (crea la cuenta y abre la sesión del hub). Siempre con CSRF y un límite de 30 intentos por IP cada 15 min. Token mal formado, inexistente, caducado, revocado o usado: **la misma respuesta** (`404`) | — |
+| Un solo uso | La fila se bloquea (`FOR UPDATE`) y se marca aceptada en la misma transacción que crea la membresía | — |
+| Estado del tenant | Aceptar habilita una membresía (consumo facturable): la empresa debe admitir `USERS_ADD` **en ese momento** (matriz o excepción vigente de YEBO), leída sin caché | multitenancy §5.2 |
+| Membresía existente | `SUSPENDED` o `REVOKED` → `ACTIVE`; se suman los roles y se incrementa la versión de permisos | — |
+| Correo ya registrado al crear la cuenta | `409` («inicia sesión para aceptar»), también en la carrera de dos registros simultáneos (restricción única) | Riesgo residual aceptado |
+| `yebo_identity` | Pasa a crear cuentas y membresías, siempre con el contexto del tenant. Sigue sin poder borrar ni cambiar cuentas existentes, ni la persona o la empresa de una membresía | ADR-034: permisos mínimos y por columna |
+| Pantalla `/invitacion` | En el hub, con los componentes y tokens de la 3.2b. Muestra la empresa y el correo invitado. Ofrece aceptar (con sesión), crear la cuenta o entrar con la contraseña, sin revelar de entrada si el correo tiene cuenta. Al terminar, enlace a la empresa | — |
+
+### Base de datos
+
+- **Migración `20261110210000_fase4_3b_membership_invitations`:**
+  - crea `membership_invitations` (de tenant, con RLS forzado);
+  - FK compuestas a la membresía que invita y a la que acepta;
+  - `CHECK`: correo normalizado, de 1 a 20 roles, hash de 32 bytes, caducidad de 7 días como máximo, un único origen (membresía o staff), aceptación coherente, y no aceptada y revocada a la vez;
+  - permiso `members.invite`.
+
+  La reversión está en su cabecera.
+- **Privilegios:**
+  - `yebo_app`: SELECT e INSERT en `membership_invitations`, y UPDATE de `revoked_at`.
+  - `yebo_backoffice`: SELECT e INSERT en `membership_invitations`.
+  - `yebo_identity`:
+    - SELECT en `membership_invitations` y UPDATE de `accepted_at` y `accepted_membership_id`;
+    - INSERT en `users` y en `tenant_memberships`, y UPDATE de su estado y su versión de permisos;
+    - SELECT e INSERT en `membership_roles`;
+    - SELECT en `roles` y en `tenant_operation_overrides`.
+- **Lista de contraseñas filtradas:** `identity/data/common-passwords.txt.gz` (680 KB). Origen y procedimiento en su `README.md`. Se copia a `dist` con `assets` de `nest-cli.json`.
+
+### Pruebas
+
+| Suite | Contenido | Resultado |
+|---|---|---|
+| Unitarias: `password-policy.spec` (3) e `invitation-token.spec` (4) | Longitud, lista de filtradas, correo, nombre sin tildes y «yebo». Ida y vuelta del token, unicidad, formatos inválidos y enlace con fragmento | ✅ |
+| `invitations.int-spec` (17) | **Primer administrador:** enlace devuelto una vez y solo el hash en la base, auditoría sin el correo; vista previa y tokens inválidos con un único mensaje (incluido el secreto real con otro tenant); política de contraseñas; cuenta sin verificar, membresía `ACTIVE` con Administrador y sesión del hub que ya ve la empresa; un solo uso. **Panel:** invitar a una empresa con roles elegidos (rol de otra empresa → 400, empresa inexistente → 404) y al staff con rol de plataforma, sin cruzar los realms; permiso por destino; destino desconocido o datos incompletos → 400. **Empresa:** respuesta idéntica exista o no la cuenta; rol de otra empresa; con cuenta, solo el titular; aceptaciones simultáneas; bloqueo con una aceptación concurrente; reactivación con versión; revocar (y revocar otra vez), listado con estados y aislamiento; caducidad exacta de 72 h; `SUSPENDED` sin invitar ni aceptar y con la excepción de YEBO. Registros simultáneos con el mismo correo | ✅ |
+| `access`, `sessions` y `privileges` | Barrido de rutas públicas con las tres del hub; `members.invite` en el catálogo y la plantilla; garantías de `yebo_identity` actualizadas; matriz versionada | ✅ |
+| Integración completa | 17 suites y 302 pruebas. **Una prueba de estrés anterior falla de forma intermitente** (ver «Pendiente») | ⚠️ |
+| Unitarias, lint, typecheck, formato y build (API y web) | 135 unitarias | ✅ |
+
+**Mutaciones (17):**
+- **Detectadas (15):**
+  - un solo uso: sin `FOR UPDATE`, sin marcar la invitación como aceptada;
+  - validez: caducidad ignorada, revocada válida;
+  - aceptación: sin comprobar el correo, sin sesión del hub, sin roles asignados;
+  - estado del tenant: sin comprobarlo, excepción ignorada;
+  - cuenta y membresía: sin política de contraseñas, reactivar sin incrementar la versión;
+  - empresa y staff: roles de otra empresa, revocar dos veces, sin invitación en el alta;
+  - panel: sin el permiso por destino, roles sin validar.
+- **Equivalente (1):** registrarse con un correo que ya tiene cuenta sin la comprobación previa. La restricción única de la base da el mismo `409`; la comprobación previa solo evita calcular Argon2 en vano.
+- **Sobrevivían a la primera versión de la suite (2):** «sin `FOR UPDATE`» y «revocar dos veces». Las dos peticiones simultáneas de la prueba original no llegaban a solaparse de verdad, así que se añadió una prueba determinista: otra transacción bloquea la fila y la acepta mientras la aceptación espera. Ahora las dos se detectan.
+
+### Pendiente
+
+- **⚠️ Fallo intermitente en `isolation-e2e` (Fase 3.4):** la prueba de 600 lecturas concurrentes recibió un `500` en `GET /api/v1/roles` en 2 de 6 ejecuciones completas de la integración. Nunca falla al ejecutar la suite sola, ni en otras 2 ejecuciones completas con traza de los `500`.
+  - La ruta no cambia en la 4.3; PostgreSQL no registra errores relacionados.
+  - **Causa sin identificar.** Hipótesis: la espera por una conexión del pool supera el máximo de Prisma bajo carga (en la 4.2, `/auth/session` empezó a calcular también los módulos efectivos).
+  - **Pendiente de diagnosticar**; no se da por resuelto.
+- **Revisión visual de `/invitacion`** en el navegador (accesibilidad AA e Impeccable): con las pantallas de la 4.7. Compila y pasa typecheck y lint, pero no se ha recorrido en un navegador.
+- **Fase 12:** enviar el enlace por correo, dejar de mostrarlo a quien invita y verificar el correo. Así se elimina el riesgo residual.
+- ✅ **Migración aplicada a `yebo_dev`** el 2026-11-10 con autorización del responsable, tras una copia de la base (`pg_dump`). La API y el worker responden `ready`.

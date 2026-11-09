@@ -6,10 +6,12 @@ import { PlatformGuard } from '../platform-admin/http/platform.guard';
 import { PlatformAdminModule } from '../platform-admin/platform-admin.module';
 import { TenancyModule } from '../tenancy/tenancy.module';
 import { TenantHostGuard } from '../tenancy/tenant-host.guard';
+import { InvitationsController } from './http/invitations.controller';
 import { MembersController, RolesController } from './http/members.controller';
 import { ModuleGuard } from './http/module.guard';
 import { PermissionGuard } from './http/permission.guard';
 import { TenantStatusGuard } from './http/tenant-status.guard';
+import { InvitationsService } from './invitations.service';
 import { MembersService } from './members.service';
 import { OperationOverridesService } from './operation-overrides.service';
 import { PermissionsModule } from './permissions.module';
@@ -28,7 +30,7 @@ import { RolesService } from './roles.service';
  */
 @Module({
   imports: [TenancyModule, IdentityModule, PermissionsModule, PlatformAdminModule],
-  controllers: [MembersController, RolesController],
+  controllers: [MembersController, RolesController, InvitationsController],
   providers: [
     { provide: APP_GUARD, useClass: PlatformGuard },
     { provide: APP_GUARD, useClass: TenantHostGuard },
@@ -39,6 +41,7 @@ import { RolesService } from './roles.service';
     MembersService,
     RolesService,
     OperationOverridesService,
+    InvitationsService,
   ],
   exports: [RolesService],
 })

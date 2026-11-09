@@ -361,15 +361,16 @@ describe('Fase 4.1 · staff de YEBO (panel de administración)', () => {
       });
 
       it('alta con enlace de un solo uso (token en el fragmento #) y contraseña mínima', async () => {
-        const created = await call(anaJar, 'post', '/api/v1/platform/staff', {
+        const created = await call(anaJar, 'post', '/api/v1/platform/invitations', {
+          target: 'STAFF',
           email: 'Beto@YEBO.pe',
           fullName: 'Beto',
           role: 'BILLING',
         });
         expect(created.status).toBe(201);
-        expect(created.body.setupUrl).toMatch(/^https:\/\/admin\.yebo\.pe\/configurar#token=[\w-]{43}$/);
-        billingId = created.body.platformUserId;
-        const token = created.body.setupUrl.split('#token=')[1];
+        expect(created.body.link).toMatch(/^https:\/\/admin\.yebo\.pe\/configurar#token=[\w-]{43}$/);
+        billingId = created.body.id;
+        const token = created.body.link.split('#token=')[1];
 
         const anon = new Jar();
         expect(
@@ -390,7 +391,8 @@ describe('Fase 4.1 · staff de YEBO (panel de administración)', () => {
         expect((await call(beto.jar, 'get', '/api/v1/platform/staff')).status).toBe(403);
         expect(
           (
-            await call(beto.jar, 'post', '/api/v1/platform/staff', {
+            await call(beto.jar, 'post', '/api/v1/platform/invitations', {
+              target: 'STAFF',
               email: 'x@yebo.pe',
               fullName: 'X',
               role: 'VIEWER',
@@ -400,17 +402,18 @@ describe('Fase 4.1 · staff de YEBO (panel de administración)', () => {
       });
 
       it('correo duplicado → 409; mutación sin CSRF → 403', async () => {
-        const dup = await call(anaJar, 'post', '/api/v1/platform/staff', {
+        const dup = await call(anaJar, 'post', '/api/v1/platform/invitations', {
+          target: 'STAFF',
           email: 'beto@yebo.pe',
           fullName: 'Beto 2',
           role: 'VIEWER',
         });
         expect(dup.status).toBe(409);
         const noCsrf = await http()
-          .post('/api/v1/platform/staff')
+          .post('/api/v1/platform/invitations')
           .set('Host', ADMIN)
           .set('Cookie', `__Host-yebo_admin=${encodeURIComponent(anaJar.get('__Host-yebo_admin') ?? '')}`)
-          .send({ email: 'z@yebo.pe', fullName: 'Z', role: 'VIEWER' });
+          .send({ target: 'STAFF', email: 'z@yebo.pe', fullName: 'Z', role: 'VIEWER' });
         expect(noCsrf.status).toBe(403);
       });
 
@@ -441,16 +444,17 @@ describe('Fase 4.1 · staff de YEBO (panel de administración)', () => {
       });
 
       it('nunca queda el sistema sin superadmin: dos superadmins que se desactivan a la vez → solo gana uno', async () => {
-        const created = await call(anaJar, 'post', '/api/v1/platform/staff', {
+        const created = await call(anaJar, 'post', '/api/v1/platform/invitations', {
+          target: 'STAFF',
           email: 'carla@yebo.pe',
           fullName: 'Carla',
           role: 'SUPERADMIN',
         });
-        const token = created.body.setupUrl.split('#token=')[1];
+        const token = created.body.link.split('#token=')[1];
         await call(new Jar(), 'post', '/api/v1/platform/auth/setup', { token, password: PASSWORD });
         const carla = await signIn('carla@yebo.pe');
         const anaId = (await me(anaJar)).platformUserId;
-        const carlaId = created.body.platformUserId;
+        const carlaId = created.body.id;
         const [a, b] = await Promise.all([
           call(anaJar, 'post', `/api/v1/platform/staff/${carlaId}/disable`),
           call(carla.jar, 'post', `/api/v1/platform/staff/${anaId}/disable`),

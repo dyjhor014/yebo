@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type {
   CreateTenantRequest,
+  CreateTenantResponse,
+  InvitationLink,
   OperationOverride,
   OperationOverrideInput,
   TenantDetail,
@@ -12,6 +14,7 @@ import { ENV } from '../../config/env.module';
 import type { Env } from '../../config/env';
 import { Prisma } from '../../generated/prisma/client';
 import { Clock } from '../identity/clock';
+import { INVITATION_TTL_MS, invitationLink, newInvitationToken } from '../identity/invitation-token';
 import { isReservedSlug } from '../tenancy/reserved-subdomains';
 import { BackofficePrismaService } from './backoffice-prisma.service';
 import { PlatformAuditService } from './platform-audit.service';
@@ -45,7 +48,7 @@ export class TenantsService {
     actor: PlatformPrincipal,
     input: CreateTenantRequest,
     meta: RequestMeta,
-  ): Promise<TenantDetail> {
+  ): Promise<CreateTenantResponse> {
     if (
       isReservedSlug(
         input.slug,
@@ -58,6 +61,7 @@ export class TenantsService {
     const host = `${input.slug}.${this.env.TENANT_BASE_DOMAIN}`;
     const now = this.clock.now();
     let tenantId: string;
+    let firstAdminInvitation: InvitationLink | null = null;
     try {
       tenantId = await this.db.client.$transaction(async (tx) => {
         // FOR SHARE: una retirada simultánea de la versión espera a que termine el alta.
@@ -121,7 +125,7 @@ export class TenantsService {
             service: s.service,
           })),
         });
-        await this.instantiateRoles(tx, tenant.id);
+        const roles = await this.instantiateRoles(tx, tenant.id);
         // Período en la zona horaria de la empresa; PostgreSQL ajusta fin de mes (31 ene + 1 mes = 28/29 feb).
         const [period] = await tx.$queryRaw<{ start: Date; end: Date }[]>`
           SELECT (${now}::timestamptz AT TIME ZONE ${input.timezone})::date AS start,
@@ -162,6 +166,19 @@ export class TenantsService {
           },
           tx,
         );
+        if (input.firstAdminEmail) {
+          const adminRole = roles.get('ADMIN');
+          if (!adminRole) throw new Error('Falta la plantilla ADMIN en role_templates');
+          firstAdminInvitation = await this.invite(
+            tx,
+            actor,
+            tenant.id,
+            input.firstAdminEmail,
+            [adminRole],
+            now,
+            meta,
+          );
+        }
         return tenant.id;
       });
     } catch (error) {
@@ -173,7 +190,44 @@ export class TenantsService {
     }
     // El resolvedor pudo cachear el host como inexistente (caché negativa): se invalida para que resuelva ya.
     await this.lifecycle.invalidate(tenantId);
-    return this.get(tenantId);
+    return { ...(await this.get(tenantId)), firstAdminInvitation };
+  }
+
+  /**
+   * Invitación a una empresa desde el panel (Fase 4.3b), con roles elegidos de esa empresa (no archivados). El
+   * enlace se devuelve una vez. La valida el mismo hub que las invitaciones de la propia empresa.
+   */
+  async inviteToTenant(
+    actor: PlatformPrincipal,
+    tenantId: string,
+    email: string,
+    roleIds: readonly string[],
+    meta: RequestMeta,
+  ): Promise<InvitationLink> {
+    await this.requireTenant(tenantId);
+    const now = this.clock.now();
+    return this.db.withTenant(tenantId, async (tx) => {
+      const roles = await tx.role.findMany({
+        where: { id: { in: [...roleIds] }, archivedAt: null },
+        select: { id: true },
+      });
+      if (roles.length !== roleIds.length) {
+        throw new AppError('VALIDATION_FAILED', 'Algún rol no existe en esta empresa', 400);
+      }
+      return this.invite(tx, actor, tenantId, email, [...roleIds], now, meta);
+    });
+  }
+
+  /** Roles de una empresa (para el selector de la invitación). */
+  async listRoles(tenantId: string): Promise<{ id: string; name: string; isSystem: boolean }[]> {
+    await this.requireTenant(tenantId);
+    return this.db.withTenant(tenantId, (tx) =>
+      tx.role.findMany({
+        where: { archivedAt: null },
+        select: { id: true, name: true, isSystem: true },
+        orderBy: { name: 'asc' },
+      }),
+    );
   }
 
   async list(): Promise<TenantSummary[]> {
@@ -385,9 +439,57 @@ export class TenantsService {
   // ---------------------------------------------------------------------------------------------------------------
 
   /** Roles de sistema desde TODAS las plantillas de la base (security.md §2), como RolesService pero en esta tx. */
-  private async instantiateRoles(tx: Prisma.TransactionClient, tenantId: string): Promise<void> {
+  /** Invitación hecha por el staff, dentro de la transacción (con el contexto del tenant ya fijado). */
+  private async invite(
+    tx: Prisma.TransactionClient,
+    actor: PlatformPrincipal,
+    tenantId: string,
+    email: string,
+    roleIds: string[],
+    now: Date,
+    meta: RequestMeta,
+  ): Promise<InvitationLink> {
+    const { token, hash } = newInvitationToken(tenantId);
+    const row = await tx.membershipInvitation.create({
+      data: {
+        tenantId,
+        email,
+        roleIds,
+        tokenHash: new Uint8Array(hash),
+        expiresAt: new Date(now.getTime() + INVITATION_TTL_MS),
+        invitedByPlatformUserId: actor.platformUserId,
+        createdAt: now,
+      },
+      select: { id: true, email: true, expiresAt: true },
+    });
+    // El correo no se guarda en la auditoría (dato personal): basta con el id de la invitación.
+    await this.audit.record(
+      {
+        platformUserId: actor.platformUserId,
+        action: 'invitation.created',
+        targetType: 'membership_invitation',
+        targetId: row.id,
+        tenantId,
+        ...ipOf(meta),
+      },
+      tx,
+    );
+    return {
+      id: row.id,
+      email: row.email,
+      expiresAt: row.expiresAt.toISOString(),
+      link: invitationLink(this.env.AUTH_HUB_HOST, token),
+    };
+  }
+
+  /** Roles de sistema desde las plantillas; devuelve código de plantilla → id del rol. */
+  private async instantiateRoles(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+  ): Promise<Map<string, string>> {
+    const created = new Map<string, string>();
     const templates = await tx.roleTemplate.findMany({
-      select: { id: true, name: true, permissionCodes: true },
+      select: { id: true, code: true, name: true, permissionCodes: true },
     });
     for (const template of templates) {
       const permissions = await tx.permission.findMany({
@@ -401,7 +503,9 @@ export class TenantsService {
       await tx.rolePermission.createMany({
         data: permissions.map((p) => ({ tenantId, roleId: role.id, permissionId: p.id })),
       });
+      created.set(template.code, role.id);
     }
+    return created;
   }
 
   private async requireTenant(tenantId: string): Promise<void> {

@@ -105,7 +105,7 @@ Los `enum` son cerrados; los `→ catálogo` son tablas extensibles.
 (`membership_id`, `branch_id`) PK. Si no hay filas, la membresía accede a todas las sucursales.
 
 ### membership_invitations
-`email citext`, `role_ids uuid[]`, `token_hash`, `expires_at`, `accepted_at?`, `invited_by_membership_id`.
+`email citext` (normalizado), `role_ids uuid[]` (1–20), `token_hash bytea` (SHA-256 del secreto, UNIQUE), `expires_at` (72 h; máximo 7 días por CHECK), `invited_by_membership_id?` **o** `invited_by_platform_user_id?` (exactamente uno), `accepted_at?`, `accepted_membership_id?`, `revoked_at?`, `created_at`. RLS de tenant: el token del enlace lleva el id del tenant (`<tenant>.<secreto>`) para fijar el contexto antes de buscar el hash. Fase 4.3b.
 
 ### 🌐 identity_sessions / tenant_sessions / refresh_tokens / authorization_codes / password_reset_tokens
 Ver [identity-and-sessions.md](../architecture/identity-and-sessions.md).

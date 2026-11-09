@@ -20,6 +20,10 @@ export const PUBLIC_ROUTES: readonly string[] = [
   'POST /api/v1/hub/logout',
   'GET /api/v1/hub/me/memberships',
   'GET /api/v1/hub/branding',
+  // Invitaciones (Fase 4.3b): token de un solo uso en el cuerpo; aceptar exige la sesión del hub.
+  'POST /api/v1/hub/invitations/preview',
+  'POST /api/v1/hub/invitations/accept',
+  'POST /api/v1/hub/invitations/register',
   // Entrada a la empresa (host del tenant; OAuth 2.0 + PKCE y renovación).
   'GET /api/v1/auth/start',
   'POST /api/v1/auth/token',
