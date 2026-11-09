@@ -15,6 +15,7 @@ import type { Pool } from 'pg';
 import {
   GLOBAL_TABLES_WITH_TENANT_ID,
   TENANT_SCOPED_TABLES,
+  TENANT_TABLES_WITHOUT_APP_READ,
 } from '../../src/infrastructure/database/tenant-scoped-models';
 import { grantTestBypass, testBypassPool, testPool } from '../support/db';
 
@@ -161,6 +162,10 @@ async function verifyFinalState(set: MigrationSet, owner: Pool, app: Pool): Prom
     expect(p.check).toMatch(/NULLIF\(current_setting\('app\.tenant_id'::text, true\), ''::text\)/);
   }
   for (const t of set.tenantTables) {
+    if (TENANT_TABLES_WITHOUT_APP_READ.has(t)) {
+      await expect(countAs(app, t, null)).rejects.toMatchObject({ code: '42501' }); // ni siquiera puede leerla
+      continue;
+    }
     await expect(countAs(app, t, null)).resolves.toBe(0); // sin contexto
     await expect(countAs(app, t, '')).resolves.toBe(0); // contexto vacío explícito
   }

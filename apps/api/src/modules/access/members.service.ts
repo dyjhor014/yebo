@@ -156,9 +156,11 @@ export class MembersService {
       }
       const revokedSessions = await beforeUpdate();
       // Autor del cambio para el historial de medición (lo copian los triggers).
+      const support = this.cls.get('supportPrincipal');
       await declareChangeActor(tx, {
-        kind: 'MEMBERSHIP',
-        id: this.principal().membershipId,
+        // Fase 4.6: el staff de soporte queda como autor con su id de plataforma.
+        kind: support ? 'PLATFORM_USER' : 'MEMBERSHIP',
+        id: support ? support.platformUserId : this.principal().membershipId,
         reason: to === 'SUSPENDED' ? 'members.suspend' : 'members.reactivate',
       });
       await tx.tenantMembership.updateMany({ where: { id: membershipId }, data: { status: to } });
@@ -176,6 +178,7 @@ export class MembersService {
   }
 
   private assertNotSelf(membershipId: string, message: string): void {
+    if (this.cls.get('supportPrincipal')) return; // el staff no tiene membresía propia
     if (membershipId === this.principal().membershipId) throw new AppError('FORBIDDEN', message, 403);
   }
 

@@ -1,6 +1,6 @@
 # Fase 4 — Superadmin SaaS y membresías: plan de trabajo
 
-- **Estado:** ✅ Plan **aprobado** por el responsable el 2026-11-10, con las decisiones F4-Q1 a F4-Q6 tal como se recomendaron. Etapa **4.1 implementada**, pendiente de revisión; etapa **4.2 aprobada** (2026-11-10); etapa **4.3a aprobada** (2026-11-10). Etapa **4.3b aprobada** (2026-11-10). Etapa **4.4 aprobada** (2026-11-10). Etapa **4.5 aprobada** (2026-11-10).
+- **Estado:** ✅ Plan **aprobado** por el responsable el 2026-11-10, con las decisiones F4-Q1 a F4-Q6 tal como se recomendaron. Etapa **4.1 implementada**, pendiente de revisión; etapa **4.2 aprobada** (2026-11-10); etapa **4.3a aprobada** (2026-11-10). Etapa **4.3b aprobada** (2026-11-10). Etapa **4.4 aprobada** (2026-11-10). Etapa **4.5 aprobada** (2026-11-10). Etapa **4.6 aprobada** (2026-11-10).
 - **Rama:** `fase-4/plan`, apilada sobre `fase-3/adr-034-privilegios` (`d21b591`). La Fase 3 sigue en revisión.
 - **Criterio de aceptación (roadmap):** crear empresa, asignar plan, medir usuarios y calcular el importe.
 - **Decisiones que se implementan:**
@@ -485,3 +485,66 @@ Sustituye la regla MVP de billing §7 para los upgrades. Migración `20261111030
 - **S5:** fijar `tax_rate` cuando el contador valide los impuestos.
 - **Ajustes y anulaciones** (`ADJUSTMENT`, `CREDIT`, `VOID`) y **reversión de pagos** (`REVERSED`): los tipos existen, pero no hay operación todavía.
 - ✅ Migraciones aplicadas a `yebo_dev` el 2026-11-10 (con copia previa).
+
+## Etapa 4.6 · Acceso de soporte (implementada y aprobada el 2026-11-10)
+
+### Decisiones del responsable (2026-11-10)
+
+| Pregunta | Decisión |
+|---|---|
+| Duración | Hasta **8 h** (por defecto 2 h), elegida por el staff; la sesión en la empresa caduca además a los **30 min de inactividad** |
+| Aprobación de la empresa | **Sin aprobación por defecto.** Cada empresa puede exigirla (`tenant_settings.support_requires_approval`) |
+| Qué ve la empresa | **Cada petición** del staff: cuándo, quién, método y ruta (sin cuerpos ni datos) |
+| `READ_ONLY` | **Solo consultas** (categoría `READ`); exportar exige `FULL` |
+
+### Decisiones de implementación
+
+| Tema | Decisión | Motivo |
+|---|---|---|
+| Acceso | `support_access_grants`: personal (solo quien lo crea abre sesiones), con motivo, alcance y ventana (`CHECK` ≤ 8 h). Guarda una copia del nombre y el correo del staff para que la empresa vea quién, sin leer `platform_users`. Es usable si no está revocado, ya empezó, no ha vencido y, si la empresa exige aprobación, está aprobado | multitenancy §1, security.md §2 |
+| Abrir sesión | El panel emite un **código de un solo uso** (60 s, solo su SHA-256) y un enlace al host de la empresa (`GET /api/v1/support/session?code=…`, ruta pública del host del tenant). El canje consume el código con la fila bloqueada, abre una sesión opaca en la cookie `__Host-yebo_support` (más el CSRF) y redirige a `/panel`. Un código de otra empresa no existe en ese host (RLS) | La cookie del panel es solo del host de administración; mismo patrón que el código del hub |
+| Verificación | El guard de autenticación de empresa, si no hay access token, acepta la sesión de soporte. La verifica en PostgreSQL en cada petición: sesión viva (inactividad renovada como mucho una vez por minuto, sin superar nunca el vencimiento del acceso), acceso usable y miembro del staff `ACTIVE` con `platform.support.access`. Mutaciones con CSRF. `READ_ONLY` fuera de `READ` → `403`. Cada petición se registra en `support_access_logs` (append-only) | «El guard de empresa acepta la sesión del staff solo con un grant vigente» |
+| Principal | El staff no tiene membresía: el contexto lleva `supportPrincipal`, nunca `principal`. Los permisos de empresa son todos (el alcance lo limita la categoría). Los cambios quedan a su nombre: historial de membresías con `PLATFORM_USER` e invitaciones con `invited_by_platform_user_id`. `GET /auth/session` y la gestión de los propios accesos de soporte responden `403` a una sesión de soporte | Trazabilidad |
+| Revocar | El staff (`POST …/support-grants/:id/revoke`, que cierra también sus sesiones) o la empresa (`POST /api/v1/support-access/:id/revoke`). La verificación de cada petición deja fuera la sesión de inmediato | — |
+| Empresa | `GET /api/v1/support-access` (`support.read`): accesos con su estado y su registro. `POST …/approve` y `…/revoke`, y `PUT /api/v1/support-access/settings` (`support.manage`, categoría `CONFIGURE_COMPLIANCE`, disponible también suspendida) | Permisos nuevos en la plantilla Administrador |
+| Panel | `GET` y `POST /platform/tenants/:id/support-grants`, `…/:grantId/revoke` y `…/:grantId/handoff` (`platform.support.access`: SUPPORT y SUPERADMIN). Auditados: creado, revocado, enlace emitido y sesión iniciada | — |
+
+### Base de datos
+
+- **Migración `20261111040000_fase4_6_support_access`:**
+  - tablas `support_access_grants`, `support_handoffs`, `support_sessions` y `support_access_logs`, de tenant, con RLS forzado;
+  - columna `support_requires_approval` en `tenant_settings`;
+  - `CHECK` de ventana, aprobación, revocación, hashes y caducidad del código;
+  - registro de accesos append-only (trigger);
+  - permisos `support.read` y `support.manage`, añadidos a la plantilla y a los roles Administrador existentes.
+
+  La reversión está en su cabecera.
+- **Privilegios:**
+  - `yebo_backoffice`: SELECT e INSERT en las cuatro tablas; UPDATE de la revocación del acceso, del consumo del código y de la actividad o revocación de la sesión.
+  - `yebo_app`: SELECT de los accesos y del registro; UPDATE de la aprobación y la revocación, y de `support_requires_approval`.
+  - `yebo_app` **no lee** `support_handoffs` ni `support_sessions` (hashes de credenciales). Las pruebas de cobertura de RLS exigen para ellas permiso denegado (`TENANT_TABLES_WITHOUT_APP_READ`).
+
+### Pruebas
+
+| Suite | Contenido | Resultado |
+|---|---|---|
+| `support.int-spec` (7) | **Sin acceso:** cookie inventada → `401`; VIEWER no crea accesos; otro miembro del staff no usa el ajeno. **`FULL`:** lee y escribe; suspensión e invitación a nombre del staff; `403` en `/auth/session` y al gestionar su propio acceso; CSRF exigido. **Código:** de un solo uso, caduca a los 60 s, no sirve en otra empresa; la sesión no sirve en otro host. **`READ_ONLY`:** no escribe. **`401`** si el acceso está revocado (por la empresa o por el staff), vencido (que tampoco emite enlaces), inactivo o el staff deshabilitado. **Aprobación:** pendiente hasta aprobar; la empresa ve quién, motivo, alcance y cada petición; otra empresa no ve nada. Registro append-only y auditoría | ✅ |
+| `privileges`, `tenancy`, `migration-paths` y `access` | Matriz versionada; tablas sin lectura para `yebo_app`; permisos en el catálogo y la plantilla | ✅ |
+| Integración completa | 21 suites y 351 pruebas | ✅ |
+| Unitarias, lint, typecheck, formato y build | 144 unitarias | ✅ |
+
+**Mutaciones (13):**
+- **Detectadas (12):**
+  - en el acceso: revocado o pendiente de aprobación usables, otro miembro del staff;
+  - en el código: reutilizable, sin caducidad;
+  - en la sesión: sin inactividad, staff deshabilitado que entra;
+  - en el guard: `READ_ONLY` que escribe, sin registro, sin CSRF;
+  - en la empresa: el soporte gestiona su propio acceso;
+  - en el historial: autor registrado como membresía.
+- **Sobrevivía a la primera versión de la suite y ahora se detecta (1):** «acceso vencido usable». La inactividad ya limitaba la sesión al vencimiento; faltaba probar que un acceso vencido no emite enlaces.
+
+### Pendiente
+
+- ✅ Migración aplicada a `yebo_dev` el 2026-11-10 (con copia previa).
+- Pantallas (panel del staff y vista de la empresa): etapa 4.7.
+- Incidencias de soporte (`incident_id`): fuera de la Fase 4 (F4-Q5).

@@ -31,7 +31,9 @@ export class InvitationsService {
   async create(input: CreateInvitationRequest): Promise<InvitationLink> {
     const tenantId = this.cls.get('tenantId');
     const principal = this.cls.get('principal');
-    if (!tenantId || !principal) throw new Error('InvitationsService requiere tenant y sesión verificada');
+    const support = this.cls.get('supportPrincipal');
+    if (!tenantId || (!principal && !support))
+      throw new Error('InvitationsService requiere tenant y sesión verificada');
     const now = this.clock.now();
     const { token, hash } = newInvitationToken(tenantId);
     return this.db.transaction(async (tx) => {
@@ -49,7 +51,10 @@ export class InvitationsService {
           roleIds: input.roleIds,
           tokenHash: new Uint8Array(hash),
           expiresAt: new Date(now.getTime() + INVITATION_TTL_MS),
-          invitedByMembershipId: principal.membershipId,
+          // Fase 4.6: una invitación hecha por el staff de soporte queda a nombre del staff.
+          ...(support
+            ? { invitedByPlatformUserId: support.platformUserId }
+            : { invitedByMembershipId: principal?.membershipId ?? null }),
           createdAt: now,
         },
         select: { id: true, email: true, expiresAt: true },

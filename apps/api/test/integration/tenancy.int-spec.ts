@@ -13,6 +13,7 @@ import { TenantDbService } from '../../src/infrastructure/database/tenant-db.ser
 import {
   GLOBAL_TABLES_WITH_TENANT_ID,
   TENANT_SCOPED_TABLES,
+  TENANT_TABLES_WITHOUT_APP_READ,
   TENANT_SCOPED_MODELS,
 } from '../../src/infrastructure/database/tenant-scoped-models';
 import { TenantResolverService } from '../../src/modules/tenancy/tenant-resolver.service';
@@ -166,6 +167,13 @@ describe('Fase 3.1 · tenancy e identidad (PostgreSQL real, rol yebo_app)', () =
 
     it('§7.4 · yebo_app sin app.tenant_id ve 0 filas en todas las tablas de tenant (y con contexto vacío)', async () => {
       for (const t of tenantTables) {
+        if (TENANT_TABLES_WITHOUT_APP_READ.has(t)) {
+          // Fase 4.6: credenciales del soporte; yebo_app ni siquiera puede leerlas.
+          await expect(
+            inTenant(appPool, null, async (c) => c.query(`SELECT count(*) FROM ${t}`)),
+          ).rejects.toMatchObject({ code: '42501' });
+          continue;
+        }
         for (const ctx of [null, '']) {
           const n = await inTenant(
             appPool,

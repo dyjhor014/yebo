@@ -27,6 +27,19 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set<string>([
   'PlatformInvoice',
   'PlatformInvoiceLine',
   'SubscriptionPayment',
+  'SupportAccessGrant',
+  'SupportHandoff',
+  'SupportSession',
+  'SupportAccessLog',
+]);
+
+/**
+ * Tablas de tenant que `yebo_app` NO puede leer (Fase 4.6): guardan hashes de credenciales del staff de soporte y
+ * solo las usa `yebo_backoffice`. Para ellas, las pruebas de cobertura de RLS exigen permiso denegado en vez de 0 filas.
+ */
+export const TENANT_TABLES_WITHOUT_APP_READ: ReadonlySet<string> = new Set([
+  'support_handoffs',
+  'support_sessions',
 ]);
 
 /** Nombres de tabla de TENANT_SCOPED_MODELS, para las verificaciones sobre el catálogo de PostgreSQL. */
@@ -49,6 +62,10 @@ export const TENANT_SCOPED_TABLES: readonly string[] = [
   'platform_invoices',
   'platform_invoice_lines',
   'subscription_payments',
+  'support_access_grants',
+  'support_handoffs',
+  'support_sessions',
+  'support_access_logs',
 ];
 
 /**

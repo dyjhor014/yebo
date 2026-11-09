@@ -11,11 +11,14 @@ import { PlatformAuthController } from './http/platform-auth.controller';
 import { PlatformInvitationsController } from './http/platform-invitations.controller';
 import { PlatformGuard } from './http/platform.guard';
 import { StaffController } from './http/staff.controller';
+import { SupportSessionController } from './http/support-session.controller';
+import { SupportController } from './http/support.controller';
 import { TenantsController } from './http/tenants.controller';
 import { PlanChangeService } from './plan-change.service';
 import { PlatformAuditService } from './platform-audit.service';
 import { PlatformAuthService } from './platform-auth.service';
 import { StaffService } from './staff.service';
+import { SupportAccessService } from './support-access.service';
 import { TenantLifecycleService } from './tenant-lifecycle.service';
 import { TenantsService } from './tenants.service';
 
@@ -33,6 +36,8 @@ import { TenantsService } from './tenants.service';
     TenantsController,
     PlatformInvitationsController,
     BillingController,
+    SupportController,
+    SupportSessionController,
   ],
   providers: [
     BackofficePrismaService,
@@ -45,8 +50,9 @@ import { TenantsService } from './tenants.service';
     TenantsService,
     BillingService,
     PlanChangeService,
+    SupportAccessService,
     PlatformGuard,
   ],
-  exports: [PlatformAuthService, PlatformGuard],
+  exports: [PlatformAuthService, PlatformGuard, SupportAccessService],
 })
 export class PlatformAdminModule {}

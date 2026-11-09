@@ -193,6 +193,10 @@ export class AuthController {
   @TenantOperation('READ')
   async session(@Res({ passthrough: true }) res: Response): Promise<AuthSessionResponse> {
     noStore(res);
+    if (this.cls.get('supportPrincipal')) {
+      // El staff de soporte no tiene sesión de persona en la empresa (Fase 4.6).
+      throw new AppError('FORBIDDEN', 'No disponible en una sesión de soporte', 403);
+    }
     const principal = this.cls.get('principal');
     const tenantId = this.cls.get('tenantId');
     if (!principal || !tenantId) throw new Error('AuthenticationGuard no fijó la sesión');

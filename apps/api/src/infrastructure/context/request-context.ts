@@ -18,6 +18,19 @@ export interface RequestContextStore extends ClsStore {
   modules?: ReadonlySet<string>;
   /** Miembro del staff de YEBO verificado en este request (PlatformGuard, Fase 4.1). Nunca coexiste con `principal`. */
   platformPrincipal?: PlatformPrincipal;
+  /**
+   * Staff de YEBO trabajando en la empresa del host con un acceso de soporte vigente (Fase 4.6). Nunca coexiste con
+   * `principal`: el staff no tiene membresía.
+   */
+  supportPrincipal?: SupportPrincipal;
+}
+
+/** Sesión de soporte verificada: quién del staff, con qué acceso y alcance. */
+export interface SupportPrincipal {
+  sessionId: string;
+  grantId: string;
+  platformUserId: string;
+  scope: 'READ_ONLY' | 'FULL';
 }
 
 /** Quién hace la petición: usuario, membresía y sesión de empresa, todos del tenant del host. */

@@ -37,6 +37,8 @@ const EXPECTED_TABLE_GRANTS = [
   'yebo_app roles DELETE,INSERT,SELECT,UPDATE',
   'yebo_app subscription_payments SELECT',
   'yebo_app subscriptions SELECT',
+  'yebo_app support_access_grants SELECT',
+  'yebo_app support_access_logs SELECT',
   'yebo_app tenant_memberships SELECT',
   'yebo_app tenant_module_overrides SELECT',
   'yebo_app tenant_operation_overrides SELECT',
@@ -64,6 +66,10 @@ const EXPECTED_TABLE_GRANTS = [
   'yebo_backoffice roles INSERT,SELECT',
   'yebo_backoffice subscription_payments INSERT,SELECT',
   'yebo_backoffice subscriptions INSERT,SELECT',
+  'yebo_backoffice support_access_grants INSERT,SELECT',
+  'yebo_backoffice support_access_logs INSERT,SELECT',
+  'yebo_backoffice support_handoffs INSERT,SELECT',
+  'yebo_backoffice support_sessions INSERT,SELECT',
   'yebo_backoffice tenant_domains INSERT,SELECT',
   'yebo_backoffice tenant_module_overrides INSERT,SELECT,UPDATE',
   'yebo_backoffice tenant_operation_overrides INSERT,SELECT,UPDATE',
@@ -102,9 +108,16 @@ const EXPECTED_TABLE_GRANTS = [
 const EXPECTED_COLUMN_GRANTS = [
   'yebo_app membership_invitations.revoked_at UPDATE',
   'yebo_app membership_status_history.valid_to UPDATE',
+  'yebo_app support_access_grants.approved_at UPDATE',
+  'yebo_app support_access_grants.approved_by_membership_id UPDATE',
+  'yebo_app support_access_grants.revoked_at UPDATE',
+  'yebo_app support_access_grants.revoked_by_id UPDATE',
+  'yebo_app support_access_grants.revoked_by_kind UPDATE',
   'yebo_app tenant_memberships.permissions_version UPDATE',
   'yebo_app tenant_memberships.status UPDATE',
   'yebo_app tenant_memberships.updated_at UPDATE',
+  'yebo_app tenant_settings.support_requires_approval UPDATE',
+  'yebo_app tenant_settings.updated_at UPDATE',
   'yebo_backoffice billing_periods.cut_off UPDATE',
   'yebo_backoffice platform_invoices.balance UPDATE',
   'yebo_backoffice platform_invoices.status UPDATE',
@@ -113,6 +126,13 @@ const EXPECTED_COLUMN_GRANTS = [
   'yebo_backoffice subscriptions.next_plan_version_id UPDATE',
   'yebo_backoffice subscriptions.status UPDATE',
   'yebo_backoffice subscriptions.updated_at UPDATE',
+  'yebo_backoffice support_access_grants.revoked_at UPDATE',
+  'yebo_backoffice support_access_grants.revoked_by_id UPDATE',
+  'yebo_backoffice support_access_grants.revoked_by_kind UPDATE',
+  'yebo_backoffice support_handoffs.consumed_at UPDATE',
+  'yebo_backoffice support_sessions.idle_expires_at UPDATE',
+  'yebo_backoffice support_sessions.last_seen_at UPDATE',
+  'yebo_backoffice support_sessions.revoked_at UPDATE',
   'yebo_backoffice tenants.activated_at UPDATE',
   'yebo_backoffice tenants.cancelled_at UPDATE',
   'yebo_backoffice tenants.status UPDATE',
@@ -277,7 +297,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
       expect(rows.map((r) => r.line)).toEqual(EXPECTED_TABLE_GRANTS);
     });
 
-    it('privilegios de columna explícitos: membresías, estados, invitaciones, historial y facturación (3.3–4.5)', async () => {
+    it('privilegios de columna explícitos: membresías, estados, invitaciones, historial, facturación y soporte (3.3–4.6)', async () => {
       const { rows } = await owner.query<{ line: string }>(
         `SELECT r.rolname || ' ' || c.relname || '.' || att.attname || ' ' || a.privilege_type AS line
            FROM pg_attribute att JOIN pg_class c ON c.oid = att.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace,

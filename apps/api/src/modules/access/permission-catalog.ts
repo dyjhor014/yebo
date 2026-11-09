@@ -29,6 +29,17 @@ export const PERMISSION_CATALOG = {
     sensitive: false,
     description: 'Ver las obligaciones de la empresa con YEBO',
   },
+  // Fase 4.6: accesos de soporte de YEBO (ver, aprobar, revocar y exigir aprobación).
+  'support.read': {
+    module: 'ACCESS',
+    sensitive: false,
+    description: 'Ver los accesos de soporte de YEBO y su registro',
+  },
+  'support.manage': {
+    module: 'ACCESS',
+    sensitive: true,
+    description: 'Aprobar o revocar accesos de soporte de YEBO',
+  },
 } as const satisfies Record<string, { module: string; sensitive: boolean; description: string }>;
 
 export type PermissionCode = keyof typeof PERMISSION_CATALOG;

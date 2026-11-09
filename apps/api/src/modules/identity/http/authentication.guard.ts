@@ -5,6 +5,7 @@ import { ClsService } from 'nestjs-cls';
 import { AppError } from '../../../common/errors/app-error';
 import type { RequestContextStore } from '../../../infrastructure/context/request-context';
 import { routePolicyForContext } from '../../access/route-policy';
+import { SupportAccessService } from '../../platform-admin/support-access.service';
 import { AccessTokenService, type AccessTokenClaims } from '../access-token.service';
 import { SessionService } from '../session.service';
 import { COOKIE, readCookie } from './cookies';
@@ -22,6 +23,8 @@ const UNAUTHENTICATED = () => new AppError('UNAUTHENTICATED', 'Sesión no válid
  *     `sub`, `mid` y el tenant del token coincidan con los de la sesión;
  *  4. `ver` = `permissions_version` vigente; si no, `401 PERMISSIONS_CHANGED` (el cliente renueva en silencio).
  * En las mutaciones exige además el token CSRF (*double submit*): la sesión viaja en una cookie.
+ * Fase 4.6: sin access token de empresa, acepta la sesión de SOPORTE del staff (cookie propia) solo con un acceso
+ * vigente para este tenant; un acceso READ_ONLY solo entra en rutas READ. Cada petición del staff queda registrada.
  * El motivo concreto de un 401 no se expone al cliente.
  */
 @Injectable()
@@ -31,6 +34,7 @@ export class AuthenticationGuard implements CanActivate {
     private readonly tokens: AccessTokenService,
     private readonly sessions: SessionService,
     private readonly cls: ClsService<RequestContextStore>,
+    private readonly support: SupportAccessService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -40,6 +44,10 @@ export class AuthenticationGuard implements CanActivate {
     const tenantId = this.cls.get('tenantId');
     if (!tenantId) throw new Error('TenantHostGuard no fijó el tenant antes de AuthenticationGuard');
 
+    const supportToken = readCookie(request, COOKIE.support);
+    if (!readCookie(request, COOKIE.access) && supportToken) {
+      return this.supportAccess(context, request, tenantId, supportToken);
+    }
     const claims = this.verifiedClaims(request);
     if (!claims || claims.tid !== tenantId) throw UNAUTHENTICATED();
     const check = await this.sessions.checkSession(claims.sid);
@@ -62,6 +70,31 @@ export class AuthenticationGuard implements CanActivate {
       sessionId: claims.sid,
       accessTokenExpiresAt: claims.exp,
     });
+    return true;
+  }
+
+  /** Sesión de soporte del staff (Fase 4.6). */
+  private async supportAccess(
+    context: ExecutionContext,
+    request: Request,
+    tenantId: string,
+    token: string,
+  ): Promise<boolean> {
+    const principal = await this.support.verify(tenantId, token);
+    if (!principal) throw UNAUTHENTICATED();
+    if (!SAFE_METHODS.has(request.method)) assertCsrf(request);
+    const policy = routePolicyForContext(this.reflector, context);
+    if (principal.scope === 'READ_ONLY' && (policy.kind !== 'protected' || policy.operation !== 'READ')) {
+      throw new AppError('FORBIDDEN', 'El acceso de soporte es de solo lectura', 403);
+    }
+    this.cls.set('supportPrincipal', principal);
+    const route = (request.route as { path?: string } | undefined)?.path;
+    await this.support.log(
+      tenantId,
+      principal,
+      request.method,
+      route ? `${request.baseUrl}${route}` : request.path,
+    );
     return true;
   }
 

@@ -80,6 +80,7 @@ model Tenant {
   invitations        MembershipInvitation[]
   usageSnapshots     UsageDailySnapshot[]
   invoices           PlatformInvoice[]
+  supportGrants      SupportAccessGrant[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -176,6 +177,7 @@ model TenantMembership {
   invitationsSent     MembershipInvitation[]    @relation("InvitationInvitedBy")
   invitationsAccepted MembershipInvitation[]    @relation("InvitationAcceptedAs")
   statusHistory       MembershipStatusHistory[]
+  supportApprovals    SupportAccessGrant[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, userId])
@@ -465,6 +467,7 @@ model PlatformUser {
   opOverridesEnded   TenantOperationOverride[] @relation("OpOverrideEndedBy")
   invitationsSent    MembershipInvitation[]
   paymentsRecorded   SubscriptionPayment[]
+  supportGrants      SupportAccessGrant[]
 
   @@map("platform_users")
 }
@@ -763,6 +766,8 @@ model TenantSetting {
   exceptionalDeliverySecondApprovalThreshold Decimal? @map("exceptional_delivery_second_approval_threshold") @db.Decimal(14, 2)
   exceptionalDeliveryRequiredEvidence        String[] @default([]) @map("exceptional_delivery_required_evidence")
   publicTrackingShowRecipientInitials        Boolean  @default(true) @map("public_tracking_show_recipient_initials")
+  /// Fase 4.6: la empresa exige aprobar cada acceso de soporte de YEBO.
+  supportRequiresApproval                    Boolean  @default(false) @map("support_requires_approval")
   settings                                   Json     @default("{}")
   createdAt                                  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                                  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -1099,4 +1104,97 @@ model SubscriptionPayment {
   @@unique([tenantId, id])
   @@index([invoiceId])
   @@map("subscription_payments")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 4.6 · Acceso de soporte del staff de YEBO
+// ---------------------------------------------------------------------------------------------------------------
+
+enum SupportScope {
+  READ_ONLY
+  FULL
+
+  @@map("support_scope")
+}
+
+/// Acceso temporal (≤ 8 h), personal, con motivo, visible para la empresa, aprobable y revocable.
+model SupportAccessGrant {
+  id                     String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId               String                 @map("tenant_id") @db.Uuid
+  platformUserId         String                 @map("platform_user_id") @db.Uuid
+  staffName              String                 @map("staff_name")
+  staffEmail             String                 @map("staff_email") @db.Citext
+  reason                 String
+  scope                  SupportScope
+  startsAt               DateTime               @map("starts_at") @db.Timestamptz(6)
+  expiresAt              DateTime               @map("expires_at") @db.Timestamptz(6)
+  requiresApproval       Boolean                @map("requires_approval")
+  approvedAt             DateTime?              @map("approved_at") @db.Timestamptz(6)
+  approvedByMembershipId String?                @map("approved_by_membership_id") @db.Uuid
+  revokedAt              DateTime?              @map("revoked_at") @db.Timestamptz(6)
+  revokedByKind          MembershipChangeActor? @map("revoked_by_kind")
+  revokedById            String?                @map("revoked_by_id") @db.Uuid
+  createdAt              DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  staff      PlatformUser       @relation(fields: [platformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  approvedBy TenantMembership?  @relation(fields: [tenantId, approvedByMembershipId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  handoffs   SupportHandoff[]
+  sessions   SupportSession[]
+  logs       SupportAccessLog[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, expiresAt])
+  @@map("support_access_grants")
+}
+
+/// Código de un solo uso (≤ 2 min) que el navegador canjea en el host de la empresa.
+model SupportHandoff {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  grantId    String    @map("grant_id") @db.Uuid
+  codeHash   Bytes     @unique @map("code_hash")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  grant SupportAccessGrant @relation(fields: [tenantId, grantId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@map("support_handoffs")
+}
+
+/// Sesión de soporte en la empresa (cookie opaca, solo su SHA-256), verificada en PostgreSQL en cada petición.
+model SupportSession {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  grantId       String    @map("grant_id") @db.Uuid
+  tokenHash     Bytes     @unique @map("token_hash")
+  lastSeenAt    DateTime  @map("last_seen_at") @db.Timestamptz(6)
+  idleExpiresAt DateTime  @map("idle_expires_at") @db.Timestamptz(6)
+  revokedAt     DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  grant SupportAccessGrant @relation(fields: [tenantId, grantId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([grantId])
+  @@map("support_sessions")
+}
+
+/// Cada petición del staff en la empresa (append-only). La empresa lo ve.
+model SupportAccessLog {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  grantId        String   @map("grant_id") @db.Uuid
+  platformUserId String   @map("platform_user_id") @db.Uuid
+  method         String
+  route          String
+  occurredAt     DateTime @map("occurred_at") @db.Timestamptz(6)
+
+  grant SupportAccessGrant @relation(fields: [tenantId, grantId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, grantId, occurredAt])
+  @@map("support_access_logs")
 }

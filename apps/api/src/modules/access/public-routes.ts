@@ -24,6 +24,8 @@ export const PUBLIC_ROUTES: readonly string[] = [
   'POST /api/v1/hub/invitations/preview',
   'POST /api/v1/hub/invitations/accept',
   'POST /api/v1/hub/invitations/register',
+  // Sesión de soporte del staff de YEBO (Fase 4.6): código de un solo uso en el host de la empresa.
+  'GET /api/v1/support/session',
   // Entrada a la empresa (host del tenant; OAuth 2.0 + PKCE y renovación).
   'GET /api/v1/auth/start',
   'POST /api/v1/auth/token',

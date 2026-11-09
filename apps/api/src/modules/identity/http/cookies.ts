@@ -16,6 +16,8 @@ export const COOKIE = {
   authRequest: '__Host-yebo_auth',
   /** Sesión de identidad del hub (id firmado). Solo en el host del hub. */
   hub: '__Host-yebo_hub',
+  /** Sesión de soporte del staff de YEBO en el host de la empresa (Fase 4.6), opaca. */
+  support: '__Host-yebo_support',
 } as const;
 
 export const REFRESH_COOKIE_PATH = '/api/v1/auth';
