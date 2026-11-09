@@ -82,7 +82,7 @@ describe('Fase 4.5 · períodos, importe y cobro', () => {
     }
   };
   /** Empresa con suscripción de octubre 2026 a un plan (99 base, 5 incluidos, 15 por adicional, 7 días). */
-  const company = async (opts: { metric?: string; trial?: boolean; host?: string } = {}) => {
+  const company = async (opts: { metric?: string; trial?: boolean; host?: string; grace?: number } = {}) => {
     const tenantId = uuid();
     const planId = uuid();
     const versionId = uuid();
@@ -104,9 +104,15 @@ describe('Fase 4.5 · períodos, importe y cobro', () => {
     );
     await owner.query(
       `INSERT INTO plan_versions (id, plan_id, version, status, currency, base_price, billing_interval, included_users,
-                                  extra_user_price, usage_metric, payment_terms_days, published_at, updated_at)
-       VALUES ($1, $2, 1, 'PUBLISHED', 'PEN', 99, 'MONTHLY', 5, 15, $3, 7, now(), now())`,
-      [versionId, planId, opts.metric ?? 'PEAK_DAILY'],
+                                  extra_user_price, usage_metric, payment_terms_days, suspension_policy,
+                                  published_at, updated_at)
+       VALUES ($1, $2, 1, 'PUBLISHED', 'PEN', 99, 'MONTHLY', 5, 15, $3, 7, $4, now(), now())`,
+      [
+        versionId,
+        planId,
+        opts.metric ?? 'PEAK_DAILY',
+        JSON.stringify(opts.grace === undefined ? {} : { pastDueGraceDays: opts.grace }),
+      ],
     );
     await seed.query(
       `INSERT INTO subscriptions (id, tenant_id, plan_version_id, status, current_period_start, current_period_end,
@@ -352,6 +358,16 @@ describe('Fase 4.5 · períodos, importe y cobro', () => {
       expect(partial.body.invoice).toMatchObject({ status: 'PARTIALLY_PAID', balance: '104.00' });
       expect(partial.body.invoice.payments).toHaveLength(1);
       expect((await pay('104.01')).status).toBe(400);
+      const future = await request(app.getHttpServer())
+        .post(`/api/v1/platform/tenants/${t}/invoices/${invoiceId}/payments`)
+        .set('Host', ADMIN)
+        .set('Cookie', billing)
+        .set('X-CSRF-Token', STAFF_CSRF)
+        .send({ amount: '1.00', method: 'CASH', reference: 'R-1', paidAt: '2026-11-01T06:01:00Z' });
+      expect(future.status).toBe(400); // un minuto después del reloj: fecha futura
+      expect(await q('SELECT balance::text FROM platform_invoices WHERE id = $1', [invoiceId])).toEqual([
+        { balance: '104.00' },
+      ]);
     });
 
     it('al vencer sin pagar: factura OVERDUE y empresa PAST_DUE (job de estados)', async () => {
@@ -368,6 +384,83 @@ describe('Fase 4.5 · períodos, importe y cobro', () => {
       expect(await q('SELECT status::text FROM tenants WHERE id = $1', [t])).toEqual([
         { status: 'PAST_DUE' },
       ]);
+    });
+
+    it('la lista del panel (4.7) muestra plan, saldo, vencimiento y el día de la suspensión en hora de la empresa', async () => {
+      // PAST_DUE desde las 01:00 del 9 en Lima; gracia por defecto de 7 días → se suspende el 16 (hora de Lima).
+      const fresh = (
+        await seedPlatformSession(seed, { email: 'mira2@yebo.pe', role: 'VIEWER', now: clock.now() })
+      ).cookie; // el reloj avanzó 8 días: la sesión anterior ya caducó
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/platform/tenants')
+        .set('Host', ADMIN)
+        .set('Cookie', fresh);
+      expect(res.status).toBe(200);
+      const row = res.body.tenants.find((x: { id: string }) => x.id === t);
+      expect(row).toMatchObject({
+        status: 'PAST_DUE',
+        plan: { name: 'P', version: 1 },
+        includedUsers: 5,
+        usersPeak: null, // período nuevo sin días cerrados
+        outstanding: '104.00',
+        overdue: true,
+        currency: 'PEN',
+        milestone: { kind: 'SUSPENDS_ON', date: '2026-11-16' },
+      });
+      // Una empresa al día (sin facturas): saldo 0.00, sin vencimiento; el hito es el último día de su período.
+      const ok = await company();
+      const again = await request(app.getHttpServer())
+        .get('/api/v1/platform/tenants')
+        .set('Host', ADMIN)
+        .set('Cookie', fresh);
+      expect(again.body.tenants.find((x: { id: string }) => x.id === ok)).toMatchObject({
+        status: 'ACTIVE',
+        outstanding: '0.00',
+        overdue: false,
+        milestone: { kind: 'PERIOD_ENDS', date: '2026-10-31' },
+      });
+      // Vencida a las 22:00 del 8 en Lima (03:00 UTC del 9) con 3 días de gracia en su plan → se suspende el 11
+      // (hora de Lima). Leída en UTC daría el 12; con la gracia por defecto, el 15.
+      const late = await company({ grace: 3 });
+      await owner.query(
+        "UPDATE tenants SET status = 'PAST_DUE', status_changed_at = '2026-11-09T03:00:00Z' WHERE id = $1",
+        [late],
+      );
+      const third = await request(app.getHttpServer())
+        .get('/api/v1/platform/tenants')
+        .set('Host', ADMIN)
+        .set('Cookie', fresh);
+      expect(third.body.tenants.find((x: { id: string }) => x.id === late).milestone).toEqual({
+        kind: 'SUSPENDS_ON',
+        date: '2026-11-11',
+      });
+      // Suspendida a las 23:30 del 10 en Lima (04:30 UTC del 11): «Suspendida desde el 10».
+      await owner.query(
+        "UPDATE tenants SET status = 'SUSPENDED', status_changed_at = '2026-11-11T04:30:00Z' WHERE id = $1",
+        [late],
+      );
+      const fourth = await request(app.getHttpServer())
+        .get('/api/v1/platform/tenants')
+        .set('Host', ADMIN)
+        .set('Cookie', fresh);
+      expect(fourth.body.tenants.find((x: { id: string }) => x.id === late).milestone).toEqual({
+        kind: 'SUSPENDED_SINCE',
+        date: '2026-11-10',
+      });
+      // Una factura anulada no cuenta como saldo pendiente ni como vencida (se restaura para las pruebas siguientes).
+      await seed.query("UPDATE platform_invoices SET status = 'VOID' WHERE id = $1", [invoiceId]);
+      try {
+        const voided = await request(app.getHttpServer())
+          .get('/api/v1/platform/tenants')
+          .set('Host', ADMIN)
+          .set('Cookie', fresh);
+        expect(voided.body.tenants.find((x: { id: string }) => x.id === t)).toMatchObject({
+          outstanding: '0.00',
+          overdue: false,
+        });
+      } finally {
+        await seed.query("UPDATE platform_invoices SET status = 'OVERDUE' WHERE id = $1", [invoiceId]);
+      }
     });
 
     it('pagar el saldo vencido reactiva la empresa en la misma operación, con historial y auditoría', async () => {

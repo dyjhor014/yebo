@@ -6,7 +6,7 @@ import type {
   OperationOverride,
   OperationOverrideInput,
   TenantDetail,
-  TenantSummary,
+  TenantOverview,
   TenantUsageResponse,
 } from '@yebo/contracts';
 import { z } from 'zod';
@@ -21,7 +21,7 @@ import { isReservedSlug } from '../tenancy/reserved-subdomains';
 import { BackofficePrismaService } from './backoffice-prisma.service';
 import { PlatformAuditService } from './platform-audit.service';
 import { ipOf, type PlatformPrincipal, type RequestMeta } from './platform-auth.service';
-import { SUBSCRIPTION_STATUS_FOR } from './tenant-lifecycle';
+import { DEFAULT_PAST_DUE_GRACE_DAYS, SUBSCRIPTION_STATUS_FOR } from './tenant-lifecycle';
 import { TenantLifecycleService } from './tenant-lifecycle.service';
 
 const UUID = z.uuid();
@@ -276,7 +276,11 @@ export class TenantsService {
     );
   }
 
-  async list(): Promise<TenantSummary[]> {
+  /**
+   * Lista del panel (Fase 4.7) con lo necesario para priorizar: plan, servicios, pico del período, saldo y próximo
+   * hito. Cada empresa se lee con su contexto (RLS); N consultas pequeñas, suficiente para el volumen del MVP.
+   */
+  async list(): Promise<TenantOverview[]> {
     const rows = await this.db.client.tenant.findMany({
       select: {
         id: true,
@@ -285,19 +289,91 @@ export class TenantsService {
         legalName: true,
         status: true,
         createdAt: true,
+        statusChangedAt: true,
+        trialEndsAt: true,
+        cancelledAt: true,
+        timezone: true,
         domains: { where: { isPrimary: true }, select: { host: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map((t) => ({
-      id: t.id,
-      slug: t.slug,
-      tradeName: t.tradeName,
-      legalName: t.legalName,
-      status: t.status,
-      primaryHost: t.domains[0]?.host ?? null,
-      createdAt: t.createdAt.toISOString(),
-    }));
+    // Instantes (timestamptz) → fecha civil en la zona de la empresa; columnas DATE → su propia fecha.
+    const localDay = (d: Date, tz: string) => new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(d);
+    const plusDays = (d: Date, n: number) => new Date(d.getTime() + n * 86_400_000);
+    return Promise.all(
+      rows.map(async (t) => {
+        const extra = await this.db.withTenant(t.id, async (tx) => {
+          const services = await tx.tenantService.findMany({
+            where: { enabled: true },
+            select: { modality: true, service: true },
+          });
+          const [sub] = await tx.$queryRaw<
+            {
+              name: string;
+              version: number;
+              included: number;
+              currency: string;
+              start: Date;
+              end: Date;
+              grace: number | null;
+            }[]
+          >`
+            SELECT p.name, pv.version, pv.included_users AS included, pv.currency,
+                   s.current_period_start AS start, s.current_period_end AS end,
+                   (pv.suspension_policy ->> 'pastDueGraceDays')::int AS grace
+              FROM subscriptions s JOIN plan_versions pv ON pv.id = s.plan_version_id JOIN plans p ON p.id = pv.plan_id
+             WHERE s.is_current`;
+          // OVERDUE ⇒ saldo > 0 lo garantiza el CHECK platform_invoices_status_balance.
+          const [money] = await tx.$queryRaw<{ outstanding: Prisma.Decimal | null; overdue: boolean }[]>`
+            SELECT sum(balance) FILTER (WHERE status IN ('ISSUED', 'PARTIALLY_PAID', 'OVERDUE')) AS outstanding,
+                   bool_or(status = 'OVERDUE') AS overdue
+              FROM platform_invoices`;
+          const [peak] = sub
+            ? await tx.$queryRaw<{ peak: number | null }[]>`
+                SELECT max(peak_concurrent) AS peak FROM usage_daily_snapshots
+                 WHERE usage_date >= ${sub.start}::date AND usage_date < ${sub.end}::date`
+            : [{ peak: null }];
+          return { services, sub, money, peak: peak?.peak ?? null };
+        });
+        const { sub } = extra;
+        const day = (d: Date) => localDay(d, t.timezone);
+        const milestone: TenantOverview['milestone'] =
+          t.status === 'SUSPENDED'
+            ? { kind: 'SUSPENDED_SINCE', date: day(t.statusChangedAt) }
+            : t.status === 'PAST_DUE'
+              ? {
+                  kind: 'SUSPENDS_ON',
+                  date: day(plusDays(t.statusChangedAt, sub?.grace ?? DEFAULT_PAST_DUE_GRACE_DAYS)),
+                }
+              : t.status === 'TRIAL' && t.trialEndsAt
+                ? { kind: 'TRIAL_ENDS', date: day(t.trialEndsAt) }
+                : t.status === 'EXPIRED'
+                  ? { kind: 'EXPIRED_SINCE', date: day(t.statusChangedAt) }
+                  : t.status === 'CANCELLED' && t.cancelledAt
+                    ? { kind: 'CLOSING_ENDS', date: day(plusDays(t.cancelledAt, 30)) }
+                    : sub
+                      ? { kind: 'PERIOD_ENDS', date: plusDays(sub.end, -1).toISOString().slice(0, 10) }
+                      : null;
+        return {
+          id: t.id,
+          slug: t.slug,
+          tradeName: t.tradeName,
+          legalName: t.legalName,
+          status: t.status,
+          primaryHost: t.domains[0]?.host ?? null,
+          createdAt: t.createdAt.toISOString(),
+          modalities: [...new Set(extra.services.map((s) => s.modality))],
+          services: [...new Set(extra.services.map((s) => s.service))],
+          plan: sub ? { name: sub.name, version: sub.version } : null,
+          usersPeak: extra.peak,
+          includedUsers: sub?.included ?? null,
+          outstanding: new Prisma.Decimal(extra.money?.outstanding ?? 0).toFixed(2),
+          overdue: extra.money?.overdue ?? false,
+          currency: sub?.currency ?? 'PEN',
+          milestone,
+        };
+      }),
+    );
   }
 
   async get(tenantId: string): Promise<TenantDetail> {

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MoneySchema } from './catalog';
+import { TenantStatusSchema } from './tenants';
 
 /**
  * Períodos, importes y cobro (Fase 4.5; billing §5–7). Importes como texto decimal («204.00»), nunca `float`.
@@ -79,6 +80,11 @@ export const RecordPaymentRequestSchema = z
   })
   .strict();
 export type RecordPaymentRequest = z.infer<typeof RecordPaymentRequestSchema>;
+export const RecordPaymentResponseSchema = z.object({
+  invoice: InvoiceSchema,
+  tenantStatus: TenantStatusSchema,
+});
+export type RecordPaymentResponse = z.infer<typeof RecordPaymentResponseSchema>;
 
 /** Empresa: «Obligaciones con YEBO» (BILLING_SELF). */
 export const ObligationsResponseSchema = z.object({

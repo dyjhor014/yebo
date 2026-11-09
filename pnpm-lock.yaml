@@ -141,9 +141,12 @@ importers:
       '@yebo/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@yebo/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       next:
         specifier: 16.4.5
-        version: 16.4.5(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 16.4.5(@babel/core@7.29.13)(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       react:
         specifier: 19.3.1
         version: 19.3.1
@@ -153,10 +156,22 @@ importers:
       server-only:
         specifier: 0.0.1
         version: 0.0.1
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
     devDependencies:
+      '@swc/core':
+        specifier: 1.16.22
+        version: 1.16.22(@swc/helpers@0.5.23)
+      '@swc/jest':
+        specifier: 0.2.39
+        version: 0.2.39(@swc/core@1.16.22(@swc/helpers@0.5.23))
       '@tailwindcss/postcss':
         specifier: 4.3.4
         version: 4.3.4
+      '@types/jest':
+        specifier: 30.0.0
+        version: 30.0.0
       '@types/node':
         specifier: 24.19.2
         version: 24.19.2
@@ -169,6 +184,9 @@ importers:
       '@yebo/config':
         specifier: workspace:*
         version: link:../../packages/config
+      jest:
+        specifier: 30.5.2
+        version: 30.5.2(@types/node@24.19.2)
       tailwindcss:
         specifier: 4.3.4
         version: 4.3.4
@@ -181,9 +199,12 @@ importers:
       '@yebo/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@yebo/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       next:
         specifier: 16.4.5
-        version: 16.4.5(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 16.4.5(@babel/core@7.29.13)(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       react:
         specifier: 19.3.1
         version: 19.3.1
@@ -242,6 +263,21 @@ importers:
       jest:
         specifier: 30.5.2
         version: 30.5.2(@types/node@24.19.2)
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/ui:
+    devDependencies:
+      '@types/react':
+        specifier: 19.3.0
+        version: 19.3.0
+      '@yebo/config':
+        specifier: workspace:*
+        version: link:../config
+      react:
+        specifier: 19.3.1
+        version: 19.3.1
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -7914,7 +7950,7 @@ snapshots:
     optionalDependencies:
       '@nestjs/swagger': 11.4.8(@nestjs/common@11.2.8(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.8)(reflect-metadata@0.2.2)
 
-  next@16.4.5(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
+  next@16.4.5(@babel/core@7.29.13)(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
     dependencies:
       '@next/env': 16.4.5
       '@swc/helpers': 0.5.23
@@ -7923,7 +7959,7 @@ snapshots:
       postcss: 8.5.23
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
-      styled-jsx: 5.1.6(react@19.3.1)
+      styled-jsx: 5.1.6(@babel/core@7.29.13)(react@19.3.1)
     optionalDependencies:
       '@next/swc-darwin-arm64': 16.4.5
       '@next/swc-darwin-x64': 16.4.5
@@ -8554,10 +8590,12 @@ snapshots:
     dependencies:
       '@tokenizer/token': 0.3.0
 
-  styled-jsx@5.1.6(react@19.3.1):
+  styled-jsx@5.1.6(@babel/core@7.29.13)(react@19.3.1):
     dependencies:
       client-only: 0.0.1
       react: 19.3.1
+    optionalDependencies:
+      '@babel/core': 7.29.13
 
   superagent@10.4.1:
     dependencies:

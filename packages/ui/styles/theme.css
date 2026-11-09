@@ -1,0 +1,74 @@
+/*
+ * Tema compartido de las apps de YEBO (Fase 4.7, packages/ui): roles funcionales de semantic.css expuestos a
+ * Tailwind y superficies de acceso. Cada app importa, en este orden: tailwindcss, identity.css, semantic.css y este
+ * archivo, y declara `@source` hacia packages/ui/src para que Tailwind vea las clases de los componentes.
+ */
+@theme inline {
+  --color-canvas: var(--surface-canvas);
+  --color-raised: var(--surface-raised);
+  --color-rail: var(--surface-rail);
+  --color-rail-track: var(--surface-rail-track);
+  --color-rail-edge: var(--surface-rail-edge);
+  --color-ink: var(--text-primary);
+  --color-ink-muted: var(--text-secondary);
+  --color-on-rail: var(--text-on-rail);
+  --color-on-rail-muted: var(--text-on-rail-secondary);
+  --color-rail-accent: var(--accent-on-rail);
+  --color-rail-highlight: var(--highlight-on-rail);
+  --color-action: var(--action-fill);
+  --color-action-hover: var(--action-fill-hover);
+  --color-on-action: var(--action-text);
+  --color-control: var(--control-border);
+  --color-control-strong: var(--control-border-strong);
+  --color-divider: var(--divider);
+  --color-danger: var(--state-danger);
+  --color-danger-surface: var(--state-danger-surface);
+  --color-warning: var(--state-warning);
+  --color-warning-surface: var(--state-warning-surface);
+  --font-display: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Superficies de acceso: claras por defecto (taquillas y móviles con luz de día); oscuras según preferencia. */
+.yebo-access {
+  color-scheme: var(--access-color-scheme);
+  background: var(--surface-canvas);
+  color: var(--text-primary);
+  caret-color: var(--text-primary);
+  accent-color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+.yebo-access ::selection {
+  background: var(--yebo-amazon-teal);
+  color: var(--yebo-midnight-navy);
+}
+
+.yebo-access :focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.yebo-rail :focus-visible {
+  outline-color: var(--focus-ring-on-rail);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .yebo-access *,
+  .yebo-access *::before,
+  .yebo-access *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Gesto de trayecto: avance indeterminado mientras se entra a una empresa (el movimiento comunica un estado). */
+@keyframes yebo-travel {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}

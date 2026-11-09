@@ -27,7 +27,7 @@ Cada etapa termina con sus pruebas y se presenta para revisión antes de empezar
 | **4.4 · Medición de usuarios** | `membership_status_history` con `EXCLUDE USING gist` y trigger (sin fechas retroactivas, sin `DELETE`, solo se cierra la fila vigente), escrito **en la misma transacción** que cada cambio de membresía o de usuario. `usage_daily_snapshots` (job horario idempotente, `PROVISIONAL` y `FINAL`, `algorithm_version`, detalle auditable) | Las de billing §8: ejemplo de §3.1 = 3 y 4; reemplazo en el mismo instante sin doble conteo; días de 23 y 25 horas; job caído 3 días = mismo resultado; historial inmodificable; staff y cuentas de servicio nunca cuentan |
 | **4.5 · Períodos, importe y cobro** | `billing_periods` (zona horaria fija por período), cierre `OPEN → CLOSING → CLOSED` sin días faltantes; `usage_period_calculations` con la copia del plan; `platform_invoices`, líneas y `subscription_payments` (registro manual, sin pagos simulados); triggers de inmutabilidad. Vista del tenant «Obligaciones con YEBO» (`BILLING_SELF`) | La fórmula de billing §5 con las tres métricas; período cerrado inmodificable; revocar usuarios tras el cierre no altera la factura; un pago registrado actualiza el saldo y el estado |
 | **4.6 · Acceso de soporte** | `support_access_grants`: temporal, con motivo, visible para el tenant, con aprobación opcional de la empresa y revocable. El guard de empresa acepta la sesión del staff **solo** con un grant vigente para ese tenant, con ámbito `READ_ONLY` o `FULL`, y todo queda auditado | Sin grant → `401`; grant vencido o revocado → `401`; `READ_ONLY` no escribe; el tenant ve quién accedió y cuándo |
-| **4.7 · Panel de superadmin** (`apps/platform`) | Pantallas mínimas: login del staff con MFA, empresas (alta, estado, dominios, invitación del primer administrador), **«Invitar usuario» con el destino a elegir: staff de YEBO o una empresa (con sus roles)**, planes y versiones, suscripción, consumo diario, períodos, facturas y pagos. Identidad YEBO v1.0 con los mismos componentes y tokens de la 3.2b | Recorrido completo en el navegador; accesibilidad AA; revisión visual con Impeccable |
+| **4.7 · Panel de superadmin** (`apps/platform`) | Pantallas mínimas: login del staff con MFA, empresas (alta, estado, dominios, invitación del primer administrador), **invitaciones separadas: «Invitar a la empresa» desde su ficha (empresa fijada, sus roles) e «Invitar al staff» desde Staff de YEBO (solo @yebo.pe; Superadmin con confirmación explícita), sobre la única ruta `POST /platform/invitations` (decisión del 2026-11-10 tras la crítica de Impeccable)**, planes y versiones, suscripción, consumo diario, períodos, facturas y pagos. Identidad YEBO v1.0 con los mismos componentes y tokens de la 3.2b | Recorrido completo en el navegador; accesibilidad AA; revisión visual con Impeccable |
 | **4.8 · Cierre** | Prueba de extremo a extremo del criterio: crear empresa → asignar plan → medir usuarios durante varios días → cerrar el período → importe correcto. Resultados en `phase-4-results.md` | Criterio del roadmap en CI |
 
 ## Privilegios de base de datos (ADR-034)
@@ -548,3 +548,61 @@ Sustituye la regla MVP de billing §7 para los upgrades. Migración `20261111030
 - ✅ Migración aplicada a `yebo_dev` el 2026-11-10 (con copia previa).
 - Pantallas (panel del staff y vista de la empresa): etapa 4.7.
 - Incidencias de soporte (`incident_id`): fuera de la Fase 4 (F4-Q5).
+
+## Etapa 4.7 · Panel de superadmin (en diseño)
+
+### Decisiones del responsable (2026-11-10)
+
+| Pregunta | Decisión |
+|---|---|
+| Ubicación y componentes | `apps/platform` (Next.js) y un `packages/ui` mínimo: solo los componentes y tokens de la 3.2b, que `apps/web` pasa a importar de ahí. El sistema de diseño completo sigue siendo MKT-01.1 (F4-Q6) |
+| Proceso | Maqueta navegable antes del código; revisión con Impeccable (solo `critique`/`audit`); recorrido E2E con Playwright y axe (WCAG 2.1 AA), inspeccionando las dependencias antes de instalarlas |
+| Tras la crítica de Impeccable (21/40) | Se corrigen los 5 problemas (importes en formato es-PE; «Registrar pago» completo: fecha, aviso según el importe, errores, resultado y anulación; Superadmin protegido; «Copiar» como única acción principal; lista por urgencia con «Próximo hito», filtros y una zona clicable por fila) y las observaciones de accesibilidad. Invitaciones separadas en dos accesos. Trayecto de estados en la ficha (como `RouteLine`). Token nuevo `--state-warning` en `semantic.css` (ámbar #7A4B00 sobre #FFF1D6, 6,64:1) |
+
+Maqueta (privada): https://claude.ai/artifact/UywBBL67MKUw1ajdBHsC7s, versión 2.
+
+La maqueta v2 se aprobó el 2026-11-10. La implementación se divide en tres partes, cada una con su aprobación:
+
+| Parte | Alcance |
+|---|---|
+| **4.7a** | `packages/ui` (componentes y tokens de la 3.2b, más `--state-warning`), `apps/platform` con el acceso del staff (contraseña y MFA obligatoria), Empresas y ficha · Facturación y consumo con «Registrar pago» |
+| 4.7b | Resto de pantallas: alta de empresa, acciones de la ficha (invitar a la empresa, cambiar plan, acceso de soporte, cambiar estado) y sus pestañas, planes, staff e invitación al staff; **anulación de pagos** (API y panel) |
+| 4.7c | Recorrido E2E con Playwright y axe (WCAG 2.1 AA) y revisión con Impeccable del código |
+
+### Resultado de la 4.7a
+
+- **`packages/ui` (`@yebo/ui`):**
+  - los 8 componentes de la 3.2b se mueven de `apps/web` sin cambios, y `apps/web` los importa de ahí;
+  - `styles/theme.css` reúne el `@theme` de Tailwind que antes estaba en `apps/web/app/globals.css`;
+  - se publica como fuente TypeScript, con `transpilePackages` en cada app.
+- **`--state-warning`:**
+  - claro: `#7a4b00` sobre `#fff1d6` (6,64:1);
+  - oscuro: `#f5c46b` sobre navy (10,4:1).
+- **`apps/platform` (puerto 3101):**
+  - Sustituye el andamio de la Fase 2. Su página de estado del sistema se conserva intacta en `/estado`.
+  - **Rutas:** `/login` (contraseña, y después verificación o activación de la MFA), `/empresas` y `/empresas/{id}`.
+  - **Llamadas a la API:** todas van al mismo origen (`/api/v1`).
+    - En producción las enruta Nginx.
+    - En desarrollo las reenvía Next si existe `API_INTERNAL_URL`, y la API resuelve el host del panel por `X-Forwarded-Host` (`TRUST_PROXY=loopback`).
+  - **Cabeceras:** todo el panel sale sin marco, sin Referer y sin caché.
+  - **Retorno tras el login:** `?volver=` solo admite rutas internas.
+- **API:**
+  - `GET /platform/tenants` devuelve ahora `TenantOverview`: modalidades y servicios, plan, pico de usuarios del período, saldo pendiente, vencida (sí/no) y próximo hito.
+    - El hito se calcula en la zona horaria de la empresa, con la gracia de su plan.
+    - Las facturas anuladas no suman al saldo.
+  - El pago con fecha futura se rechaza con 400.
+  - `RecordPaymentResponseSchema` en contratos.
+- **Lógica del panel (funciones puras con pruebas unitarias):**
+  - formato es-PE de importes, fechas y períodos;
+  - lectura de importes (punto, coma, miles, símbolo; nunca más de 2 decimales);
+  - orden por urgencia y filtros;
+  - trayecto de estados;
+  - aviso de la consecuencia del pago, con la misma regla de reactivación que la API.
+- **Pruebas:**
+  - **Integración:** 21 suites, 352 pruebas.
+  - **Unitarias del panel:** 17.
+  - **Mutaciones:** todas las no equivalentes se detectan; en la consulta del saldo vencido, `AND balance > 0` era redundante con el CHECK `platform_invoices_status_balance` y se quitó.
+  - **Prueba de humo contra `yebo_test`** a través de Next con `Host: admin.yebo.pe`: login → activación de la MFA → sesión → empresas → cerrar sesión; tras cerrar, la sesión da 401 y un host distinto da 404.
+- **Pendiente de la 4.7a, explícito:**
+  - el código QR para activar la MFA (se muestra la clave para escribirla a mano); necesita una dependencia que hay que inspeccionar antes de instalarla;
+  - «Anular este pago» de la maqueta pasa a la 4.7b, porque la API aún no tiene la anulación.

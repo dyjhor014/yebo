@@ -60,6 +60,10 @@ export class BillingService {
           FROM platform_invoices i JOIN tenants t ON t.id = i.tenant_id
          WHERE i.id = ${invoiceId}::uuid FOR UPDATE OF i`;
       if (!invoice) throw NOT_FOUND();
+      // La fecha es la del comprobante: nunca futura (Fase 4.7, maqueta aprobada).
+      if (input.paidAt && new Date(input.paidAt).getTime() > now.getTime()) {
+        throw new AppError('VALIDATION_FAILED', 'La fecha del pago no puede ser futura', 400);
+      }
       if (!['ISSUED', 'PARTIALLY_PAID', 'OVERDUE'].includes(invoice.status)) {
         throw new AppError('CONFLICT', 'La factura no admite pagos (está pagada o anulada)', 409);
       }

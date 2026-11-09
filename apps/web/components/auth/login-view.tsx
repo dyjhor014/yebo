@@ -1,10 +1,10 @@
 'use client';
 
 import type { FormEvent } from 'react';
-import { AccessShell } from '../identity/access-shell';
-import { Button } from '../ui/button';
-import { PasswordField, TextField } from '../ui/field';
-import { Notice } from '../ui/notice';
+import { AccessShell } from '@yebo/ui/access-shell';
+import { Button } from '@yebo/ui/button';
+import { PasswordField, TextField } from '@yebo/ui/field';
+import { Notice } from '@yebo/ui/notice';
 import { AccessHeading } from './heading';
 
 export interface LoginFieldErrors {

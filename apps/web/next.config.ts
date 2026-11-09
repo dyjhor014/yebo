@@ -15,6 +15,8 @@ const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   output: 'standalone',
+  // Componentes de la 3.2b compartidos con apps/platform (Fase 4.7): se publican como fuente TypeScript.
+  transpilePackages: ['@yebo/ui'],
   async headers() {
     return ['/login', '/sin-acceso', '/salir', '/auth/callback', '/panel'].map((source) => ({
       source,

@@ -1,11 +1,11 @@
 'use client';
 
 import type { FormEvent } from 'react';
-import { AccessShell } from '../identity/access-shell';
-import { Button, ButtonLink } from '../ui/button';
-import { PasswordField, TextField } from '../ui/field';
-import { Notice } from '../ui/notice';
-import { TextLink } from '../ui/text-link';
+import { AccessShell } from '@yebo/ui/access-shell';
+import { Button, ButtonLink } from '@yebo/ui/button';
+import { PasswordField, TextField } from '@yebo/ui/field';
+import { Notice } from '@yebo/ui/notice';
+import { TextLink } from '@yebo/ui/text-link';
 import { AccessHeading } from './heading';
 
 export type InvitationMode = 'register' | 'login';

@@ -1,5 +1,5 @@
-import { AccessShell } from '../identity/access-shell';
-import { Button, ButtonLink } from '../ui/button';
+import { AccessShell } from '@yebo/ui/access-shell';
+import { Button, ButtonLink } from '@yebo/ui/button';
 import { AccessHeading } from './heading';
 
 export type SessionState = 'checking' | 'signed-in' | 'signed-out';

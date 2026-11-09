@@ -1,5 +1,5 @@
-import { AccessShell } from '../identity/access-shell';
-import { ButtonLink } from '../ui/button';
+import { AccessShell } from '@yebo/ui/access-shell';
+import { ButtonLink } from '@yebo/ui/button';
 import { AccessHeading } from './heading';
 
 export type EnteringState = 'entering' | 'expired';

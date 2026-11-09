@@ -4,7 +4,7 @@ import {
   ChangePlanRequestSchema,
   RecordPaymentRequestSchema,
   type ChangePlanResponse,
-  type Invoice,
+  type RecordPaymentResponse,
   type TenantBillingResponse,
 } from '@yebo/contracts';
 import type { Request, Response } from 'express';
@@ -47,7 +47,7 @@ export class BillingController {
     @Param('invoiceId') invoiceId: string,
     @Body() body: RecordPaymentRequestDto,
     @Req() req: Request,
-  ): Promise<{ invoice: Invoice; tenantStatus: string }> {
+  ): Promise<RecordPaymentResponse> {
     const actor = this.cls.get('platformPrincipal');
     if (!actor) throw new Error('PlatformGuard no fijó la sesión del staff');
     return this.billing.recordPayment(actor, tenantId, invoiceId, body, meta(req));

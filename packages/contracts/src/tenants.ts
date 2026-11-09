@@ -76,7 +76,37 @@ export const TenantSummarySchema = z.object({
   createdAt: z.iso.datetime(),
 });
 export type TenantSummary = z.infer<typeof TenantSummarySchema>;
-export const TenantsResponseSchema = z.object({ tenants: z.array(TenantSummarySchema) });
+/**
+ * Fila de la lista de empresas del panel (Fase 4.7): lo necesario para decidir a quién atender primero.
+ * `milestone` es el próximo hito del trayecto del tenant (suspensión, fin de la prueba, fin del período...).
+ */
+export const TenantOverviewSchema = TenantSummarySchema.extend({
+  modalities: z.array(z.enum(['LAND', 'RIVER'])),
+  services: z.array(z.enum(['PASSENGER', 'PARCEL', 'CARGO', 'VEHICLE_TRANSPORT'])),
+  plan: z.object({ name: z.string(), version: z.number().int() }).nullable(),
+  /** Pico de usuarios facturables en los días cerrados del período en curso (null sin días cerrados). */
+  usersPeak: z.number().int().nullable(),
+  includedUsers: z.number().int().nullable(),
+  /** Saldo pendiente de facturas emitidas, parciales o vencidas. */
+  outstanding: z.string(),
+  overdue: z.boolean(),
+  currency: z.string(),
+  milestone: z
+    .object({
+      kind: z.enum([
+        'SUSPENDED_SINCE',
+        'SUSPENDS_ON',
+        'TRIAL_ENDS',
+        'EXPIRED_SINCE',
+        'CLOSING_ENDS',
+        'PERIOD_ENDS',
+      ]),
+      date: z.iso.date(),
+    })
+    .nullable(),
+});
+export type TenantOverview = z.infer<typeof TenantOverviewSchema>;
+export const TenantsResponseSchema = z.object({ tenants: z.array(TenantOverviewSchema) });
 export type TenantsResponse = z.infer<typeof TenantsResponseSchema>;
 
 export const TenantStatusChangeSchema = z.object({

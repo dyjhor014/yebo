@@ -1,0 +1,33 @@
+{
+  "name": "@yebo/ui",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Componentes y tokens de la 3.2b compartidos por apps/web y apps/platform (Fase 4.7, F4-Q6: mínimo; el sistema de diseño completo es MKT-01.1)",
+  "type": "module",
+  "exports": {
+    "./access-shell": "./src/access-shell.tsx",
+    "./button": "./src/button.tsx",
+    "./field": "./src/field.tsx",
+    "./icon": "./src/icon.tsx",
+    "./logo": "./src/logo.tsx",
+    "./notice": "./src/notice.tsx",
+    "./route-line": "./src/route-line.tsx",
+    "./text-link": "./src/text-link.tsx",
+    "./styles/identity.css": "./styles/identity.css",
+    "./styles/semantic.css": "./styles/semantic.css",
+    "./styles/theme.css": "./styles/theme.css"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "peerDependencies": {
+    "react": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@yebo/config": "workspace:*",
+    "react": "19.3.1",
+    "typescript": "5.9.3"
+  }
+}
