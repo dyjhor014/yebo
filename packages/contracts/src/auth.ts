@@ -65,5 +65,7 @@ export const AuthSessionResponseSchema = z.object({
   accessTokenExpiresAt: z.iso.datetime(),
   /** Permisos efectivos de la membresía en esta empresa (la autoridad sigue siendo el backend). */
   permissions: z.array(z.string()),
+  /** Módulos efectivos de la empresa (multitenancy §6): la interfaz oculta lo no habilitado; la autoridad es el backend. */
+  modules: z.array(z.string()),
 });
 export type AuthSessionResponse = z.infer<typeof AuthSessionResponseSchema>;

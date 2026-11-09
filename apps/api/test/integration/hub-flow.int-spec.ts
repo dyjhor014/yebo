@@ -20,7 +20,7 @@ import { PasswordHasher } from '../../src/modules/identity/password-hasher';
 import { codeChallengeS256, newCodeVerifier } from '../../src/modules/identity/pkce';
 import { SessionService } from '../../src/modules/identity/session.service';
 import { TenantResolverService } from '../../src/modules/tenancy/tenant-resolver.service';
-import { testBypassPool, testPool } from '../support/db';
+import { testBypassPool, testPool, RESET_TENANT_DATA } from '../support/db';
 
 const DB = 'yebo_test';
 const HUB = 'cuentas.yebo.pe';
@@ -83,9 +83,7 @@ describe('Fase 3.2b · hub de cuentas y sesión de empresa (HTTP)', () => {
   beforeAll(async () => {
     owner = testPool('owner', DB, 2);
     seed = testBypassPool(DB, 2);
-    await owner.query(
-      'TRUNCATE authorization_codes, refresh_tokens, tenant_sessions, identity_sessions, membership_roles, role_permissions, roles, tenant_memberships, users, permissions, role_templates, tenant_domains, tenants',
-    );
+    await owner.query(RESET_TENANT_DATA);
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(Clock)
       .useValue(clock)

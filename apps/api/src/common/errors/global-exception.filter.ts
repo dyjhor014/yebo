@@ -33,6 +33,7 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   PERMISSIONS_CHANGED: 'Tus permisos cambiaron; renueva la sesión',
   FORBIDDEN: 'No tiene permiso para realizar esta operación',
   TENANT_RESTRICTED: 'El estado de la empresa no permite esta operación',
+  MODULE_NOT_ENABLED: 'La empresa no tiene habilitado este módulo',
   NOT_FOUND: 'Recurso no encontrado',
   CONFLICT: 'La operación entra en conflicto con el estado actual',
   PAYLOAD_TOO_LARGE: 'El contenido enviado excede el tamaño permitido',

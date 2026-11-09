@@ -1,3 +1,4 @@
+export * from './catalog';
 export * from './platform';
 export * from './access';
 export * from './auth';

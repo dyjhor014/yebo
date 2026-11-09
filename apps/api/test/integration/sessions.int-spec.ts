@@ -16,7 +16,7 @@ import { Clock } from '../../src/modules/identity/clock';
 import { IdentityPrismaService } from '../../src/modules/identity/identity-prisma.service';
 import { SessionService, type IssuedTokens } from '../../src/modules/identity/session.service';
 import { decryptSuccessor } from '../../src/modules/identity/successor-crypto';
-import { testBypassPool, testPool } from '../support/db';
+import { testBypassPool, testPool, RESET_TENANT_DATA } from '../support/db';
 
 const DB = 'yebo_test';
 const A = '0190f0a0-0000-7000-8000-00000000a002';
@@ -61,9 +61,7 @@ describe('Fase 3.2a · sesiones y refresh tokens (PostgreSQL y Redis reales, rol
     appPool = testPool('app', DB, 2);
     seed = testBypassPool(DB, 2);
     identityPool = testPool('identity', DB, 2);
-    await owner.query(
-      'TRUNCATE authorization_codes, refresh_tokens, tenant_sessions, identity_sessions, membership_roles, role_permissions, roles, tenant_memberships, users, permissions, role_templates, tenant_domains, tenants',
-    );
+    await owner.query(RESET_TENANT_DATA);
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(Clock)
       .useValue(clock)

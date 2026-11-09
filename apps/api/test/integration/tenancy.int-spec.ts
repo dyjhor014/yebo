@@ -12,12 +12,13 @@ import { createPrismaClient } from '../../src/infrastructure/database/create-pri
 import { TenantDbService } from '../../src/infrastructure/database/tenant-db.service';
 import {
   GLOBAL_TABLES_WITH_TENANT_ID,
+  TENANT_SCOPED_TABLES,
   TENANT_SCOPED_MODELS,
 } from '../../src/infrastructure/database/tenant-scoped-models';
 import { TenantResolverService } from '../../src/modules/tenancy/tenant-resolver.service';
 import type { PrismaClient } from '../../src/generated/prisma/client';
 import { createTestApp } from '../support/create-test-app';
-import { testBypassUrl, testPool } from '../support/db';
+import { testBypassUrl, testPool, RESET_TENANT_DATA } from '../support/db';
 
 const DB = 'yebo_test';
 const A = '0190f0a0-0000-7000-8000-00000000a001';
@@ -125,9 +126,7 @@ describe('Fase 3.1 · tenancy e identidad (PostgreSQL real, rol yebo_app)', () =
 
   beforeAll(async () => {
     owner = testPool('owner', DB, 1);
-    await owner.query(
-      'TRUNCATE authorization_codes, refresh_tokens, tenant_sessions, identity_sessions, membership_roles, role_permissions, roles, tenant_memberships, users, permissions, role_templates, tenant_domains, tenants',
-    );
+    await owner.query(RESET_TENANT_DATA);
     appPool = testPool('app', DB, 4);
     app = await createTestApp();
     // Un solo servidor escuchando: si no, supertest abre uno por petición (fuga de listeners en §7.6).
@@ -150,7 +149,7 @@ describe('Fase 3.1 · tenancy e identidad (PostgreSQL real, rol yebo_app)', () =
   });
 
   describe('base de datos', () => {
-    const tenantTables = ['tenant_memberships', 'roles', 'role_permissions', 'membership_roles'];
+    const tenantTables = [...TENANT_SCOPED_TABLES];
 
     it('§7.7 · toda tabla con tenant_id tiene RLS habilitado y forzado, salvo las excepciones globales declaradas', async () => {
       const { rows } = await owner.query<{ table: string; enabled: boolean; forced: boolean }>(`

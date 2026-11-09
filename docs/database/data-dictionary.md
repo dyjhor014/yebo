@@ -45,14 +45,14 @@ Los `enum` son cerrados; los `→ catálogo` son tablas extensibles.
 
 ### 🌐 plans / plan_versions / plan_version_modules
 - **plans:** `code UNIQUE`, `name`, `description`, `status enum DRAFT|ACTIVE|RETIRED`.
-- **plan_versions:** `plan_id → plans`, `version int` (UNIQUE plan_id+version), `status enum DRAFT|PUBLISHED|RETIRED`, `currency`, `base_price numeric(14,2)`, `billing_interval enum MONTHLY|QUARTERLY|YEARLY`, `included_users int`, `extra_user_price numeric(14,2)`, `usage_metric enum PEAK_DAILY|AVERAGE_DAILY|END_OF_PERIOD` (default `PEAK_DAILY`, D5), `daily_aggregation enum PEAK_CONCURRENT|DISTINCT_ACTIVE` (default `PEAK_CONCURRENT`), `min_active_seconds int DEFAULT 0`, `trial_days int`, `limits jsonb` (sucursales, vehículos, almacenamiento GB; esquema validado), `suspension_policy jsonb` (por defecto: 7 días de gracia en PAST_DUE, 30 días de cierre en CANCELLED, matriz de operaciones de multitenancy §5), `published_at`. **Inmutable al publicarse** (trigger).
+- **plan_versions:** `plan_id → plans`, `version int` (UNIQUE plan_id+version), `status enum DRAFT|PUBLISHED|RETIRED`, `currency`, `base_price numeric(14,2)`, `billing_interval enum MONTHLY|QUARTERLY|YEARLY`, `included_users int`, `extra_user_price numeric(14,2)`, `usage_metric enum PEAK_DAILY|AVERAGE_DAILY|END_OF_PERIOD` (default `PEAK_DAILY`, D5), `daily_aggregation enum PEAK_CONCURRENT|DISTINCT_ACTIVE` (default `PEAK_CONCURRENT`), `min_active_seconds int DEFAULT 0`, `trial_days int`, `limits jsonb` (sucursales, vehículos, almacenamiento GB; esquema validado), `suspension_policy jsonb` (por defecto: 7 días de gracia en PAST_DUE, 30 días de cierre en CANCELLED, matriz de operaciones de multitenancy §5), `published_at`, `retired_at`, `created_by_id → platform_users`. **Inmutable al publicarse** (trigger: solo admite `PUBLISHED → RETIRED`; sus módulos tampoco cambian). Implementado en la Fase 4.2.
 - **plan_version_modules:** `plan_version_id`, `module_id`, `config jsonb?`. PK compuesta.
 
 ### tenant_module_overrides
-`module_id → modules`, `effect enum GRANT|REVOKE`, `valid_from`, `valid_to?`, `reason`, `granted_by_platform_user_id`.
+`module_id → modules`, `effect enum GRANT|REVOKE`, `valid_from`, `valid_to?`, `reason`, `granted_by_platform_user_id`, `ended_at?`, `ended_by_platform_user_id?`. No se borra: se termina y queda en el historial. REVOKE gana sobre GRANT.
 
 ### subscriptions
-`plan_version_id → plan_versions`, `status enum TRIALING|ACTIVE|PAST_DUE|SUSPENDED|CANCELLED|EXPIRED`, `current_period_start`, `current_period_end`, `cancel_at?`, `grace_until?`, `price_override jsonb?` (acuerdos comerciales especiales, auditado). Una sola suscripción vigente: índice único parcial `(tenant_id) WHERE status IN (...)`.
+`plan_version_id → plan_versions`, `status enum TRIALING|ACTIVE|PAST_DUE|SUSPENDED|CANCELLED|EXPIRED`, `current_period_start`, `current_period_end`, `cancel_at?`, `grace_until?`, `price_override jsonb?` (acuerdos comerciales especiales, auditado). Una sola suscripción vigente: `is_current` (TRUE o NULL, con CHECK) y `UNIQUE (tenant_id, is_current)`; sustituye al índice único parcial por estado, que Prisma no representa (prueba de deriva, ADR-024).
 
 ### billing_periods
 `subscription_id`, `period_start date`, `period_end date` (fechas locales), `timezone text` (copiada del tenant al abrir; fija durante el período), `status enum OPEN|CLOSING|CLOSED`. UNIQUE (subscription_id, period_start). Tras `CLOSED`, un trigger bloquea cambios en el período, sus snapshots y su cálculo.

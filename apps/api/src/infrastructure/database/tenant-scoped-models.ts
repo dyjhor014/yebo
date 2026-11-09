@@ -13,7 +13,19 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set<string>([
   'Role',
   'RolePermission',
   'MembershipRole',
+  'TenantModuleOverride',
+  'Subscription',
 ]);
+
+/** Nombres de tabla de TENANT_SCOPED_MODELS, para las verificaciones sobre el catálogo de PostgreSQL. */
+export const TENANT_SCOPED_TABLES: readonly string[] = [
+  'tenant_memberships',
+  'roles',
+  'role_permissions',
+  'membership_roles',
+  'tenant_module_overrides',
+  'subscriptions',
+];
 
 /**
  * - tenant_domains: el resolver la consulta para DESCUBRIR el tenant a partir del host (ADR-004).

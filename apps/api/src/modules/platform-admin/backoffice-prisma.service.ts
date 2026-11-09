@@ -28,6 +28,20 @@ export class BackofficePrismaService implements OnModuleDestroy {
     });
   }
 
+  /**
+   * Transacción con el contexto de UN tenant fijado (ADR-025): para las pocas escrituras del superadmin en tablas de
+   * tenant (excepciones de módulo, alta de empresas). El RLS forzado sigue activo: fuera de ese tenant, 0 filas.
+   */
+  withTenant<T>(
+    tenantId: string,
+    fn: (tx: Parameters<Parameters<PrismaClient['$transaction']>[0]>[0]) => Promise<T>,
+  ): Promise<T> {
+    return this.client.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`;
+      return fn(tx);
+    });
+  }
+
   async onModuleDestroy(): Promise<void> {
     await this.client.$disconnect();
   }

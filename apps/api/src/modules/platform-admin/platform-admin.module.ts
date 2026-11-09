@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { FieldEncryption } from '../../common/crypto/field-encryption';
 import { IdentityModule } from '../identity/identity.module';
 import { BackofficePrismaService } from './backoffice-prisma.service';
+import { CatalogService } from './catalog.service';
+import { CatalogController } from './http/catalog.controller';
 import { PlatformAuthController } from './http/platform-auth.controller';
 import { PlatformGuard } from './http/platform.guard';
 import { StaffController } from './http/staff.controller';
@@ -16,13 +18,14 @@ import { StaffService } from './staff.service';
  */
 @Module({
   imports: [IdentityModule],
-  controllers: [PlatformAuthController, StaffController],
+  controllers: [PlatformAuthController, StaffController, CatalogController],
   providers: [
     BackofficePrismaService,
     FieldEncryption,
     PlatformAuditService,
     PlatformAuthService,
     StaffService,
+    CatalogService,
     PlatformGuard,
   ],
   exports: [PlatformAuthService, PlatformGuard],

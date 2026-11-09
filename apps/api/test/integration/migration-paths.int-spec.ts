@@ -12,7 +12,10 @@ import { cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Pool } from 'pg';
-import { GLOBAL_TABLES_WITH_TENANT_ID } from '../../src/infrastructure/database/tenant-scoped-models';
+import {
+  GLOBAL_TABLES_WITH_TENANT_ID,
+  TENANT_SCOPED_TABLES,
+} from '../../src/infrastructure/database/tenant-scoped-models';
 import { grantTestBypass, testBypassPool, testPool } from '../support/db';
 
 const API_ROOT = resolve(__dirname, '..', '..');
@@ -168,7 +171,7 @@ const SETS: MigrationSet[] = [
     name: 'producción',
     schema: 'prisma/schema.prisma',
     migrations: 'prisma/migrations',
-    tenantTables: ['tenant_memberships', 'roles', 'role_permissions', 'membership_roles'],
+    tenantTables: [...TENANT_SCOPED_TABLES],
     // Del registro de modelos: una excepción global nueva no puede olvidarse aquí.
     globalTablesWithTenantId: [...GLOBAL_TABLES_WITH_TENANT_ID],
     extensions: ['btree_gist', 'citext'],

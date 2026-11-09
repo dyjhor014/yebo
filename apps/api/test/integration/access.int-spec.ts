@@ -23,7 +23,7 @@ import { RolesService } from '../../src/modules/access/roles.service';
 import { routePolicyOf, type RoutePolicy } from '../../src/modules/access/route-policy';
 import { SessionService } from '../../src/modules/identity/session.service';
 import { TenantResolverService } from '../../src/modules/tenancy/tenant-resolver.service';
-import { testBypassPool, testPool } from '../support/db';
+import { testBypassPool, testPool, RESET_TENANT_DATA } from '../support/db';
 
 const DB = 'yebo_test';
 const A = '0190f0a0-0000-7000-8000-00000000a033';
@@ -97,9 +97,7 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
   beforeAll(async () => {
     owner = testPool('owner', DB, 2);
     seed = testBypassPool(DB, 2);
-    await owner.query(
-      'TRUNCATE authorization_codes, refresh_tokens, tenant_sessions, identity_sessions, membership_roles, role_permissions, roles, tenant_memberships, users, permissions, role_templates, tenant_domains, tenants',
-    );
+    await owner.query(RESET_TENANT_DATA);
     // Otras suites vacían el catálogo: se vuelve a aplicar la migración (idempotente) para probar su contenido.
     await owner.query(readFileSync(MIGRATION, 'utf8'));
 

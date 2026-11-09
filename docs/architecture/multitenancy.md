@@ -204,7 +204,9 @@ efectivo = módulos del plan contratado (plan_version_modules)
          + overrides otorgados por YEBO (tenant_module_overrides, con vigencia)
 ```
 
-- Guard `@RequiresModule('PARCELS')` en los controladores. El frontend recibe la lista efectiva y oculta lo no habilitado, pero **la autoridad es el backend**.
+Las excepciones REVOKE vigentes restan y ganan sobre las GRANT. Implementado en la Fase 4.2 sin la capa de `tenant_services`, que llega con la 4.3 (ver [phase-4-plan](../development/phase-4-plan.md)).
+
+- Guard `@RequiresModule('PARCELS')` en los controladores (`403 MODULE_NOT_ENABLED`). El frontend recibe la lista efectiva y oculta lo no habilitado, pero **la autoridad es el backend**.
 - Los límites del plan (sucursales, vehículos, almacenamiento) se validan en los servicios al crear recursos.
 
 ## 7. Pruebas de aislamiento (criterio de la Fase 3)

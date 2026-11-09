@@ -13,6 +13,8 @@ export const ErrorCode = z.enum([
   'FORBIDDEN',
   /** El estado del tenant (suspendido, vencido, cancelado) no permite esta operación (ADR-023, multitenancy §5). */
   'TENANT_RESTRICTED',
+  /** La empresa no tiene habilitado el módulo de la operación (plan, servicios o excepción de YEBO; multitenancy §6). */
+  'MODULE_NOT_ENABLED',
   'NOT_FOUND',
   'CONFLICT',
   'PAYLOAD_TOO_LARGE',

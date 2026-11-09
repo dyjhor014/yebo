@@ -69,6 +69,8 @@ model Tenant {
   roles              Role[]
   tenantSessions     TenantSession[]
   authorizationCodes AuthorizationCode[]
+  moduleOverrides    TenantModuleOverride[]
+  subscriptions      Subscription[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -436,12 +438,15 @@ model PlatformUser {
   createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  createdBy    PlatformUser?        @relation("PlatformUserCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  created      PlatformUser[]       @relation("PlatformUserCreatedBy")
-  sessions     PlatformSession[]
-  setupTokens  PlatformSetupToken[] @relation("SetupTokenFor")
-  issuedTokens PlatformSetupToken[] @relation("SetupTokenIssuedBy")
-  auditEntries PlatformAuditLog[]
+  createdBy        PlatformUser?          @relation("PlatformUserCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  created          PlatformUser[]         @relation("PlatformUserCreatedBy")
+  sessions         PlatformSession[]
+  setupTokens      PlatformSetupToken[]   @relation("SetupTokenFor")
+  issuedTokens     PlatformSetupToken[]   @relation("SetupTokenIssuedBy")
+  auditEntries     PlatformAuditLog[]
+  planVersions     PlanVersion[]
+  overridesGranted TenantModuleOverride[] @relation("OverrideGrantedBy")
+  overridesEnded   TenantModuleOverride[] @relation("OverrideEndedBy")
 
   @@map("platform_users")
 }
@@ -500,4 +505,193 @@ model PlatformAuditLog {
   @@index([platformUserId, occurredAt])
   @@index([tenantId, occurredAt])
   @@map("platform_audit_logs")
+}
+
+// ============================================================================
+// Fase 4.2 · Catálogo comercial: módulos, planes y versiones (globales 🌐), excepciones de módulo y
+// suscripciones (de tenant, con RLS). Ningún precio se fija aquí: los planes los crea el superadmin.
+// ============================================================================
+
+enum PlanStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+
+  @@map("plan_status")
+}
+
+enum PlanVersionStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+
+  @@map("plan_version_status")
+}
+
+enum BillingInterval {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+
+  @@map("billing_interval")
+}
+
+enum UsageMetric {
+  PEAK_DAILY
+  AVERAGE_DAILY
+  END_OF_PERIOD
+
+  @@map("usage_metric")
+}
+
+enum DailyAggregation {
+  PEAK_CONCURRENT
+  DISTINCT_ACTIVE
+
+  @@map("daily_aggregation")
+}
+
+enum ModuleOverrideEffect {
+  GRANT
+  REVOKE
+
+  @@map("module_override_effect")
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+  EXPIRED
+
+  @@map("subscription_status")
+}
+
+/// Catálogo de módulos funcionales. Fuente en código (module-catalog.ts); se siembra por migración.
+model Module {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  code        String   @unique
+  name        String
+  description String
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  planVersions PlanVersionModule[]
+  overrides    TenantModuleOverride[]
+
+  @@map("modules")
+}
+
+model Plan {
+  id          String     @id @default(uuid(7)) @db.Uuid
+  code        String     @unique
+  name        String
+  description String     @default("")
+  status      PlanStatus @default(DRAFT)
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  versions PlanVersion[]
+
+  @@map("plans")
+}
+
+/// Inmutable al publicarse (trigger; ADR-010). Solo admite PUBLISHED → RETIRED.
+model PlanVersion {
+  id               String            @id @default(uuid(7)) @db.Uuid
+  planId           String            @map("plan_id") @db.Uuid
+  version          Int
+  status           PlanVersionStatus @default(DRAFT)
+  currency         String            @db.Char(3)
+  basePrice        Decimal           @map("base_price") @db.Decimal(14, 2)
+  billingInterval  BillingInterval   @map("billing_interval")
+  includedUsers    Int               @map("included_users")
+  extraUserPrice   Decimal           @map("extra_user_price") @db.Decimal(14, 2)
+  usageMetric      UsageMetric       @default(PEAK_DAILY) @map("usage_metric")
+  dailyAggregation DailyAggregation  @default(PEAK_CONCURRENT) @map("daily_aggregation")
+  minActiveSeconds Int               @default(0) @map("min_active_seconds")
+  trialDays        Int               @default(0) @map("trial_days")
+  /// Límites del plan (sucursales, vehículos, almacenamiento GB); esquema validado. null = sin límite.
+  limits           Json              @default("{}")
+  /// Política de estados (días de gracia y de cierre); esquema validado. Por defecto, la de multitenancy §5.
+  suspensionPolicy Json              @default("{}") @map("suspension_policy")
+  publishedAt      DateTime?         @map("published_at") @db.Timestamptz(6)
+  retiredAt        DateTime?         @map("retired_at") @db.Timestamptz(6)
+  createdById      String?           @map("created_by_id") @db.Uuid
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  plan          Plan                @relation(fields: [planId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy     PlatformUser?       @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  modules       PlanVersionModule[]
+  subscriptions Subscription[]
+
+  @@unique([planId, version])
+  @@map("plan_versions")
+}
+
+model PlanVersionModule {
+  planVersionId String @map("plan_version_id") @db.Uuid
+  moduleId      String @map("module_id") @db.Uuid
+  config        Json?
+
+  planVersion PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  module      Module      @relation(fields: [moduleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([planVersionId, moduleId])
+  @@index([moduleId])
+  @@map("plan_version_modules")
+}
+
+/// Excepción temporal y auditada de YEBO sobre los módulos de un tenant (multitenancy §5.2 nota 2 y §6).
+model TenantModuleOverride {
+  id                      String               @id @default(uuid(7)) @db.Uuid
+  tenantId                String               @map("tenant_id") @db.Uuid
+  moduleId                String               @map("module_id") @db.Uuid
+  effect                  ModuleOverrideEffect
+  validFrom               DateTime             @map("valid_from") @db.Timestamptz(6)
+  validTo                 DateTime?            @map("valid_to") @db.Timestamptz(6)
+  reason                  String
+  grantedByPlatformUserId String               @map("granted_by_platform_user_id") @db.Uuid
+  endedAt                 DateTime?            @map("ended_at") @db.Timestamptz(6)
+  endedByPlatformUserId   String?              @map("ended_by_platform_user_id") @db.Uuid
+  createdAt               DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  module    Module        @relation(fields: [moduleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  grantedBy PlatformUser  @relation("OverrideGrantedBy", fields: [grantedByPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  endedBy   PlatformUser? @relation("OverrideEndedBy", fields: [endedByPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, moduleId])
+  @@map("tenant_module_overrides")
+}
+
+/// Suscripción del tenant a una versión de plan. La crea el alta de empresas (4.3); aquí se define y se lee.
+model Subscription {
+  id                 String             @id @default(uuid(7)) @db.Uuid
+  tenantId           String             @map("tenant_id") @db.Uuid
+  planVersionId      String             @map("plan_version_id") @db.Uuid
+  status             SubscriptionStatus
+  currentPeriodStart DateTime           @map("current_period_start") @db.Date
+  currentPeriodEnd   DateTime           @map("current_period_end") @db.Date
+  cancelAt           DateTime?          @map("cancel_at") @db.Timestamptz(6)
+  graceUntil         DateTime?          @map("grace_until") @db.Timestamptz(6)
+  /// Acuerdo comercial especial (auditado). F4-Q1: el cálculo del precio tiene un único punto de entrada.
+  priceOverride      Json?              @map("price_override")
+  /// TRUE o NULL (CHECK en SQL): UNIQUE(tenant_id, is_current) garantiza una sola suscripción vigente.
+  isCurrent          Boolean?           @map("is_current")
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  planVersion PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, isCurrent])
+  @@index([planVersionId])
+  @@map("subscriptions")
 }

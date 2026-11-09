@@ -1,6 +1,6 @@
 # Fase 4 — Superadmin SaaS y membresías: plan de trabajo
 
-- **Estado:** ✅ Plan **aprobado** por el responsable el 2026-11-10, con las decisiones F4-Q1 a F4-Q6 tal como se recomendaron. Etapa **4.1 implementada** (2026-11-10), pendiente de revisión.
+- **Estado:** ✅ Plan **aprobado** por el responsable el 2026-11-10, con las decisiones F4-Q1 a F4-Q6 tal como se recomendaron. Etapa **4.1 implementada**, pendiente de revisión; etapa **4.2 aprobada** (2026-11-10).
 - **Rama:** `fase-4/plan`, apilada sobre `fase-3/adr-034-privilegios` (`d21b591`). La Fase 3 sigue en revisión.
 - **Criterio de aceptación (roadmap):** crear empresa, asignar plan, medir usuarios y calcular el importe.
 - **Decisiones que se implementan:**
@@ -112,3 +112,53 @@ Dos de ellas sobrevivían a la primera versión de la suite (sin consumo atómic
 - **Rotación de `FIELD_ENCRYPTION_KEY`:** hoy solo existe la clave vigente; las anteriores se añadirán cuando haga falta rotar.
 - **Restablecer la MFA de un miembro del staff:** el enlace de configuración solo restablece la contraseña.
 - **Pantallas del panel:** etapa 4.7.
+
+## Etapa 4.2 · Catálogo comercial (implementada y aprobada el 2026-11-10)
+
+### Decisiones de implementación
+
+| Tema | Decisión | Motivo |
+|---|---|---|
+| Catálogo de módulos | Fuente única en código (`access/module-catalog.ts`). La migración siembra exactamente esos nueve módulos y una prueba compara la base con el archivo. Un módulo nuevo exige una migración nueva; el panel solo los lee | Los códigos de módulo se usan en `@RequiresModule` con tipo: no pueden aparecer ni desaparecer desde el panel |
+| Planes y versiones | `DRAFT → PUBLISHED → RETIRED`. Un borrador se edita completo (campos y módulos). Publicar exige al menos un módulo y pasa el plan a `ACTIVE`. Retirar deja de ofrecer la versión; las suscripciones existentes la conservan. El número de versión es el último + 1, con el plan bloqueado (`FOR UPDATE`) | ADR-010 |
+| Inmutabilidad | La API rechaza con `409` modificar lo que no es borrador. Además, dos triggers en la base (`SECURITY INVOKER`): en una versión publicada solo se admite `PUBLISHED → RETIRED` sin tocar ningún otro campo; sus módulos no se insertan, modifican ni borran; una versión publicada no se borra | Defensa en profundidad: la regla se cumple aunque alguien escriba sin pasar por la API |
+| Importes | `numeric(14,2)`, con dos decimales como máximo en la entrada (`"99.00"` como texto en el contrato, nunca `float`). Ningún precio lo fija el sistema | — |
+| `limits` y `suspension_policy` | `jsonb` validado con un esquema estricto en `@yebo/contracts` (sucursales, vehículos y GB, con `null` = sin límite; 7 días de gracia y 30 de cierre por defecto) y `CHECK` de objeto en la base | Data-dictionary |
+| Suscripción vigente | `is_current` (TRUE o NULL, con `CHECK`) y `UNIQUE (tenant_id, is_current)`, en vez del índice único parcial por estado del diccionario | Prisma no representa índices parciales y la prueba de deriva (ADR-024) los rechazaría. Una sola fila vigente por tenant, con la misma garantía. La tabla se crea ya con RLS, pero las suscripciones las crea el alta de empresas (4.3) |
+| Excepciones de módulo | `GRANT` o `REVOKE`, con inicio (por defecto, ahora), fin opcional y motivo obligatorio. No se borran: se **terminan** (`ended_at`, `ended_by_platform_user_id`) y quedan en el historial. Las escribe `yebo_backoffice` con el contexto del tenant fijado (`BackofficePrismaService.withTenant`), así que el RLS forzado sigue activo | ADR-025 y ADR-034: sin BYPASSRLS |
+| Módulos efectivos | `(módulos del plan vigente ∪ GRANT vigentes) − REVOKE vigentes`, solo con módulos activos. Una consulta con `yebo_app` en el contexto del tenant, una vez por petición (caché en el contexto de la petición). `GET /auth/session` devuelve la lista para que la interfaz oculte lo no habilitado | Multitenancy §6. **La intersección con `tenant_services` llega con la 4.3**, que crea esa tabla |
+| `@RequiresModule` | Guard global después del de permisos y antes del de estado del tenant. Una ruta de un módulo no habilitado responde `403 MODULE_NOT_ENABLED`. Solo se admite en rutas de empresa protegidas (si no, error de programación) | La autoridad es el backend |
+| Reloj | `Clock` pasa a un `ClockModule` propio, importado por la API, para que `access` y `platform-admin` lo usen sin depender de `identity` | Pruebas con el reloj controlado |
+| Rutas del panel | `GET modules`, `GET plans` (`platform.billing.read`); `POST plans`, `POST plans/:id/versions`, `PUT plan-versions/:id`, `POST plan-versions/:id/publish` y `/retire` (`platform.plans.manage`: SUPERADMIN y BILLING); `GET`, `POST tenants/:id/module-overrides` y `POST …/:overrideId/end` (`platform.tenants.read` / `.manage`). Todo cambio queda en `platform_audit_logs` en la misma transacción | — |
+
+### Base de datos
+
+- **Migración `20261110170000_fase4_2_commercial_catalog`:** crea `modules`, `plans`, `plan_versions` y `plan_version_modules` (globales 🌐), y `tenant_module_overrides` y `subscriptions` (de tenant, con RLS forzado). Incluye los `CHECK` de formato de códigos, moneda, importes no negativos, coherencia estado-fechas, ventana de las excepciones y suscripción vigente; los dos triggers de inmutabilidad; y la siembra de los nueve módulos. La reversión está en su cabecera.
+- **Privilegios (lista blanca, ADR-034):**
+  - `yebo_backoffice`: SELECT en `modules`, `tenants` y `subscriptions`; SELECT, INSERT y UPDATE en `plans`, `plan_versions` y `tenant_module_overrides`; SELECT, INSERT y DELETE en `plan_version_modules` (el trigger solo deja borrar los de un borrador). Sin DELETE en versiones ni excepciones.
+  - `yebo_app`: SELECT en `modules`, `plan_version_modules`, `subscriptions` y `tenant_module_overrides`, solo para calcular los módulos efectivos de su tenant (RLS).
+- **Tablas de tenant:** `TENANT_SCOPED_TABLES` reúne ahora la lista que antes se repetía en cuatro pruebas (cobertura de RLS, rutas de migración, aislamiento y privilegios).
+
+### Pruebas
+
+| Suite | Contenido | Resultado |
+|---|---|---|
+| `platform-catalog.int-spec` (13) | Siembra igual a `module-catalog.ts`; permisos por rol; ciclo borrador → publicada → retirada; numeración y publicación sin módulos; validación (3 decimales, moneda, módulo inexistente); el trigger rechaza modificar una publicada y sus módulos aunque se escriba directamente en la base; retirar una sola vez; auditoría. Módulos efectivos: sin excepciones; GRANT vigente que vence a su fin; REVOKE futuro que aún no quita y quita al llegar su inicio; REVOKE gana sobre GRANT; excepción terminada; aislamiento de las excepciones y suscripciones entre tenants (API y `yebo_app` con RLS); ruta de un módulo no contratado → `403` y, con el GRANT, → `200` | ✅ |
+| `privileges.int-spec`, `tenancy.int-spec`, `migration-paths.int-spec` | Los permisos nuevos en la matriz versionada; las dos tablas de tenant en la cobertura de RLS y en las rutas de migración | ✅ |
+| Integración completa | 15 suites y 267 pruebas | ✅ |
+| Unitarias, lint, typecheck y build | 117 unitarias | ✅ |
+
+**Mutaciones detectadas (11):**
+- en el guard: no comprobar el módulo;
+- en los módulos efectivos: REVOKE no resta; sin inicio de vigencia; sin fin de vigencia; las excepciones terminadas siguen contando;
+- en los planes: editar una publicada; publicar sin módulos; retirar dos veces; sin auditoría al publicar;
+- en las excepciones: fin anterior al inicio; terminar dos veces.
+
+«Sin fin de vigencia» sobrevivía a la primera versión de la suite: ninguna prueba usaba un GRANT con fin. Se añadió y ahora se detecta.
+
+### Pendiente
+
+- **Clúster de desarrollo:** ✅ migración aplicada a `yebo_dev` el 2026-11-10 con autorización del responsable, tras una copia de la base (`pg_dump`, fuera del repositorio). Nueve módulos sembrados, RLS forzado en las dos tablas de tenant; la API arranca y responde `live` y `ready` contra `yebo_dev`.
+- **`tenant_services`** y su intersección con los módulos del plan: etapa 4.3.
+- **Límites del plan** (sucursales, vehículos, almacenamiento): se guardan y validan como datos; su aplicación al crear recursos llega con cada módulo que los cree.
+- **`config` de `plan_version_modules`:** la columna existe, pero la API aún no la expone.

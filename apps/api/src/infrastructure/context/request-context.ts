@@ -14,6 +14,8 @@ export interface RequestContextStore extends ClsStore {
   principal?: Principal;
   /** Permisos efectivos de la membresía, cargados una sola vez por request (PermissionService). */
   permissions?: ReadonlySet<string>;
+  /** Módulos efectivos del tenant, calculados una sola vez por request (EffectiveModulesService, Fase 4.2). */
+  modules?: ReadonlySet<string>;
   /** Miembro del staff de YEBO verificado en este request (PlatformGuard, Fase 4.1). Nunca coexiste con `principal`. */
   platformPrincipal?: PlatformPrincipal;
 }

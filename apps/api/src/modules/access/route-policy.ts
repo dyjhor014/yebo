@@ -3,6 +3,7 @@ import type { Reflector } from '@nestjs/core';
 import type { ExecutionContext } from '@nestjs/common';
 import { AppError } from '../../common/errors/app-error';
 import type { PlatformPermission } from '../platform-admin/platform-permissions';
+import type { ModuleCode } from './module-catalog';
 import type { PermissionCode } from './permission-catalog';
 import type { TenantOperationCategory } from './tenant-operation';
 
@@ -16,6 +17,7 @@ const PERMISSION = 'yebo:access:permission';
 const AUTHENTICATED_ONLY = 'yebo:access:authenticated-only';
 const OPERATION = 'yebo:access:operation';
 const PLATFORM = 'yebo:access:platform';
+const MODULE = 'yebo:access:module';
 
 /**
  * Dónde vive una ruta pública:
@@ -44,6 +46,21 @@ export const TenantOperation = (category: TenantOperationCategory): MethodDecora
 /** Atajo para rutas protegidas por permiso: siempre van juntos el permiso y la categoría. */
 export const Protected = (code: PermissionCode, category: TenantOperationCategory) =>
   applyDecorators(RequirePermission(code), TenantOperation(category));
+
+/**
+ * Exige que el tenant tenga habilitado el módulo (multitenancy §6; Fase 4.2): plan contratado + excepciones vigentes
+ * de YEBO. Solo en rutas de empresa protegidas; se comprueba después del permiso y antes del estado del tenant.
+ */
+export const RequiresModule = (code: ModuleCode): MethodDecorator & ClassDecorator =>
+  SetMetadata(MODULE, code);
+
+/** Módulo exigido por la ruta (o `null`). */
+export function requiredModuleOf(reflector: Reflector, context: ExecutionContext): ModuleCode | null {
+  return (
+    reflector.getAllAndOverride<ModuleCode | undefined>(MODULE, [context.getHandler(), context.getClass()]) ??
+    null
+  );
+}
 
 /**
  * Ruta de PLATAFORMA (Fase 4.1): host del panel, sesión del staff con MFA y un permiso de plataforma. Nunca acepta

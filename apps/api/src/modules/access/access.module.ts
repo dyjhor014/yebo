@@ -7,6 +7,7 @@ import { PlatformAdminModule } from '../platform-admin/platform-admin.module';
 import { TenancyModule } from '../tenancy/tenancy.module';
 import { TenantHostGuard } from '../tenancy/tenant-host.guard';
 import { MembersController, RolesController } from './http/members.controller';
+import { ModuleGuard } from './http/module.guard';
 import { PermissionGuard } from './http/permission.guard';
 import { TenantStatusGuard } from './http/tenant-status.guard';
 import { MembersService } from './members.service';
@@ -19,6 +20,7 @@ import { RolesService } from './roles.service';
  *   1. TenantHostGuard     · tenant por host (ADR-004)
  *   2. AuthenticationGuard · access token + sesión en PostgreSQL + versión de permisos (+ CSRF en mutaciones)
  *   3. PermissionGuard     · `@RequirePermission`
+ *   3b. ModuleGuard        · `@RequiresModule` contra los módulos efectivos del tenant (Fase 4.2)
  *   4. TenantStatusGuard   · `@TenantOperation` contra la matriz de estados (ADR-023)
  * Denegar por defecto: toda ruta sin `@Public(...)` pasa por los cuatro. ESLint prohíbe registrar APP_GUARD
  * fuera de este archivo.
@@ -31,6 +33,7 @@ import { RolesService } from './roles.service';
     { provide: APP_GUARD, useClass: TenantHostGuard },
     { provide: APP_GUARD, useClass: AuthenticationGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
+    { provide: APP_GUARD, useClass: ModuleGuard },
     { provide: APP_GUARD, useClass: TenantStatusGuard },
     MembersService,
     RolesService,
