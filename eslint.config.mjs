@@ -34,7 +34,8 @@ export default tseslint.config(
   {
     // El cliente Prisma de plataforma (BYPASSRLS) solo puede usarse desde módulos autorizados (multitenancy §3).
     files: ['apps/api/src/modules/**/*.ts'],
-    ignores: ['apps/api/src/modules/health/**'],
+    // Módulos de plataforma autorizados a usar PlatformPrismaService (omite RLS). Añadir uno exige revisión.
+    ignores: ['apps/api/src/modules/health/**', 'apps/api/src/modules/tenancy/**'],
     rules: {
       'no-restricted-imports': [
         'error',

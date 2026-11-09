@@ -1,6 +1,22 @@
 /**
- * Registro de modelos Prisma con columna tenant_id.
- * Fase 2: vacío (aún no hay modelos de negocio). A partir de la Fase 3, una prueba de integración
- * verificará que toda tabla con tenant_id esté registrada aquí y tenga RLS habilitado y forzado.
+ * Registro de modelos Prisma con columna tenant_id (multitenancy §3–4).
+ *
+ * - TENANT_SCOPED_MODELS: tablas de tenant. Pasan por las dos barreras: filtro de la extensión Prisma
+ *   y RLS forzado. Una prueba unitaria verifica que todo modelo con `tenantId` del esquema esté aquí
+ *   (o en la lista de excepciones), y las pruebas de integración verifican RLS en sus tablas.
+ * - GLOBAL_MODELS_WITH_TENANT_ID: excepciones explícitas. Tablas globales (multitenancy §4.3) que
+ *   referencian a un tenant pero deben leerse SIN contexto de tenant. Sin RLS de tenant y sin acceso
+ *   para yebo_app; solo las usa la plataforma (yebo_platform).
  */
-export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set<string>([]);
+export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set<string>([
+  'TenantMembership',
+  'Role',
+  'RolePermission',
+  'MembershipRole',
+]);
+
+/** tenant_domains: el resolver la consulta para DESCUBRIR el tenant a partir del host (ADR-004). */
+export const GLOBAL_MODELS_WITH_TENANT_ID: ReadonlySet<string> = new Set<string>(['TenantDomain']);
+
+/** Nombres de tabla equivalentes, para las verificaciones sobre el catálogo de PostgreSQL. */
+export const GLOBAL_TABLES_WITH_TENANT_ID: readonly string[] = ['tenant_domains'];

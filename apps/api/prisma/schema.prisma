@@ -13,3 +13,232 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+// ============================================================================
+// Fase 3.1 · Plataforma: tenants y dominios (tablas globales 🌐, sin RLS de tenant)
+// ============================================================================
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+  EXPIRED
+
+  @@map("tenant_status")
+}
+
+enum TenantDomainKind {
+  SUBDOMAIN
+  CUSTOM
+
+  @@map("tenant_domain_kind")
+}
+
+enum DomainVerificationStatus {
+  PENDING
+  VERIFIED
+  FAILED
+
+  @@map("domain_verification_status")
+}
+
+/// 🌐 Empresa cliente. Su estado solo cambia por la máquina de estados (Fase 4).
+model Tenant {
+  id              String       @id @default(uuid(7)) @db.Uuid
+  slug            String       @unique @db.Citext
+  legalName       String       @map("legal_name")
+  tradeName       String       @map("trade_name")
+  taxIdType       String       @map("tax_id_type")
+  taxId           String       @map("tax_id")
+  fiscalAddress   String?      @map("fiscal_address")
+  phones          Json         @default("[]")
+  emails          Json         @default("[]")
+  status          TenantStatus @default(TRIAL)
+  timezone        String       @default("America/Lima")
+  defaultCurrency String       @default("PEN") @map("default_currency") @db.Char(3)
+  trialEndsAt     DateTime?    @map("trial_ends_at") @db.Timestamptz(6)
+  activatedAt     DateTime?    @map("activated_at") @db.Timestamptz(6)
+  cancelledAt     DateTime?    @map("cancelled_at") @db.Timestamptz(6)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  domains     TenantDomain[]
+  memberships TenantMembership[]
+  roles       Role[]
+
+  @@unique([taxIdType, taxId])
+  @@map("tenants")
+}
+
+/// 🌐 Host → tenant. Solo los dominios VERIFIED resuelven un tenant (ADR-004).
+model TenantDomain {
+  id                 String                   @id @default(uuid(7)) @db.Uuid
+  tenantId           String                   @map("tenant_id") @db.Uuid
+  host               String                   @unique @db.Citext
+  kind               TenantDomainKind
+  /// TRUE o NULL (CHECK en SQL): UNIQUE(tenant_id, is_primary) garantiza un único dominio principal.
+  isPrimary          Boolean?                 @map("is_primary")
+  verificationStatus DomainVerificationStatus @default(PENDING) @map("verification_status")
+  verifiedAt         DateTime?                @map("verified_at") @db.Timestamptz(6)
+  createdAt          DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, isPrimary])
+  @@index([tenantId])
+  @@map("tenant_domains")
+}
+
+// ============================================================================
+// Fase 3.1 · Identidad y acceso (D3: identidad global + membresías por tenant)
+// ============================================================================
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+  LOCKED
+
+  @@map("user_status")
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REVOKED
+
+  @@map("membership_status")
+}
+
+enum MembershipKind {
+  HUMAN
+
+  @@map("membership_kind")
+}
+
+/// 🌐 Identidad global: solo los datos necesarios para autenticar. yebo_app no tiene acceso.
+model User {
+  id                String     @id @default(uuid(7)) @db.Uuid
+  email             String     @unique @db.Citext
+  emailVerifiedAt   DateTime?  @map("email_verified_at") @db.Timestamptz(6)
+  passwordHash      String     @map("password_hash")
+  fullName          String     @map("full_name")
+  mfaEnabled        Boolean    @default(false) @map("mfa_enabled")
+  status            UserStatus @default(ACTIVE)
+  lastLoginAt       DateTime?  @map("last_login_at") @db.Timestamptz(6)
+  passwordChangedAt DateTime   @default(now()) @map("password_changed_at") @db.Timestamptz(6)
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  memberships TenantMembership[]
+
+  @@map("users")
+}
+
+/// Membresía del usuario en una empresa. Roles y permisos cuelgan de la membresía, no del usuario.
+model TenantMembership {
+  id                 String           @id @default(uuid(7)) @db.Uuid
+  tenantId           String           @map("tenant_id") @db.Uuid
+  userId             String           @map("user_id") @db.Uuid
+  status             MembershipStatus @default(INVITED)
+  kind               MembershipKind   @default(HUMAN)
+  /// Solo modificable por la plataforma (D5).
+  billable           Boolean          @default(true)
+  displayName        String?          @map("display_name")
+  /// Se incrementa al cambiar roles o permisos: invalida tokens con otra versión (`ver`).
+  permissionsVersion Int              @default(1) @map("permissions_version")
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user   User             @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  roles  MembershipRole[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, userId])
+  @@index([userId])
+  @@map("tenant_memberships")
+}
+
+/// 🌐 Catálogo global de permisos (`shipments.deliver`, `customers.pii.read`…).
+model Permission {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  code        String   @unique
+  moduleCode  String   @map("module_code")
+  description String
+  isSensitive Boolean  @default(false) @map("is_sensitive")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+/// 🌐 Plantillas de rol de la plataforma (Administrador, Cajero, Almacenero…).
+model RoleTemplate {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  code            String   @unique
+  name            String
+  permissionCodes String[] @map("permission_codes")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  roles Role[]
+
+  @@map("role_templates")
+}
+
+/// Rol de un tenant, creado desde una plantilla o propio.
+model Role {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  name       String
+  templateId String?   @map("template_id") @db.Uuid
+  isSystem   Boolean   @default(false) @map("is_system")
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  template    RoleTemplate?    @relation(fields: [templateId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  permissions RolePermission[]
+  memberships MembershipRole[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, name])
+  @@map("roles")
+}
+
+model RolePermission {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  roleId       String   @map("role_id") @db.Uuid
+  permissionId String   @map("permission_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  /// FK compuesta: el rol debe pertenecer al MISMO tenant.
+  role       Role       @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Cascade, onUpdate: Restrict)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([tenantId, roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model MembershipRole {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  membershipId String   @map("membership_id") @db.Uuid
+  roleId       String   @map("role_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  /// FK compuestas: membresía y rol deben pertenecer al MISMO tenant.
+  membership TenantMembership @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Cascade, onUpdate: Restrict)
+  role       Role             @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([tenantId, membershipId, roleId])
+  @@index([tenantId, roleId])
+  @@map("membership_roles")
+}
