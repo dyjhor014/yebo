@@ -353,9 +353,20 @@ La 4.3 se divide en dos partes, cada una con sus pruebas: **4.3a** (alta de empr
 | Panel | `GET /platform/tenants/:id/usage?from&to` (`platform.billing.read`, como mucho 93 días): días `FINAL` y el día en curso `PROVISIONAL` | Pantalla de consumo de la 4.7 |
 | `yebo_metering` | Rol nuevo, sin `BYPASSRLS`. SELECT en `tenants`, `membership_status_history`, `subscriptions` y `plan_versions`; SELECT e INSERT en `usage_daily_snapshots`. Lo usan solo el worker y la frontera 5 de ESLint (`MeteringPrismaService`, solo en `modules/metering`). La API arranca sin su contraseña | F4-Q2 |
 
-### Desviación pendiente de decisión
+### Autor de cada cambio (decisión del responsable, 2026-11-10)
 
-El diccionario de datos prevé `changed_by_kind`, `changed_by_id` y `reason` en `membership_status_history`. **No se implementaron:** un trigger no conoce al autor del cambio. Para registrarlo habría que pasar el actor por una variable de transacción (como `app.tenant_id`) desde cada servicio, que es justo lo que los triggers evitan olvidar. Hoy el autor queda en los registros de cada operación (auditoría del staff, logs de la empresa).
+`changed_by_kind` (`MEMBERSHIP`, `USER`, `PLATFORM_USER` o `SYSTEM`), `changed_by_id` y `reason`, en la migración `20261111000000_fase4_4_history_actor`.
+
+- **Cómo se declara:** cada servicio declara el autor en la transacción del cambio (`declareChangeActor`: variables `app.actor_kind`, `app.actor_id` y `app.change_reason`), y los triggers lo copian a cada fila.
+- **Quién lo declara hoy:**
+  - suspender o reactivar desde la empresa: `MEMBERSHIP`, con la membresía que actúa;
+  - aceptar una invitación: `USER`, con la persona que acepta.
+- **Nunca sin autor:** si un rol de ejecución cambia una membresía o un usuario sin declararlo (o sin su id), la base lo rechaza. Solo el propietario (migraciones) y un rol con `BYPASSRLS` (pruebas; nunca en producción) quedan como `SYSTEM`, igual que las filas del arranque de la medición.
+- **Coherencia:** un `CHECK` impone que solo `SYSTEM` va sin id.
+- **Pruebas:**
+  - cambio sin autor y sin su id rechazados;
+  - autor registrado al suspender por la API y al aceptar una invitación;
+  - 3 mutaciones detectadas (no exigir el autor, no exigir su id, no copiarlo).
 
 ### Base de datos
 
@@ -395,6 +406,5 @@ El diccionario de datos prevé `changed_by_kind`, `changed_by_id` y `reason` en 
 
 ### Pendiente
 
-- Decidir la desviación del autor del cambio (sección anterior).
-- Aplicar la migración a `yebo_dev`, con autorización y copia previa.
+- ✅ Migraciones aplicadas a `yebo_dev` (con copia previa).
 - 4.5: la zona horaria del período sustituye a la de la empresa.

@@ -851,6 +851,15 @@ model MembershipInvitation {
 // Fase 4.4 · Medición de usuarios (billing §1–4; D5; ADR-016)
 // ---------------------------------------------------------------------------------------------------------------
 
+enum MembershipChangeActor {
+  MEMBERSHIP
+  USER
+  PLATFORM_USER
+  SYSTEM
+
+  @@map("membership_change_actor")
+}
+
 enum UsageSnapshotStatus {
   PROVISIONAL
   FINAL
@@ -862,16 +871,20 @@ enum UsageSnapshotStatus {
 /// cambio de la membresía o del usuario; nunca la aplicación. EXCLUDE (sin solapes), guarda (sin fechas retroactivas,
 /// sin DELETE, solo se cierra la vigente) y CHECK de effective_billable, en SQL.
 model MembershipStatusHistory {
-  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId          String           @map("tenant_id") @db.Uuid
-  membershipId      String           @map("membership_id") @db.Uuid
-  userId            String           @map("user_id") @db.Uuid
+  id                String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String                @map("tenant_id") @db.Uuid
+  membershipId      String                @map("membership_id") @db.Uuid
+  userId            String                @map("user_id") @db.Uuid
   status            MembershipStatus
   billable          Boolean
-  userActive        Boolean          @map("user_active")
-  effectiveBillable Boolean          @map("effective_billable")
-  validFrom         DateTime         @map("valid_from") @db.Timestamptz(6)
-  validTo           DateTime?        @map("valid_to") @db.Timestamptz(6)
+  userActive        Boolean               @map("user_active")
+  effectiveBillable Boolean               @map("effective_billable")
+  validFrom         DateTime              @map("valid_from") @db.Timestamptz(6)
+  validTo           DateTime?             @map("valid_to") @db.Timestamptz(6)
+  /// Autor del cambio: lo declara cada servicio en la transacción (app.actor_kind / app.actor_id / app.change_reason).
+  changedByKind     MembershipChangeActor @map("changed_by_kind")
+  changedById       String?               @map("changed_by_id") @db.Uuid
+  reason            String?
 
   membership TenantMembership @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
   user       User             @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)

@@ -251,6 +251,13 @@ describe('Fase 4.3b · invitaciones de membresía', () => {
         [tenant.id, user.rows[0]?.id],
       );
       expect(membership.rows).toEqual([{ status: 'ACTIVE', name: 'Administrador' }]);
+      // Historial de medición (Fase 4.4): el alta tiene como autora a la persona que aceptó.
+      const history = await seed.query(
+        `SELECT changed_by_kind::text AS kind, changed_by_id AS id, reason FROM membership_status_history
+          WHERE tenant_id = $1 AND user_id = $2`,
+        [tenant.id, user.rows[0]?.id],
+      );
+      expect(history.rows).toEqual([{ kind: 'USER', id: user.rows[0]?.id, reason: 'invitation.accepted' }]);
 
       // La sesión del hub que abre el registro ya ve la empresa.
       const cookie = (res.headers['set-cookie'] as unknown as string[]).find((c) =>

@@ -27,6 +27,8 @@ import { seedPlatformSession } from '../support/platform-session';
 
 const DB = 'yebo_test';
 const HOUR = 3_600_000;
+/** Membresía ficticia que actúa como autora de un cambio (el historial no exige que exista). */
+const ACTOR = '0190f0a0-0000-7000-8000-00000000ac70';
 
 class FakeClock extends Clock {
   constructor(public current: Date) {
@@ -100,8 +102,8 @@ describe('Fase 4.4 · medición de usuarios', () => {
   ) => {
     await c.query(
       `INSERT INTO membership_status_history (tenant_id, membership_id, user_id, status, billable, user_active,
-                                              effective_billable, valid_from, valid_to)
-       VALUES ($1, $2, $3, $4, true, true, $5, $6, $7)`,
+                                              effective_billable, valid_from, valid_to, changed_by_kind)
+       VALUES ($1, $2, $3, $4, true, true, $5, $6, $7, 'SYSTEM')`,
       [tenantId, p.membershipId, p.userId, billable ? 'ACTIVE' : 'SUSPENDED', billable, from, to],
     );
   };
@@ -224,8 +226,8 @@ describe('Fase 4.4 · medición de usuarios', () => {
         await interval(c, t, b!, '2026-11-01T05:00Z', null, false);
         await c.query(
           `INSERT INTO membership_status_history (tenant_id, membership_id, user_id, status, billable, user_active,
-                                                  effective_billable, valid_from)
-           VALUES ($1, $2, $3, 'ACTIVE', true, false, false, '2026-11-01T05:00Z')`,
+                                                  effective_billable, valid_from, changed_by_kind)
+           VALUES ($1, $2, $3, 'ACTIVE', true, false, false, '2026-11-01T05:00Z', 'SYSTEM')`,
           [t, d!.membershipId, d!.userId],
         );
       });
@@ -397,8 +399,29 @@ describe('Fase 4.4 · medición de usuarios', () => {
       const app = testPool('app', DB, 1);
       const c = await app.connect();
       try {
+        // Sin declarar el autor, la base rechaza el cambio.
         await c.query('BEGIN');
         await c.query("SELECT set_config('app.tenant_id', $1, true)", [t]);
+        await expect(
+          c.query("UPDATE tenant_memberships SET status = 'SUSPENDED' WHERE id = $1", [membershipId]),
+        ).rejects.toMatchObject({ code: 'P0001' });
+        await c.query('ROLLBACK');
+        // Un autor de empresa sin id, tampoco.
+        await c.query('BEGIN');
+        await c.query(
+          "SELECT set_config('app.tenant_id', $1, true), set_config('app.actor_kind', 'MEMBERSHIP', true)",
+          [t],
+        );
+        await expect(
+          c.query("UPDATE tenant_memberships SET status = 'SUSPENDED' WHERE id = $1", [membershipId]),
+        ).rejects.toMatchObject({ code: 'P0001' });
+        await c.query('ROLLBACK');
+        await c.query('BEGIN');
+        await c.query(
+          `SELECT set_config('app.tenant_id', $1, true), set_config('app.actor_kind', 'MEMBERSHIP', true),
+                  set_config('app.actor_id', $2, true), set_config('app.change_reason', 'members.suspend', true)`,
+          [t, ACTOR],
+        );
         await c.query("UPDATE tenant_memberships SET status = 'SUSPENDED' WHERE id = $1", [membershipId]);
         await c.query('COMMIT');
       } finally {
@@ -409,6 +432,16 @@ describe('Fase 4.4 · medición de usuarios', () => {
       expect(rows).toHaveLength(2);
       expect(rows[0]?.to?.getTime()).toBe(rows[1]?.from.getTime());
       expect(rows[1]).toMatchObject({ status: 'SUSPENDED', effective: false, user_active: true, to: null });
+      const actor = await seed.query(
+        `SELECT changed_by_kind::text AS kind, changed_by_id AS id, reason FROM membership_status_history
+          WHERE membership_id = $1 ORDER BY valid_from, valid_to NULLS LAST`,
+        [membershipId],
+      );
+      // La fila del alta (rol de pruebas) es SYSTEM; la de la suspensión lleva su autor.
+      expect(actor.rows).toEqual([
+        { kind: 'SYSTEM', id: null, reason: null },
+        { kind: 'MEMBERSHIP', id: ACTOR, reason: 'members.suspend' },
+      ]);
     });
 
     it('si el cambio se deshace, el historial también (misma transacción)', async () => {
@@ -499,8 +532,8 @@ describe('Fase 4.4 · medición de usuarios', () => {
         ],
         [
           `INSERT INTO membership_status_history (tenant_id, membership_id, user_id, status, billable, user_active,
-                                                  effective_billable, valid_from)
-           VALUES ($1, $2, $3, 'ACTIVE', true, true, true, now() - interval '1 hour')`,
+                                                  effective_billable, valid_from, changed_by_kind)
+           VALUES ($1, $2, $3, 'ACTIVE', true, true, true, now() - interval '1 hour', 'SYSTEM')`,
           [t, membershipId, userId],
         ],
       ] as const) {
@@ -510,8 +543,8 @@ describe('Fase 4.4 · medición de usuarios', () => {
       await expect(
         seed.query(
           `INSERT INTO membership_status_history (tenant_id, membership_id, user_id, status, billable, user_active,
-                                                  effective_billable, valid_from)
-           VALUES ($1, $2, $3, 'SUSPENDED', true, true, true, now())`,
+                                                  effective_billable, valid_from, changed_by_kind)
+           VALUES ($1, $2, $3, 'SUSPENDED', true, true, true, now(), 'SYSTEM')`,
           [t, uuid(), userId],
         ),
       ).rejects.toMatchObject({ code: '23514' });

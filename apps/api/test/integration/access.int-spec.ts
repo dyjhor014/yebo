@@ -366,6 +366,15 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
         [m.A.beto],
       );
       expect(live.rowCount).toBe(0);
+      // Historial de medición (Fase 4.4): la suspensión queda con su autor, la membresía de Ana.
+      const history = await seed.query(
+        `SELECT status::text, changed_by_kind::text AS kind, changed_by_id AS id, reason
+           FROM membership_status_history WHERE membership_id = $1 AND valid_to IS NULL`,
+        [m.A.beto],
+      );
+      expect(history.rows).toEqual([
+        { status: 'SUSPENDED', kind: 'MEMBERSHIP', id: m.A.ana, reason: 'members.suspend' },
+      ]);
       // Suspender dos veces es un conflicto, no un éxito silencioso.
       expect((await call('POST', `/api/v1/members/${m.A.beto}/suspend`, { token: ana.token })).status).toBe(
         409,

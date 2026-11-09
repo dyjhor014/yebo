@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { HubInvitationAccepted, HubInvitationPreview } from '@yebo/contracts';
 import { AppError } from '../../common/errors/app-error';
 import { Prisma } from '../../generated/prisma/client';
+import { declareChangeActor } from '../../infrastructure/database/change-actor';
 import { isOperationAllowed, tenantPhase } from '../access/tenant-operation';
 import { TenantResolverService } from '../tenancy/tenant-resolver.service';
 import { Clock } from './clock';
@@ -175,6 +176,9 @@ export class InvitationAcceptanceService {
                   select: { id: true },
                 })
               ).id;
+
+        // Autor para el historial de medición: la persona que acepta su invitación.
+        await declareChangeActor(tx, { kind: 'USER', id: userId, reason: 'invitation.accepted' });
 
         const roles = await tx.role.findMany({
           where: { id: { in: invitation.role_ids }, archivedAt: null },
