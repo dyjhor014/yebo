@@ -673,3 +673,11 @@ La maqueta v2 se aprobó el 2026-11-10. La implementación se divide en tres par
   - el detector solo repite los falsos positivos ya documentados.
 - **Móvil del panel (pedido después):** el carril pasa a ser una barra superior con «Menú», que abre la navegación y la sesión en vertical. Se cierra al navegar y con Esc, devolviendo el foco al botón. Antes era una franja que se desplazaba en horizontal y cortaba «Staff de YEBO». El E2E del proyecto `movil` lo comprueba. En el formulario, los servicios de Terrestre y Fluvial van en dos columnas también en móvil.
 
+## Etapa 4.8 · Cierre (2026-11-10)
+
+- **Criterio de la Fase 4 cumplido:** «crear empresa, asignar plan, medir usuarios y calcular el importe».
+  - **Prueba:** `apps/api/test/integration/phase4-criterion.int-spec.ts`, de extremo a extremo por la API real, con un reloj de prueba que avanza noche a noche y los jobs del worker en su orden.
+  - **Escenario:** un mes con altas, suspensiones, una reactivación y un reemplazo en la misma operación. Pico diario 10 → factura de S/ 174.00. Después, vencimiento → PAST_DUE y pago → «Al día».
+  - **CI:** forma parte de `pnpm test:integration`.
+- **Resultados, totales, hallazgo del reloj del historial y pendientes consolidados:** [phase-4-results.md](phase-4-results.md).
+

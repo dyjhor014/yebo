@@ -1,6 +1,6 @@
 # Estado del proyecto — YEBO
 
-**Última actualización:** 2026-11-10 (Fase 4.6)
+**Última actualización:** 2026-11-10 (Fase 4.8, cierre de la Fase 4)
 
 ## Fase actual
 
@@ -19,7 +19,17 @@ La **3.4** (cierre: aislamiento de extremo a extremo y medición del coste de un
 
 **ADR-034 aplicado** y **regla de §4.2 adoptada** (2026-11-10), en la rama `fase-3/adr-034-privilegios`, sin commit. `yebo_platform` ya no salta RLS. El clúster de desarrollo está endurecido y **`yebo_dev` migrada** (7 migraciones).
 
-**Fase 4 en curso** (rama `fase-4/plan`). El plan de 8 etapas está **aprobado** (F4-Q1 a Q6) y la **etapa 4.1 (staff de YEBO con MFA)** está implementada, pendiente de revisión. Su migración y el rol `yebo_backoffice` ya están **aplicados** al clúster de desarrollo. La **etapa 4.2 (catálogo comercial: planes y versiones inmutables, excepciones de módulo, módulos efectivos y `@RequiresModule`)** está **aprobada** (2026-11-10) y en un commit local; su migración ya está **aplicada** a `yebo_dev`. La **etapa 4.3a (alta de empresas, servicios, máquina de estados con historial, job de estados en el worker y excepción de `USERS_ADD`)** está **aprobada** y en un commit local. La **4.3b (invitaciones: primer administrador en el alta, invitaciones de la empresa y aceptación en el hub creando la cuenta si no existe)** está **aprobada** y en un commit local. La **4.4 (medición de usuarios: historial escrito por triggers, valor diario de billing §3, snapshots FINAL con el rol nuevo `yebo_metering` y consumo en el panel)** está **aprobada** y en un commit local; el rol ya existe en el clúster de desarrollo. La **4.5 (períodos, importe y cobro: cierre con todos los días, precio único con excepción comercial, facturas inmutables, pagos manuales, vencimiento → PAST_DUE y reactivación al pagar, «Obligaciones con YEBO», y cambio de plan: upgrade desde el día con prorrateo, downgrade desde el período siguiente)** está **aprobada**, en un commit local y migrada a `yebo_dev`. La **4.6 (acceso de soporte: accesos temporales con motivo, código de un solo uso para abrir la sesión en la empresa, READ_ONLY, aprobación opcional, registro de cada petición visible para la empresa)** está **aprobada**, en un commit local y migrada a `yebo_dev`. **Push y PR de la Fase 4 en espera** por decisión del responsable (la rama arrastra los commits de la Fase 3 sin subir). [phase-4-plan.md](docs/development/phase-4-plan.md).
+**Fase 4 implementada (4.1–4.8), pendiente de revisión** (rama `fase-4/plan`, solo commits locales). **Criterio de aceptación cumplido:** una prueba de extremo a extremo crea la empresa, le asigna el plan, mide sus usuarios durante un mes y calcula la factura (S/ 174.00), en la CI como parte de `pnpm test:integration`. Incluye:
+- el staff con MFA;
+- el catálogo comercial;
+- el alta y los estados de las empresas;
+- las invitaciones;
+- la medición diaria;
+- los períodos, las facturas, los pagos (con su anulación) y el cambio de plan;
+- el acceso de soporte;
+- el panel del staff (`apps/platform`), con E2E de Playwright y axe.
+
+Todas las migraciones están aplicadas a `yebo_dev` con copia previa. Hay además un modo HTTPS local para probar desde la red (`pnpm https:up`). **Push y PR en espera** por decisión del responsable. Resultados en [phase-4-results.md](docs/development/phase-4-results.md); plan en [phase-4-plan.md](docs/development/phase-4-plan.md).
 
 La Fase 2 sigue en revisión mediante el PR #1, sin merge. Orden de integración previsto: #1 → #3 → #2.
 
