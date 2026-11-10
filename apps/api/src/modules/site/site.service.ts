@@ -74,6 +74,7 @@ export class SiteService {
     assertPublishable(config);
     await this.db.transaction(async (tx) => {
       await this.lock(tx);
+      await assertAssets(tx, config);
       const draft = await tx.siteVersion.findFirst({ where: { status: 'DRAFT' }, select: { id: true } });
       const json = config as unknown as Prisma.InputJsonValue;
       if (draft) {
@@ -107,7 +108,9 @@ export class SiteService {
         select: { id: true, config: true },
       });
       if (!draft) throw new AppError('CONFLICT', 'No hay un borrador que publicar', 409);
-      assertPublishable(parseStored(draft.config));
+      const config = parseStored(draft.config);
+      assertPublishable(config);
+      await assertAssets(tx, config);
       await archivePublished(tx);
       await tx.siteVersion.update({
         where: { id: draft.id },
@@ -159,6 +162,7 @@ export class SiteService {
       }
       const config = parseStored(source.config);
       assertPublishable(config);
+      await assertAssets(tx, config);
       await archivePublished(tx);
       await tx.siteVersion.create({
         data: {
@@ -261,7 +265,7 @@ export class SiteService {
   }
 }
 
-/** Reglas que el esquema no expresa: tamaño total, contraste AA del tema y archivos (que llegan en la 5.2). */
+/** Reglas que el esquema no expresa: tamaño total y contraste AA del tema (los archivos, en assertAssets). */
 function assertPublishable(config: SiteConfig): void {
   const bytes = siteConfigBytes(config);
   if (bytes > SITE_MAX_BYTES) {
@@ -275,8 +279,30 @@ function assertPublishable(config: SiteConfig): void {
   if (problems.length > 0) {
     throw new AppError('VALIDATION_FAILED', problems.map((p) => p.message).join(' '), 400);
   }
-  if (config.logoAssetId !== null || config.hero.imageAssetId !== null) {
-    throw new AppError('VALIDATION_FAILED', 'El logo y la imagen de portada llegan con la etapa 5.2', 400);
+}
+
+/**
+ * Archivos referenciados (Fase 5.2): de esta empresa (RLS), listos y del tipo correcto. Un archivo ya retirado no se
+ * puede publicar ni restaurar.
+ */
+async function assertAssets(tx: Tx, config: SiteConfig): Promise<void> {
+  const refs = [
+    { id: config.logoAssetId, kind: 'SITE_LOGO' as const, label: 'El logo' },
+    { id: config.hero.imageAssetId, kind: 'SITE_HERO' as const, label: 'La imagen de portada' },
+  ];
+  for (const ref of refs) {
+    if (ref.id === null) continue;
+    const found = await tx.fileAsset.findFirst({
+      where: { id: ref.id, kind: ref.kind, status: 'READY' },
+      select: { id: true },
+    });
+    if (!found) {
+      throw new AppError(
+        'VALIDATION_FAILED',
+        `${ref.label} no es un archivo disponible de esta empresa`,
+        400,
+      );
+    }
   }
 }
 

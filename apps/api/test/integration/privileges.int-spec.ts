@@ -24,6 +24,7 @@ const RUNTIME = ['yebo_app', 'yebo_platform', 'yebo_identity', 'yebo_backoffice'
 /** Matriz esperada de privilegios de TABLA (explícitos) de los roles de ejecución en el esquema public. */
 const EXPECTED_TABLE_GRANTS = [
   'yebo_app billing_periods SELECT',
+  'yebo_app file_assets INSERT,SELECT',
   'yebo_app membership_invitations INSERT,SELECT',
   'yebo_app membership_roles DELETE,INSERT,SELECT,UPDATE',
   'yebo_app membership_status_history INSERT,SELECT',
@@ -49,6 +50,7 @@ const EXPECTED_TABLE_GRANTS = [
   'yebo_app usage_daily_snapshots SELECT',
   'yebo_app usage_period_calculations SELECT',
   'yebo_backoffice billing_periods INSERT,SELECT',
+  'yebo_backoffice file_assets SELECT',
   'yebo_backoffice membership_invitations INSERT,SELECT',
   'yebo_backoffice membership_status_history SELECT',
   'yebo_backoffice modules SELECT',
@@ -108,6 +110,7 @@ const EXPECTED_TABLE_GRANTS = [
 
 /** Privilegios de COLUMNA explícitos (Fase 3.3). */
 const EXPECTED_COLUMN_GRANTS = [
+  'yebo_app file_assets.status UPDATE',
   'yebo_app membership_invitations.revoked_at UPDATE',
   'yebo_app membership_status_history.valid_to UPDATE',
   'yebo_app site_versions.config UPDATE',
@@ -311,7 +314,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
       expect(rows.map((r) => r.line)).toEqual(EXPECTED_TABLE_GRANTS);
     });
 
-    it('privilegios de columna explícitos: membresías, estados, invitaciones, historial, facturación, soporte, anulación de pagos y sitio (3.3–5.1)', async () => {
+    it('privilegios de columna explícitos: membresías, estados, invitaciones, historial, facturación, soporte, anulación de pagos, sitio y archivos (3.3–5.2)', async () => {
       const { rows } = await owner.query<{ line: string }>(
         `SELECT r.rolname || ' ' || c.relname || '.' || att.attname || ' ' || a.privilege_type AS line
            FROM pg_attribute att JOIN pg_class c ON c.oid = att.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace,

@@ -21,6 +21,7 @@
     "platform:bootstrap": "node dist/modules/platform-admin/cli/bootstrap.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1158.0",
     "@nestjs/bullmq": "11.0.5",
     "@nestjs/common": "11.2.8",
     "@nestjs/core": "11.2.8",
@@ -40,6 +41,7 @@
     "pino-http": "10.5.0",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
+    "sharp": "0.35.5",
     "zod": "4.6.7"
   },
   "devDependencies": {

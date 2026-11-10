@@ -32,6 +32,7 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set<string>([
   'SupportSession',
   'SupportAccessLog',
   'SiteVersion',
+  'FileAsset',
 ]);
 
 /**
@@ -68,6 +69,7 @@ export const TENANT_SCOPED_TABLES: readonly string[] = [
   'support_sessions',
   'support_access_logs',
   'site_versions',
+  'file_assets',
 ];
 
 /**

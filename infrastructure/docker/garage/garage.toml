@@ -1,0 +1,16 @@
+# Garage (S3 compatible) para desarrollo y pruebas (Fase 5.2; F5-Q2 actualizado: MinIO archivado → Garage v2.5.0).
+# Sin secretos aquí: rpc_secret llega por GARAGE_RPC_SECRET y la clave S3 por GARAGE_DEFAULT_ACCESS_KEY y
+# GARAGE_DEFAULT_SECRET_KEY (infrastructure/docker/.env, generado por scripts/dev/init-env.sh).
+# `garage server --single-node --default-bucket` crea el layout de un nodo, la clave y el bucket al arrancar.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.garage.localhost"

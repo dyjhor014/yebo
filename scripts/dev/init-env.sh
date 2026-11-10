@@ -84,11 +84,28 @@ add_missing_phase44() {
   fi
 }
 
+# Fase 5.2: almacenamiento S3 (Garage) de desarrollo. La clave S3 de Garage: id «GK» + 24 hex, secreto de 64 hex.
+add_missing_phase52() {
+  if [[ -f "$INFRA_ENV" ]] && ! grep -q '^GARAGE_RPC_SECRET=' "$INFRA_ENV"; then
+    local key secret
+    key="GK$(openssl rand -hex 12)"
+    secret=$(openssl rand -hex 32)
+    printf 'GARAGE_RPC_SECRET=%s\nS3_ACCESS_KEY_ID=%s\nS3_SECRET_ACCESS_KEY=%s\nS3_BUCKET=yebo-assets\n' \
+      "$(openssl rand -hex 32)" "$key" "$secret" >> "$INFRA_ENV"
+    if [[ -f "$API_ENV" ]] && ! grep -q '^S3_ACCESS_KEY_ID=' "$API_ENV"; then
+      printf '\n# Almacenamiento S3 (Garage; añadido por init-env.sh)\nS3_ENDPOINT=http://127.0.0.1:3900\nS3_REGION=garage\nS3_BUCKET=yebo-assets\nS3_ACCESS_KEY_ID=%s\nS3_SECRET_ACCESS_KEY=%s\n' \
+        "$key" "$secret" >> "$API_ENV"
+    fi
+    echo "Añadidas las credenciales del almacenamiento S3 (Garage). Arráncalo con: pnpm infra:up"
+  fi
+}
+
 if [[ -f "$INFRA_ENV" && "$FORCE" != "--force" ]]; then
   add_missing_phase32
   add_missing_adr034
   add_missing_phase41
   add_missing_phase44
+  add_missing_phase52
   echo "Ya existe $INFRA_ENV (usa --force para regenerar)."; exit 0
 fi
 
@@ -98,6 +115,9 @@ PG_IDENTITY_PASSWORD=$(rnd)
 TEST_PG_BYPASS_PASSWORD=$(rnd)
 PG_BACKOFFICE_PASSWORD=$(rnd)
 PG_METERING_PASSWORD=$(rnd)
+GARAGE_RPC_SECRET=$(openssl rand -hex 32)
+S3_ACCESS_KEY_ID="GK$(openssl rand -hex 12)"
+S3_SECRET_ACCESS_KEY=$(openssl rand -hex 32)
 
 umask 077
 cat > "$INFRA_ENV" <<ENV
@@ -112,6 +132,10 @@ REDIS_PASSWORD=$REDIS_PASSWORD
 TEST_PG_BYPASS_PASSWORD=$TEST_PG_BYPASS_PASSWORD
 PG_BACKOFFICE_PASSWORD=$PG_BACKOFFICE_PASSWORD
 PG_METERING_PASSWORD=$PG_METERING_PASSWORD
+GARAGE_RPC_SECRET=$GARAGE_RPC_SECRET
+S3_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID
+S3_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY
+S3_BUCKET=yebo-assets
 ENV
 write_test_env "$TEST_PG_BYPASS_PASSWORD"
 
@@ -123,6 +147,8 @@ sed -e "s|^PG_OWNER_PASSWORD=.*|PG_OWNER_PASSWORD=$PG_OWNER_PASSWORD|" \
     -e "s|^PG_METERING_PASSWORD=.*|PG_METERING_PASSWORD=$PG_METERING_PASSWORD|" \
     -e "s|^FIELD_ENCRYPTION_KEY=.*|FIELD_ENCRYPTION_KEY=$(openssl rand -base64 32)|" \
     -e "s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=$REDIS_PASSWORD|" \
+    -e "s|^S3_ACCESS_KEY_ID=.*|S3_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID|" \
+    -e "s|^S3_SECRET_ACCESS_KEY=.*|S3_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY|" \
     -e "s|^AUTH_JWT_PRIVATE_KEY=.*|AUTH_JWT_PRIVATE_KEY=$(auth_key)|" \
     -e "s|^AUTH_COOKIE_SECRET=.*|AUTH_COOKIE_SECRET=$(openssl rand -hex 32)|" \
     "$ROOT/apps/api/.env.example" > "$API_ENV"

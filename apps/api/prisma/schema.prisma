@@ -82,6 +82,7 @@ model Tenant {
   invoices           PlatformInvoice[]
   supportGrants      SupportAccessGrant[]
   siteVersions       SiteVersion[]
+  fileAssets         FileAsset[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -1242,4 +1243,57 @@ model SiteVersion {
   @@unique([tenantId, version])
   @@unique([tenantId, liveSlot])
   @@map("site_versions")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 5.2 · Archivos de la empresa (data-dictionary §11 `file_assets`)
+// ---------------------------------------------------------------------------------------------------------------
+
+enum FileAssetKind {
+  SITE_LOGO
+  SITE_HERO
+
+  @@map("file_asset_kind")
+}
+
+enum FileAssetVisibility {
+  PUBLIC
+  PRIVATE
+
+  @@map("file_asset_visibility")
+}
+
+enum FileAssetStatus {
+  PENDING
+  READY
+  REJECTED
+  DELETED
+
+  @@map("file_asset_status")
+}
+
+/// Archivo de la empresa en el almacenamiento S3 (objeto privado; la API decide qué se sirve). Las imágenes se
+/// recodifican al subirlas (sin metadatos EXIF). Del logo se genera además un favicon (`<storage_key>.favicon.png`).
+model FileAsset {
+  id             String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String                @map("tenant_id") @db.Uuid
+  kind           FileAssetKind
+  visibility     FileAssetVisibility
+  status         FileAssetStatus
+  storageKey     String                @unique @map("storage_key")
+  mime           String
+  sizeBytes      Int                   @map("size_bytes")
+  width          Int
+  height         Int
+  checksumSha256 Bytes                 @map("checksum_sha256")
+  originalName   String?               @map("original_name")
+  uploadedByKind MembershipChangeActor @map("uploaded_by_kind")
+  uploadedById   String                @map("uploaded_by_id") @db.Uuid
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, kind])
+  @@map("file_assets")
 }

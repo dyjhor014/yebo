@@ -172,7 +172,7 @@ describe('Fase 5.1 · sitio público de la empresa', () => {
       ]);
     });
 
-    it('guardar valida contraste AA, archivos (5.2) y forma; un borrador por empresa, que se reemplaza', async () => {
+    it('guardar valida contraste AA, archivos y forma; un borrador por empresa, que se reemplaza', async () => {
       const grey = { ...own(), theme: { ...own().theme, primary: '#7F7F7F' } };
       const bad = await as(b, 'put', '/api/v1/site/draft', { config: grey });
       expect(bad.status).toBe(400);
@@ -183,7 +183,7 @@ describe('Fase 5.1 · sitio público de la empresa', () => {
       );
       const logo = { ...own(), logoAssetId: '0190f0a0-0000-7000-8000-000000000001' };
       expect((await as(b, 'put', '/api/v1/site/draft', { config: logo })).body.error.message).toContain(
-        '5.2',
+        'El logo no es un archivo disponible de esta empresa',
       );
       const http = { ...own(), social: { ...own().social, website: 'http://naviera.pe' } };
       expect((await as(b, 'put', '/api/v1/site/draft', { config: http })).status).toBe(400);

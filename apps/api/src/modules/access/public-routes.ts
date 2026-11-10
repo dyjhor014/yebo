@@ -13,6 +13,9 @@ export const PUBLIC_ROUTES: readonly string[] = [
   'GET /api/v1/health/ready',
   // Identidad pública de la empresa del host.
   'GET /api/v1/public/site',
+  // Archivos públicos del sitio de la empresa del host (Fase 5.2): logo, favicon y portada.
+  'GET /api/v1/public/assets/:assetId',
+  'GET /api/v1/public/assets/:assetId/favicon',
   // Hub de cuentas (solo en AUTH_HUB_HOST; sesión de identidad propia).
   'GET /api/v1/hub/csrf',
   'GET /api/v1/hub/authorize',

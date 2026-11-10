@@ -364,7 +364,7 @@ Copia de líneas fiscales (código, descripción, cantidad, valor unitario, afec
 `kind enum TICKET|SHIPMENT_LABEL|SHIPMENT_RECEIPT|MANIFEST|CARGO_QUOTE`, `version`, `status`, `config jsonb` (bloques predefinidos y campos visibles; sin HTML libre).
 
 ### file_assets
-`storage_key UNIQUE`, `bucket`, `original_name`, `mime`, `size_bytes`, `checksum_sha256`, `kind`, `visibility enum PRIVATE|PUBLIC`, `uploaded_by?`, `status enum PENDING|READY|REJECTED|DELETED`.
+`storage_key UNIQUE`, `bucket`, `original_name`, `mime`, `size_bytes`, `checksum_sha256`, `kind`, `visibility enum PRIVATE|PUBLIC`, `uploaded_by?`, `status enum PENDING|READY|REJECTED|DELETED`. Fase 5.2: sin `bucket` (uno por entorno, `S3_BUCKET`); `kind enum SITE_LOGO|SITE_HERO`, `width`, `height`, `uploaded_by_kind` + `uploaded_by_id`; CHECK: la clave empieza por `tenants/<tenant_id>/`, MIME PNG/JPEG/WebP, ≤ 5 MB y ≤ 8192 px; las imágenes se guardan recodificadas (sin EXIF); el logo tiene además `<storage_key>.favicon.png`.
 
 ### notification_templates (🌐 si `tenant_id IS NULL`)
 `event_code`, `channel enum EMAIL|IN_APP|WHATSAPP|SMS`, `locale`, `version`, `subject`, `body_html`, `body_text`, `status`. UNIQUE (tenant_id, event_code, channel, locale, version) con `NULLS NOT DISTINCT`.

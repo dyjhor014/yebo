@@ -31,6 +31,7 @@
 |---|---|---|
 | **F5-Q1** | Contenido del portal en esta fase | **Solo la portada informativa:** cabecera con logo, portada (título, texto e imagen), servicios que opera, sucursales y contactos, horarios, FAQ, políticas y pie con redes. Reservas y seguimiento llegan con sus fases (8+); la portada muestra solo sus accesos «Próximamente» si el módulo existe |
 | **F5-Q2** | Dónde se guardan logos e imágenes | **MinIO (compatible con S3) en el compose de desarrollo**, con una interfaz `ObjectStorage` en la API. En producción servirá el S3 del proveedor que se elija (D12). Antes de usar la imagen la inspecciono e informo. Alternativa: bytes en PostgreSQL (más simple, pero no escala y contradice `file_assets.storage_key`) |
+| **F5-Q2 (actualizada el 2026-11-10)** | MinIO ya no es viable | MinIO está **archivado** en GitHub (abril de 2026) y no publica imágenes oficiales (Docker Hub: 404; Quay: 0 etiquetas). El responsable eligió **Garage v2.5.0** (`dxflrs/garage`, AGPL-3.0, solo como servicio de desarrollo sin modificar), con `@aws-sdk/client-s3` 3.1158.0 y `sharp` 0.35.5 en la API, todos inspeccionados antes de usarlos |
 | **F5-Q3** | Libertad del tema | **Tokens, no CSS libre:** color principal, color de acento, superficie clara u oscura, radio de las esquinas (3 opciones) y fuente de una lista blanca de 6 fuentes autoalojadas. El servidor rechaza combinaciones con contraste por debajo de AA. Sin HTML ni CSS propios (seguridad e identidad coherente) |
 | **F5-Q4** | Empresas sin el módulo `WHITE_LABEL` en su plan | **Portal con el tema YEBO por defecto** y su nombre, logo, servicios y contactos. Colores, fuentes, portada y secciones propias solo con el módulo. El editor muestra qué se desbloquea con el módulo |
 | **F5-Q5** | Quién edita el sitio | **La empresa, con un permiso nuevo `site.manage`** (incluido en la plantilla Administrador). El staff de YEBO solo con un acceso de soporte `FULL` (Fase 4.6); el panel de YEBO muestra el estado del sitio, pero no lo edita |
@@ -145,4 +146,54 @@ CONFIGURE queda bloqueado en `SUSPENDED`, `EXPIRED` y `CANCELLED` (ADR-023). El 
 - Migración a `yebo_dev`: con autorización, copia previa y la reversión documentada.
 - 5.2: archivos (MinIO, a inspeccionar antes de usarlo).
 - Registro de auditoría general de las acciones de la empresa: fuera de la 5.1.
+
+## Etapa 5.2 · Archivos: logo, favicon y portada (implementada el 2026-11-10; pendiente de revisión)
+
+### Decisiones de implementación
+
+| Tema | Decisión |
+|---|---|
+| Almacenamiento | **Garage v2.5.0** en `infra:up`, solo en `127.0.0.1:3900`. `garage server --single-node --default-bucket` crea el layout, la clave y el bucket desde variables de entorno, sin script de preparación ni secretos en `garage.toml`. `init-env.sh` genera `GARAGE_RPC_SECRET` y la clave S3. En producción, el S3 del proveedor (D12) |
+| API | Interfaz `ObjectStorage` (guardar, leer y borrar) con implementación S3 (`forcePathStyle`). Es opcional: sin endpoint ni claves queda desactivada y subir responde 503, en lugar de romper el arranque |
+| Subida | `POST /api/v1/site/assets?kind=logo\|hero` con la imagen en el cuerpo (`image/png`, `image/jpeg` o `image/webp`; ≤ 5 MB, si no 413), sin multipart. Permiso `site.manage`, categoría CONFIGURE |
+| Validación por contenido | `sharp` lee la cabecera real (no el nombre ni el tipo declarado). Solo PNG, JPEG y WebP. Mínimos: logo 64 × 64, portada 1200 × 600. Bombas de descompresión (> 50 Mpx) rechazadas antes de decodificar. Una imagen dañada → 400, no 500 |
+| Recodificación | Siempre: se aplica la orientación EXIF y se **eliminan todos los metadatos**, incluida la ubicación GPS de una foto de móvil. Nunca se guarda ni se sirve el original. Logo → PNG ≤ 1024 px; portada → WebP (calidad 82) ≤ 2400 × 1600. Del logo se genera un **favicon de 64 × 64**, sin cambiar el esquema del sitio |
+| Servido | `GET /api/v1/public/assets/{id}` y `…/favicon`, en `PUBLIC_ROUTES`. Solo archivos `PUBLIC` y `READY` de la empresa del host (RLS). Cabeceras: `Cache-Control: public, max-age=31536000, immutable`, `ETag` (SHA-256; el 304 lo resuelve Express), `Content-Security-Policy: default-src 'none'; sandbox` y `nosniff`. El bucket nunca se expone |
+| Referencias del sitio | `logoAssetId` y `hero.imageAssetId` deben ser archivos `READY` de la empresa (RLS) y del tipo correcto, al guardar, publicar y restaurar. Sustituye la regla provisional de la 5.1 |
+| Coherencia | Si falla la fila, se borran los objetos ya subidos. Los archivos no se borran: se marcan `DELETED` y dejan de servirse y de poder referenciarse |
+
+### Base de datos (migración `20261112020000_fase5_2_file_assets`, reversión en su cabecera)
+
+- **Tabla:** `file_assets`, de tenant, con RLS forzado.
+- **CHECK:**
+  - tamaño y dimensiones;
+  - SHA-256 de 32 bytes;
+  - MIME de la lista;
+  - **la clave del objeto empieza por `tenants/<su tenant>/`**, así que un objeto nunca se comparte entre empresas;
+  - autor: membresía o staff.
+- **Privilegios:**
+  - `yebo_app`: SELECT, INSERT y UPDATE solo de `status`, sin DELETE;
+  - `yebo_backoffice`: SELECT.
+
+### Pruebas
+
+- **`site-assets.int-spec` (6), contra Garage real:**
+  - logo reducido y servido con sus cabeceras, 304 y favicon de 64 × 64;
+  - foto JPEG con GPS y orientación 6: se gira y queda sin EXIF en WebP;
+  - se rechazan un SVG que dice ser PNG, un GIF y un TIFF reales, imágenes pequeñas, una bomba de 60 Mpx, datos cortados, > 5 MB (413), un tipo de cuerpo erróneo y un `kind` desconocido;
+  - referencias: tipo cambiado, otra empresa, inexistente y retirada;
+  - cada host sirve solo lo suyo;
+  - sin permiso → 403; suspendida → 403;
+  - RLS, sin DELETE y CHECK de la clave.
+- **Unitaria:** almacenamiento desactivado → 503 en cada operación.
+- **Inventario actualizado:** matriz de privilegios y la prueba de la 5.1 (mensaje real del archivo).
+- **Mutaciones (13):** se detectan todas las no equivalentes: formato, píxeles, mínimo, orientación, metadatos, reducción, decodificación → 400, servir no públicos, CSP de la imagen, tipo y estado de la referencia.
+  - Dos huecos de las pruebas cerrados: el GIF de 1 × 1 lo frenaba la regla de tamaño, no la de formato.
+  - Sobrevivía la rama propia del 304 porque Express ya lo resuelve: se quitó por redundante.
+- **Totales:** integración, 24 suites y 379 pruebas ✅; tipos, lint y formato ✅.
+
+### Pendiente
+
+- Migraciones de la 5.1 y la 5.2 a `yebo_dev`: con autorización y copia previa.
+- Retirar archivos desde el editor (`DELETED`) y limpiar objetos huérfanos: con el editor de la 5.4.
 

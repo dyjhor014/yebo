@@ -11,6 +11,7 @@ import { DatabaseModule } from './database/database.module';
 import { buildPinoHttpOptions } from './logging/pino-options';
 import { QueueModule } from './queue/queue.module';
 import { RedisModule } from './redis/redis.module';
+import { StorageModule } from './storage/storage.module';
 
 /** Infraestructura común a los procesos API y worker (ADR-001). */
 @Module({
@@ -31,6 +32,7 @@ import { RedisModule } from './redis/redis.module';
     DatabaseModule,
     RedisModule,
     QueueModule,
+    StorageModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },

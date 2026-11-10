@@ -249,3 +249,29 @@ export const SiteVersionsResponseSchema = z.object({
   versions: z.array(SiteVersionSchema.omit({ config: true })),
 });
 export type SiteVersionsResponse = z.infer<typeof SiteVersionsResponseSchema>;
+
+// ---------------------------------------------------------------------------------------------------------------
+// Archivos del sitio (Fase 5.2): logo (se genera también el favicon) e imagen de portada.
+// ---------------------------------------------------------------------------------------------------------------
+
+export const SiteAssetKindSchema = z.enum(['logo', 'hero']);
+export type SiteAssetKind = z.infer<typeof SiteAssetKindSchema>;
+
+export const SiteAssetSchema = z.object({
+  id: z.string(),
+  kind: SiteAssetKindSchema,
+  mime: z.string(),
+  sizeBytes: z.number().int(),
+  width: z.number().int(),
+  height: z.number().int(),
+  createdAt: z.iso.datetime(),
+  /** Mismo origen que el portal: GET /api/v1/public/assets/{id} (y /favicon para un logo). */
+  url: z.string(),
+});
+export type SiteAsset = z.infer<typeof SiteAssetSchema>;
+export const SiteAssetsResponseSchema = z.object({ assets: z.array(SiteAssetSchema) });
+export type SiteAssetsResponse = z.infer<typeof SiteAssetsResponseSchema>;
+
+/** URL pública de un archivo del sitio en el portal (mismo origen). */
+export const siteAssetUrl = (assetId: string, variant: 'original' | 'favicon' = 'original') =>
+  `/api/v1/public/assets/${assetId}${variant === 'favicon' ? '/favicon' : ''}`;
