@@ -290,7 +290,9 @@ describe('Fase 3.1 · tenancy e identidad (PostgreSQL real, rol yebo_app)', () =
   describe('resolución del tenant por host (ADR-004)', () => {
     it('GET /api/v1/public/site devuelve la empresa del host', async () => {
       const a = await request(app.getHttpServer()).get('/api/v1/public/site').set('Host', HOST_A).expect(200);
-      expect(a.body).toEqual({ tenant: { slug: 'transportesa', tradeName: 'Transportes A' } });
+      // Contrato de la 3.1 intacto; la 5.1 añade el sitio (por defecto, sin publicar) y los servicios.
+      expect(a.body.tenant).toEqual({ slug: 'transportesa', tradeName: 'Transportes A' });
+      expect(a.body.site).toMatchObject({ version: null, config: { hero: { title: 'Transportes A' } } });
       const b = await request(app.getHttpServer())
         .get('/api/v1/public/site')
         .set('Host', `${HOST_B}:8080`)

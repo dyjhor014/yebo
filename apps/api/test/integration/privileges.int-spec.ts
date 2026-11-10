@@ -35,6 +35,7 @@ const EXPECTED_TABLE_GRANTS = [
   'yebo_app role_permissions DELETE,INSERT,SELECT,UPDATE',
   'yebo_app role_templates SELECT',
   'yebo_app roles DELETE,INSERT,SELECT,UPDATE',
+  'yebo_app site_versions INSERT,SELECT',
   'yebo_app subscription_payments SELECT',
   'yebo_app subscriptions SELECT',
   'yebo_app support_access_grants SELECT',
@@ -64,6 +65,7 @@ const EXPECTED_TABLE_GRANTS = [
   'yebo_backoffice role_permissions INSERT',
   'yebo_backoffice role_templates SELECT',
   'yebo_backoffice roles INSERT,SELECT',
+  'yebo_backoffice site_versions SELECT',
   'yebo_backoffice subscription_payments INSERT,SELECT',
   'yebo_backoffice subscriptions INSERT,SELECT',
   'yebo_backoffice support_access_grants INSERT,SELECT',
@@ -108,6 +110,14 @@ const EXPECTED_TABLE_GRANTS = [
 const EXPECTED_COLUMN_GRANTS = [
   'yebo_app membership_invitations.revoked_at UPDATE',
   'yebo_app membership_status_history.valid_to UPDATE',
+  'yebo_app site_versions.config UPDATE',
+  'yebo_app site_versions.live_slot UPDATE',
+  'yebo_app site_versions.published_at UPDATE',
+  'yebo_app site_versions.published_by_id UPDATE',
+  'yebo_app site_versions.published_by_kind UPDATE',
+  'yebo_app site_versions.schema_version UPDATE',
+  'yebo_app site_versions.status UPDATE',
+  'yebo_app site_versions.updated_at UPDATE',
   'yebo_app support_access_grants.approved_at UPDATE',
   'yebo_app support_access_grants.approved_by_membership_id UPDATE',
   'yebo_app support_access_grants.revoked_at UPDATE',
@@ -301,7 +311,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
       expect(rows.map((r) => r.line)).toEqual(EXPECTED_TABLE_GRANTS);
     });
 
-    it('privilegios de columna explícitos: membresías, estados, invitaciones, historial, facturación, soporte y anulación de pagos (3.3–4.7)', async () => {
+    it('privilegios de columna explícitos: membresías, estados, invitaciones, historial, facturación, soporte, anulación de pagos y sitio (3.3–5.1)', async () => {
       const { rows } = await owner.query<{ line: string }>(
         `SELECT r.rolname || ' ' || c.relname || '.' || att.attname || ' ' || a.privilege_type AS line
            FROM pg_attribute att JOIN pg_class c ON c.oid = att.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace,
