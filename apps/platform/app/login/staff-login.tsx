@@ -130,24 +130,36 @@ export function StaffLogin() {
                 }
               >
                 {step === 'enroll'
-                  ? 'Es obligatoria para el staff. Añade esta cuenta en tu app de autenticación y escribe el código que muestre.'
+                  ? 'Es obligatoria para el staff. Necesitas una app de autenticación en el móvil (Google Authenticator, Microsoft Authenticator o similar).'
                   : 'Escribe el código de 6 dígitos de tu app de autenticación.'}
               </Heading>
               {step === 'enroll' && enroll && (
-                <div className="flex flex-col gap-2 rounded-[var(--radius-control)] bg-ink/5 px-4 py-3 text-sm">
-                  <span className="font-medium">Clave para introducir a mano</span>
-                  <code className="font-mono text-base tracking-wider break-all select-all">
-                    {enroll.secret.replace(/(.{4})/g, '$1 ').trim()}
-                  </code>
-                  <span className="text-ink-muted">Se muestra una sola vez. No la compartas.</span>
-                </div>
+                <ol className="flex list-decimal flex-col gap-3 pl-5 text-[0.9375rem]">
+                  <li>
+                    En la app, pulsa <strong>+</strong> y elige{' '}
+                    <strong>«Introducir una clave de configuración»</strong> (o «Introducir clave
+                    manualmente»).
+                  </li>
+                  <li className="flex flex-col gap-2">
+                    <span>
+                      Nombre de la cuenta: <strong>YEBO Admin</strong>. Clave (tipo «basada en tiempo»):
+                    </span>
+                    <code className="rounded-[var(--radius-control)] bg-ink/5 px-3 py-2 font-mono text-base tracking-wider break-all select-all">
+                      {enroll.secret.replace(/(.{4})/g, '$1 ').trim()}
+                    </code>
+                    <span className="text-sm text-ink-muted">
+                      Esta clave NO se escribe aquí: va en la app. Se muestra una sola vez; no la compartas.
+                    </span>
+                  </li>
+                  <li>Escribe abajo el código de 6 dígitos que genera la app (cambia cada 30 segundos).</li>
+                </ol>
               )}
               <form className="flex flex-col gap-5" onSubmit={onCode} noValidate>
                 {error && <Notice>{error}</Notice>}
                 <TextField
                   // Aparece tras enviar la contraseña: el foco va directo al código.
                   autoFocus
-                  label="Código de 6 dígitos"
+                  label={step === 'enroll' ? 'Código de 6 dígitos que muestra la app' : 'Código de 6 dígitos'}
                   name="code"
                   inputMode="numeric"
                   autoComplete="one-time-code"

@@ -45,6 +45,27 @@ services:
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?}
 
+  # Modo HTTPS local (perfil `https`, no arranca con `infra:up`): Nginx termina TLS en <IP del servidor>:443 con el
+  # certificado de scripts/dev/https-certs.sh y reenvía a las apps del host (127.0.0.1) por host.docker.internal
+  # (válido en Docker Desktop y en Docker Engine gracias a host-gateway). Ver docs/development/https-local.md.
+  https:
+    image: nginx:1.28.3-alpine3.23
+    profiles: ['https']
+    restart: unless-stopped
+    ports:
+      - '${YEBO_HTTPS_IP:-127.0.0.1}:443:443'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    environment:
+      YEBO_HTTPS_IP: ${YEBO_HTTPS_IP:-}
+      YEBO_BASE_DOMAIN: ${YEBO_BASE_DOMAIN:-}
+      YEBO_BASE_DOMAIN_RE: ${YEBO_BASE_DOMAIN_RE:-}
+    volumes:
+      - ./https/templates:/etc/nginx/templates:ro
+      - ./https/proxy.conf:/etc/nginx/snippets/yebo-proxy.conf:ro
+      - ./https/certs/server.crt:/etc/nginx/certs/server.crt:ro
+      - ./https/certs/server.key:/etc/nginx/certs/server.key:ro
+
 volumes:
   pgdata:
   redisdata:
