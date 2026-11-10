@@ -331,6 +331,18 @@ describe('Fase 4.3b · invitaciones de membresía', () => {
           )
         ).rows[0]?.id,
       );
+      // Solo correos del dominio del staff (PLATFORM_STAFF_EMAIL_DOMAIN): ni otros dominios ni imitaciones.
+      for (const email of ['alguien@gmail.com', 'x@yebo.pe.evil.com', 'x@sub.yebo.pe', 'x@notyebo.pe']) {
+        const bad = await admin('post', '/api/v1/platform/invitations', {
+          target: 'STAFF',
+          email,
+          fullName: 'Fuera',
+          role: 'VIEWER',
+        });
+        expect(bad.status).toBe(400);
+        expect(bad.body.error.message).toBe('El staff solo admite correos @yebo.pe');
+      }
+      expect((await seed.query("SELECT 1 FROM platform_users WHERE full_name = 'Fuera'")).rowCount).toBe(0);
       // La entrada de la 4.1 se retiró: «Invitar usuario» es la única forma de dar de alta al staff.
       expect(
         (await admin('post', '/api/v1/platform/staff', { email: 'z@yebo.pe', fullName: 'Z', role: 'VIEWER' }))

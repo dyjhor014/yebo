@@ -330,6 +330,7 @@ describe('Fase 4.5 · períodos, importe y cobro', () => {
     let invoiceId = '';
     let billing = '';
     let viewer = '';
+    let tenantCookie = '';
     const pay = (amount: string, who = billing) =>
       request(app.getHttpServer())
         .post(`/api/v1/platform/tenants/${t}/invoices/${invoiceId}/payments`)
@@ -524,10 +525,11 @@ describe('Fase 4.5 · períodos, importe y cobro', () => {
       const token = (
         await sessions.openTenantSession({ identitySessionId: identity, host: 'cobro-empresa.yebo.test' })
       ).accessToken;
+      tenantCookie = `__Host-yebo_at=${token}; __Host-yebo_csrf=${CSRF}`;
       const res = await request(app.getHttpServer())
         .get('/api/v1/billing/obligations')
         .set('Host', 'cobro-empresa.yebo.test')
-        .set('Cookie', `__Host-yebo_at=${token}; __Host-yebo_csrf=${CSRF}`);
+        .set('Cookie', tenantCookie);
       expect(res.status).toBe(200);
       expect(res.body.invoices).toHaveLength(1);
       expect(res.body.invoices[0]).toMatchObject({ status: 'PAID', total: '204.00' });
@@ -554,6 +556,215 @@ describe('Fase 4.5 · períodos, importe y cobro', () => {
         c.release();
         await appPool.end();
       }
+    });
+
+    describe('anulación de pagos (4.7b, decisiones del 2026-11-10)', () => {
+      const reverse = (paymentId: string, reason: string, who = billing) =>
+        request(app.getHttpServer())
+          .post(`/api/v1/platform/tenants/${t}/payments/${paymentId}/reverse`)
+          .set('Host', ADMIN)
+          .set('Cookie', who)
+          .set('X-CSRF-Token', STAFF_CSRF)
+          .send({ reason });
+      const lastPayment = async () =>
+        (
+          await q<{ id: string }>(
+            'SELECT id FROM subscription_payments WHERE invoice_id = $1 ORDER BY created_at DESC LIMIT 1',
+            [invoiceId],
+          )
+        )[0]?.id ?? '';
+
+      it('VIEWER no anula; motivo corto → 400; pago inexistente o de otra empresa → 404', async () => {
+        const id = await lastPayment();
+        viewer = (
+          await seedPlatformSession(seed, { email: 'mira3@yebo.pe', role: 'VIEWER', now: clock.now() })
+        ).cookie;
+        expect((await reverse(id, 'Rebote del banco', viewer)).status).toBe(403);
+        expect((await reverse(id, 'no')).status).toBe(400);
+        expect((await reverse('0190f0a0-0000-7000-8000-0000000000ee', 'Rebote del banco')).status).toBe(404);
+        expect((await reverse('no-es-uuid', 'Rebote del banco')).status).toBe(404);
+        const other = await company();
+        expect(
+          (
+            await request(app.getHttpServer())
+              .post(`/api/v1/platform/tenants/${other}/payments/${id}/reverse`)
+              .set('Host', ADMIN)
+              .set('Cookie', billing)
+              .set('X-CSRF-Token', STAFF_CSRF)
+              .send({ reason: 'Rebote del banco' })
+          ).status,
+        ).toBe(404); // el RLS de la otra empresa no lo ve
+        expect(await q('SELECT status::text FROM subscription_payments WHERE id = $1', [id])).toEqual([
+          { status: 'CONFIRMED' },
+        ]);
+      });
+
+      it('anular el pago que la reactivó: saldo repuesto, factura vencida y la empresa vuelve a PAST_DUE', async () => {
+        const id = await lastPayment();
+        const res = await reverse(id, 'Rebote del banco: operación OP-104.00');
+        expect(res.status).toBe(200);
+        expect(res.body).toMatchObject({
+          invoice: { status: 'OVERDUE', balance: '104.00' },
+          tenantStatus: 'PAST_DUE',
+        });
+        const reversed = res.body.invoice.payments.find((p: { id: string }) => p.id === id);
+        expect(reversed).toMatchObject({
+          status: 'REVERSED',
+          reversedAt: clock.now().toISOString(),
+          reversalReason: 'Rebote del banco: operación OP-104.00',
+        });
+        expect(
+          await q(
+            `SELECT from_status::text, to_status::text, reason FROM tenant_status_history
+              WHERE tenant_id = $1 ORDER BY occurred_at DESC LIMIT 1`,
+            [t],
+          ),
+        ).toEqual([
+          {
+            from_status: 'ACTIVE',
+            to_status: 'PAST_DUE',
+            reason: 'Pago anulado: la factura vuelve a tener saldo vencido',
+          },
+        ]);
+        expect(
+          await q(
+            "SELECT detail->>'reason' AS reason FROM platform_audit_logs WHERE action = 'payment.reversed' AND target_id = $1",
+            [id],
+          ),
+        ).toEqual([{ reason: 'Rebote del banco: operación OP-104.00' }]);
+        expect((await reverse(id, 'Otra vez')).status).toBe(409);
+        // La empresa ve la anulación, pero no el motivo interno del staff.
+        const own = await request(app.getHttpServer())
+          .get('/api/v1/billing/obligations')
+          .set('Host', 'cobro-empresa.yebo.test')
+          .set('Cookie', tenantCookie);
+        const seen = own.body.invoices[0].payments.find((p: { id: string }) => p.id === id);
+        expect(seen.reversedAt).toBe(clock.now().toISOString());
+        expect(seen).not.toHaveProperty('reversalReason');
+        expect(own.body.outstanding).toEqual([{ currency: 'PEN', amount: '104.00' }]);
+        // Volver a pagar el saldo la reactiva de nuevo.
+        expect((await pay('104.00')).body.tenantStatus).toBe('ACTIVE');
+      });
+
+      it('antes del vencimiento: la factura vuelve a emitida o parcial y la empresa no cambia de estado', async () => {
+        const saved = clock.current;
+        clock.current = new Date('2026-11-01T05:16:00Z');
+        const fresh = await company({ host: 'anula-antes.yebo.test' });
+        await close(fresh, '2026-11-01T05:16:00Z');
+        const inv = (
+          await q<{ id: string }>('SELECT id FROM platform_invoices WHERE tenant_id = $1', [fresh])
+        )[0]!.id;
+        // 23:00 del 8 en Lima (ya el 9 en UTC): es el día del vencimiento, todavía no está vencida.
+        clock.current = new Date('2026-11-09T04:00:00Z');
+        const who = (
+          await seedPlatformSession(seed, { email: 'cobros3@yebo.pe', role: 'BILLING', now: clock.now() })
+        ).cookie;
+        const payFresh = (amount: string) =>
+          request(app.getHttpServer())
+            .post(`/api/v1/platform/tenants/${fresh}/invoices/${inv}/payments`)
+            .set('Host', ADMIN)
+            .set('Cookie', who)
+            .set('X-CSRF-Token', STAFF_CSRF)
+            .send({ amount, method: 'CASH', reference: `R-${amount}` });
+        const p1 = (await payFresh('50.00')).body.invoice.payments[0].id as string;
+        const p2 = (await payFresh('154.00')).body.invoice.payments[1].id as string;
+        const reverseFresh = (id: string) =>
+          request(app.getHttpServer())
+            .post(`/api/v1/platform/tenants/${fresh}/payments/${id}/reverse`)
+            .set('Host', ADMIN)
+            .set('Cookie', who)
+            .set('X-CSRF-Token', STAFF_CSRF)
+            .send({ reason: 'Registrado por error' });
+        const a = await reverseFresh(p2);
+        expect(a.body).toMatchObject({
+          invoice: { status: 'PARTIALLY_PAID', balance: '154.00' },
+          tenantStatus: 'ACTIVE',
+        });
+        const b = await reverseFresh(p1);
+        expect(b.body).toMatchObject({
+          invoice: { status: 'ISSUED', balance: '204.00' },
+          tenantStatus: 'ACTIVE',
+        });
+        expect(
+          (
+            await q("SELECT 1 FROM tenant_status_history WHERE tenant_id = $1 AND to_status = 'PAST_DUE'", [
+              fresh,
+            ])
+          ).length,
+        ).toBe(0);
+        // Los pagos de una factura anulada no se anulan.
+        const p3 = (await payFresh('10.00')).body.invoice.payments[2].id as string;
+        await seed.query("UPDATE platform_invoices SET status = 'VOID' WHERE id = $1", [inv]);
+        try {
+          expect((await reverseFresh(p3)).status).toBe(409);
+        } finally {
+          await seed.query("UPDATE platform_invoices SET status = 'PARTIALLY_PAID' WHERE id = $1", [inv]);
+        }
+        clock.current = saved;
+      });
+
+      it('la base de datos solo admite la anulación: ni cambiar importes, ni deshacerla, ni anular sin motivo', async () => {
+        const [confirmed] = await q<{ id: string }>(
+          "SELECT id FROM subscription_payments WHERE status = 'CONFIRMED' LIMIT 1",
+        );
+        const [reversed] = await q<{ id: string }>(
+          "SELECT id FROM subscription_payments WHERE status = 'REVERSED' LIMIT 1",
+        );
+        await expect(
+          seed.query('UPDATE subscription_payments SET amount = 1 WHERE id = $1', [confirmed!.id]),
+        ).rejects.toThrow(/solo se admite anular/);
+        await expect(
+          seed.query(
+            `UPDATE subscription_payments SET status = 'CONFIRMED', reversed_at = NULL,
+                    reversed_by_platform_user_id = NULL, reversal_reason = NULL WHERE id = $1`,
+            [reversed!.id],
+          ),
+        ).rejects.toThrow(/solo se admite anular/);
+        await expect(
+          seed.query(
+            "UPDATE subscription_payments SET status = 'REVERSED', reversed_at = now() WHERE id = $1",
+            [confirmed!.id],
+          ),
+        ).rejects.toThrow(/subscription_payments_reversal/);
+        await expect(
+          seed.query(
+            `UPDATE subscription_payments SET status = 'REVERSED', reversed_at = now(), reversal_reason = 'Rebote',
+                    reversed_by_platform_user_id = recorded_by_platform_user_id, reference = 'otra' WHERE id = $1`,
+            [confirmed!.id],
+          ),
+        ).rejects.toThrow(/solo se admite anular/);
+        // Una anulación no se reescribe, y un pago confirmado no admite otra actualización que su anulación.
+        await expect(
+          seed.query("UPDATE subscription_payments SET reversal_reason = 'Otro motivo' WHERE id = $1", [
+            reversed!.id,
+          ]),
+        ).rejects.toThrow(/solo se admite anular/);
+        await expect(
+          seed.query("UPDATE subscription_payments SET status = 'CONFIRMED' WHERE id = $1", [confirmed!.id]),
+        ).rejects.toThrow(/solo se admite anular/);
+        // Anular cambiando a la vez cualquier otro dato del pago: rechazado, columna a columna.
+        for (const change of [
+          'amount = amount + 1',
+          "method = 'OTHER'",
+          "paid_at = paid_at - interval '1 day'",
+          "created_at = created_at - interval '1 day'",
+          'invoice_id = gen_random_uuid()',
+          'tenant_id = gen_random_uuid()',
+          'id = gen_random_uuid()',
+          'recorded_by_platform_user_id = gen_random_uuid()',
+        ]) {
+          await expect(
+            seed.query(
+              `UPDATE subscription_payments SET status = 'REVERSED', reversed_at = now(), reversal_reason = 'Rebote',
+                      reversed_by_platform_user_id = recorded_by_platform_user_id, ${change} WHERE id = $1`,
+              [confirmed!.id],
+            ),
+          ).rejects.toThrow(/solo se admite anular/);
+        }
+        await expect(
+          seed.query('DELETE FROM subscription_payments WHERE id = $1', [reversed!.id]),
+        ).rejects.toThrow();
+      });
     });
   });
 

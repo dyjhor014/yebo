@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Req, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
   ChangePlanRequestSchema,
   RecordPaymentRequestSchema,
+  ReversePaymentRequestSchema,
   type ChangePlanResponse,
   type RecordPaymentResponse,
   type TenantBillingResponse,
@@ -17,6 +18,7 @@ import { PlanChangeService } from '../plan-change.service';
 import { meta, noStore } from './platform-auth.controller';
 
 class RecordPaymentRequestDto extends createZodDto(RecordPaymentRequestSchema) {}
+class ReversePaymentRequestDto extends createZodDto(ReversePaymentRequestSchema) {}
 class ChangePlanRequestDto extends createZodDto(ChangePlanRequestSchema) {}
 
 /** Facturación de las empresas en el panel (Fase 4.5). */
@@ -51,6 +53,21 @@ export class BillingController {
     const actor = this.cls.get('platformPrincipal');
     if (!actor) throw new Error('PlatformGuard no fijó la sesión del staff');
     return this.billing.recordPayment(actor, tenantId, invoiceId, body, meta(req));
+  }
+
+  /** Anular un pago (BILLING o SUPERADMIN), con motivo; repone el saldo de la factura. */
+  @Post('payments/:paymentId/reverse')
+  @PlatformProtected('platform.billing.manage')
+  @HttpCode(200)
+  reversePayment(
+    @Param('tenantId') tenantId: string,
+    @Param('paymentId') paymentId: string,
+    @Body() body: ReversePaymentRequestDto,
+    @Req() req: Request,
+  ): Promise<RecordPaymentResponse> {
+    const actor = this.cls.get('platformPrincipal');
+    if (!actor) throw new Error('PlatformGuard no fijó la sesión del staff');
+    return this.billing.reversePayment(actor, tenantId, paymentId, body, meta(req));
   }
 
   /** Cambio de plan: upgrade desde hoy (prorrateo del período en curso), downgrade desde el período siguiente. */

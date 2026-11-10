@@ -3,7 +3,9 @@
 import { TenantsResponseSchema, type TenantOverview } from '@yebo/contracts';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { can, useSession } from '@/components/session';
 import { StatusPill } from '@/components/status-pill';
+import { PRIMARY } from '@/components/ui';
 import { get } from '@/lib/api';
 import { date, money } from '@/lib/format';
 import { byUrgency, extraUsers, matches, milestoneLabel, operationLine, type Filter } from '@/lib/tenants';
@@ -30,6 +32,7 @@ const CARDS: { filter: Filter; title: string }[] = [
 
 /** Empresas (maqueta 4.7 v2): ordenadas por urgencia; las tarjetas de resumen filtran la lista. */
 export function TenantList() {
+  const session = useSession();
   const [tenants, setTenants] = useState<TenantOverview[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
@@ -45,9 +48,16 @@ export function TenantList() {
 
   return (
     <>
-      <header className="flex flex-col gap-1.5">
-        <h1 className="font-display text-[1.875rem] font-extrabold tracking-[-0.02em]">Empresas</h1>
-        <p className="text-[0.9375rem] text-ink-muted">Primero las que requieren atención.</p>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="font-display text-[1.875rem] font-extrabold tracking-[-0.02em]">Empresas</h1>
+          <p className="text-[0.9375rem] text-ink-muted">Primero las que requieren atención.</p>
+        </div>
+        {can(session, 'platform.tenants.manage') && (
+          <Link href="/empresas/nueva" className={PRIMARY}>
+            Nueva empresa
+          </Link>
+        )}
       </header>
 
       {error && (
@@ -108,7 +118,7 @@ export function TenantList() {
             {visible.length === 0 ? (
               <p className="px-5 py-10 text-center text-ink-muted">
                 {sorted.length === 0
-                  ? 'Aún no hay empresas dadas de alta.'
+                  ? 'Aún no hay empresas. Da de alta la primera con «Nueva empresa».'
                   : 'Ninguna empresa en esta situación.'}
               </p>
             ) : (

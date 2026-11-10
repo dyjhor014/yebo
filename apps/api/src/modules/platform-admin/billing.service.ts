@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import type { Invoice, RecordPaymentRequest, TenantBillingResponse } from '@yebo/contracts';
+import type {
+  Invoice,
+  RecordPaymentRequest,
+  ReversePaymentRequest,
+  TenantBillingResponse,
+} from '@yebo/contracts';
 import { z } from 'zod';
 import { AppError } from '../../common/errors/app-error';
 import { Prisma, type TenantStatus } from '../../generated/prisma/client';
@@ -34,7 +39,7 @@ export class BillingService {
     await this.requireTenant(tenantId);
     return this.db.withTenant(tenantId, async (tx) => ({
       periods: await readPeriods(tx),
-      invoices: await readInvoices(tx),
+      invoices: await readInvoices(tx, { staff: true }),
     }));
   }
 
@@ -124,7 +129,7 @@ export class BillingService {
           ...ipOf(meta),
         });
       }
-      const invoices = await readInvoices(tx);
+      const invoices = await readInvoices(tx, { staff: true });
       const updated = invoices.find((i) => i.id === invoiceId);
       if (!updated) throw NOT_FOUND();
       const current = await tx.tenant.findUniqueOrThrow({
@@ -134,6 +139,91 @@ export class BillingService {
       return { invoice: updated, tenantStatus: current.status };
     });
     if (reactivated) await this.lifecycle.invalidate(tenantId);
+    return result;
+  }
+
+  /**
+   * Anula un pago confirmado (Fase 4.7b; decisiones del 2026-11-10): en UNA transacción con el contexto de la
+   * empresa, bloquea pago y factura, marca el pago como REVERSED (quién, cuándo, motivo), repone el saldo y recalcula
+   * el estado de la factura (vencida si su vencimiento ya pasó en la zona de la empresa). Si la factura queda vencida
+   * y la empresa estaba ACTIVE, vuelve a PAST_DUE (la gracia para suspender cuenta desde ahora), con historial y
+   * auditoría. Nunca la suspende directamente.
+   */
+  async reversePayment(
+    actor: PlatformPrincipal,
+    tenantId: string,
+    paymentId: string,
+    input: ReversePaymentRequest,
+    meta: RequestMeta,
+  ): Promise<{ invoice: Invoice; tenantStatus: TenantStatus }> {
+    if (!UUID.safeParse(paymentId).success) throw NOT_FOUND();
+    await this.requireTenant(tenantId);
+    const now = this.clock.now();
+    let changed = false;
+    const result = await this.db.withTenant(tenantId, async (tx) => {
+      const [payment] = await tx.$queryRaw<{ status: string; amount: Prisma.Decimal; invoice_id: string }[]>`
+        SELECT status::text AS status, amount, invoice_id FROM subscription_payments
+         WHERE id = ${paymentId}::uuid FOR UPDATE`;
+      if (!payment) throw NOT_FOUND();
+      if (payment.status !== 'CONFIRMED') throw new AppError('CONFLICT', 'El pago ya está anulado', 409);
+      const [invoice] = await tx.$queryRaw<
+        { status: string; balance: Prisma.Decimal; total: Prisma.Decimal; due_date: Date; today: Date }[]
+      >`
+        SELECT i.status::text AS status, i.balance, i.total, i.due_date,
+               (${now}::timestamptz AT TIME ZONE t.timezone)::date AS today
+          FROM platform_invoices i JOIN tenants t ON t.id = i.tenant_id
+         WHERE i.id = ${payment.invoice_id}::uuid FOR UPDATE OF i`;
+      if (!invoice) throw NOT_FOUND();
+      if (invoice.status === 'VOID') {
+        throw new AppError('CONFLICT', 'La factura está anulada: sus pagos no se pueden anular', 409);
+      }
+      await tx.$executeRaw`
+        UPDATE subscription_payments
+           SET status = 'REVERSED', reversed_at = ${now}, reversed_by_platform_user_id = ${actor.platformUserId}::uuid,
+               reversal_reason = ${input.reason}
+         WHERE id = ${paymentId}::uuid`;
+      const balance = new Prisma.Decimal(invoice.balance).add(payment.amount);
+      const overdue = invoice.due_date.getTime() < invoice.today.getTime();
+      const status = overdue ? 'OVERDUE' : balance.eq(invoice.total) ? 'ISSUED' : 'PARTIALLY_PAID';
+      await tx.$executeRaw`
+        UPDATE platform_invoices SET balance = ${balance}, status = ${status}::invoice_status, updated_at = now()
+         WHERE id = ${payment.invoice_id}::uuid`;
+      await this.audit.record(
+        {
+          platformUserId: actor.platformUserId,
+          action: 'payment.reversed',
+          targetType: 'subscription_payment',
+          targetId: paymentId,
+          tenantId,
+          detail: {
+            invoiceId: payment.invoice_id,
+            amount: new Prisma.Decimal(payment.amount).toFixed(2),
+            reason: input.reason,
+            invoiceStatus: status,
+          },
+          ...ipOf(meta),
+        },
+        tx,
+      );
+      const tenant = await tx.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { status: true } });
+      if (overdue && tenant.status === 'ACTIVE') {
+        changed = await this.lifecycle.applyIn(tx, {
+          tenantId,
+          to: 'PAST_DUE',
+          reason: 'Pago anulado: la factura vuelve a tener saldo vencido',
+          actorPlatformUserId: actor.platformUserId,
+          ...ipOf(meta),
+        });
+      }
+      const updated = (await readInvoices(tx, { staff: true })).find((i) => i.id === payment.invoice_id);
+      if (!updated) throw NOT_FOUND();
+      const current = await tx.tenant.findUniqueOrThrow({
+        where: { id: tenantId },
+        select: { status: true },
+      });
+      return { invoice: updated, tenantStatus: current.status };
+    });
+    if (changed) await this.lifecycle.invalidate(tenantId);
     return result;
   }
 

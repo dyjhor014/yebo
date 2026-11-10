@@ -85,3 +85,19 @@ export function matches(t: TenantOverview, f: Filter): boolean {
 export function extraUsers(t: Pick<TenantOverview, 'usersPeak' | 'includedUsers'>): number {
   return t.usersPeak !== null && t.includedUsers !== null ? Math.max(0, t.usersPeak - t.includedUsers) : 0;
 }
+
+/** Subdominio propuesto a partir del nombre comercial: sin tildes, minúsculas, guiones simples, 3–40 caracteres. */
+export function slugify(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/ñ/g, 'n')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/, '');
+}
+
+export const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+export const validSlug = (s: string) => s.length >= 3 && s.length <= 40 && SLUG.test(s);

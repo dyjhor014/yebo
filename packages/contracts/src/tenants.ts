@@ -14,6 +14,19 @@ export const TenantStatusSchema = z.enum([
 ]);
 export type TenantStatus = z.infer<typeof TenantStatusSchema>;
 
+/**
+ * Transiciones MANUALES del staff (multitenancy §5.2), compartidas por la API (que las impone) y el panel (que solo
+ * ofrece estas). CANCELLED es final.
+ */
+export const TENANT_MANUAL_TRANSITIONS: Readonly<Record<TenantStatus, readonly TenantStatus[]>> = {
+  TRIAL: ['ACTIVE', 'EXPIRED', 'CANCELLED'],
+  ACTIVE: ['PAST_DUE', 'CANCELLED'],
+  PAST_DUE: ['ACTIVE', 'SUSPENDED', 'CANCELLED'],
+  SUSPENDED: ['ACTIVE', 'CANCELLED'],
+  EXPIRED: ['ACTIVE', 'CANCELLED'],
+  CANCELLED: [],
+};
+
 /** Etiqueta DNS en minúsculas, 3–40 caracteres, sin guiones al principio, al final ni dobles (ni `xn--`). */
 export const TenantSlugSchema = z
   .string()

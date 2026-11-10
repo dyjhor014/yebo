@@ -122,6 +122,10 @@ const EXPECTED_COLUMN_GRANTS = [
   'yebo_backoffice platform_invoices.balance UPDATE',
   'yebo_backoffice platform_invoices.status UPDATE',
   'yebo_backoffice platform_invoices.updated_at UPDATE',
+  'yebo_backoffice subscription_payments.reversal_reason UPDATE',
+  'yebo_backoffice subscription_payments.reversed_at UPDATE',
+  'yebo_backoffice subscription_payments.reversed_by_platform_user_id UPDATE',
+  'yebo_backoffice subscription_payments.status UPDATE',
   'yebo_backoffice subscriptions.is_current UPDATE',
   'yebo_backoffice subscriptions.next_plan_version_id UPDATE',
   'yebo_backoffice subscriptions.status UPDATE',
@@ -297,7 +301,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
       expect(rows.map((r) => r.line)).toEqual(EXPECTED_TABLE_GRANTS);
     });
 
-    it('privilegios de columna explícitos: membresías, estados, invitaciones, historial, facturación y soporte (3.3–4.6)', async () => {
+    it('privilegios de columna explícitos: membresías, estados, invitaciones, historial, facturación, soporte y anulación de pagos (3.3–4.7)', async () => {
       const { rows } = await owner.query<{ line: string }>(
         `SELECT r.rolname || ' ' || c.relname || '.' || att.attname || ' ' || a.privilege_type AS line
            FROM pg_attribute att JOIN pg_class c ON c.oid = att.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace,

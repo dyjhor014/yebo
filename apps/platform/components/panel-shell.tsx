@@ -15,10 +15,14 @@ const ROLE_LABEL: Record<PlatformRole, string> = {
   VIEWER: 'Solo lectura',
 };
 
-/** Secciones del carril. Las de la 4.7b se añaden aquí cuando existan sus pantallas (sin enlaces muertos). */
-const SECTIONS = [{ href: '/empresas', label: 'Empresas', icon: 'building' as const }];
+/** Secciones del carril, según el permiso de cada una (sin enlaces a lo que no se puede usar). */
+const SECTIONS = [
+  { href: '/empresas', label: 'Empresas', icon: 'building', permission: 'platform.tenants.read' },
+  { href: '/planes', label: 'Planes', icon: 'list', permission: 'platform.billing.read' },
+  { href: '/staff', label: 'Staff de YEBO', icon: 'people', permission: 'platform.staff.manage' },
+] as const;
 
-function RailIcon({ name }: { name: 'building' }) {
+function RailIcon({ name }: { name: (typeof SECTIONS)[number]['icon'] }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -35,6 +39,14 @@ function RailIcon({ name }: { name: 'building' }) {
           <path d="M3 21h18" />
           <path d="M5 21V7l7-4 7 4v14" />
           <path d="M9 21v-6h6v6" />
+        </>
+      )}
+      {name === 'list' && <path d="M4 6h16M4 12h16M4 18h10" />}
+      {name === 'people' && (
+        <>
+          <circle cx="9" cy="8" r="3" />
+          <path d="M3 20c0-3 3-5 6-5s6 2 6 5" />
+          <path d="M16 4a3 3 0 0 1 0 6M21 20c0-2-1.5-4-4-4.6" />
         </>
       )}
     </svg>
@@ -64,7 +76,7 @@ export function PanelShell({ children }: { children: ReactNode }) {
                 <span className="text-xs font-semibold text-on-rail-muted">Panel de plataforma</span>
               </div>
               <nav aria-label="Secciones del panel" className="flex gap-1 overflow-x-auto lg:flex-col">
-                {SECTIONS.map((s) => {
+                {SECTIONS.filter((s) => session.permissions.includes(s.permission)).map((s) => {
                   const active = path === s.href || path.startsWith(`${s.href}/`);
                   return (
                     <Link

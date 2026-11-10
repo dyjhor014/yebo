@@ -23,6 +23,9 @@ export const PaymentSchema = z.object({
   reference: z.string(),
   paidAt: z.iso.datetime(),
   status: z.enum(['CONFIRMED', 'REVERSED']),
+  /** Anulación (Fase 4.7b). La empresa ve la fecha; el motivo solo lo ve el staff. */
+  reversedAt: z.iso.datetime().nullable(),
+  reversalReason: z.string().nullable().optional(),
 });
 
 export const InvoiceSchema = z.object({
@@ -80,6 +83,9 @@ export const RecordPaymentRequestSchema = z
   })
   .strict();
 export type RecordPaymentRequest = z.infer<typeof RecordPaymentRequestSchema>;
+/** Panel: anular un pago (Fase 4.7b). Motivo obligatorio; repone el saldo de la factura. */
+export const ReversePaymentRequestSchema = z.object({ reason: z.string().trim().min(3).max(500) }).strict();
+export type ReversePaymentRequest = z.infer<typeof ReversePaymentRequestSchema>;
 export const RecordPaymentResponseSchema = z.object({
   invoice: InvoiceSchema,
   tenantStatus: TenantStatusSchema,

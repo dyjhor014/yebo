@@ -1,5 +1,5 @@
 import type { TenantOverview } from '@yebo/contracts';
-import { byUrgency, extraUsers, matches, operationLine } from './tenants';
+import { byUrgency, extraUsers, matches, operationLine, slugify, validSlug } from './tenants';
 
 const base: TenantOverview = {
   id: 'x',
@@ -74,5 +74,20 @@ describe('lista de empresas del panel', () => {
       operationLine(t({ modalities: ['LAND', 'RIVER'], services: ['PASSENGER', 'PARCEL', 'CARGO'] })),
     ).toBe('Terrestre y fluvial · pasajeros, encomiendas y carga');
     expect(operationLine(t({ modalities: [], services: [] }))).toBe('Sin servicios configurados');
+  });
+});
+
+describe('subdominio propuesto', () => {
+  it('quita tildes y símbolos y une con guiones simples', () => {
+    expect(slugify('Transportes del Oriente')).toBe('transportes-del-oriente');
+    expect(slugify('  Naviera Ucayali S.A.C. ')).toBe('naviera-ucayali-s-a-c');
+    expect(slugify('Expreso Marañón — Línea 2')).toBe('expreso-maranon-linea-2');
+    expect(slugify('Ñandú')).toBe('nandu');
+    expect(slugify('a'.repeat(39) + ' bc')).toBe('a'.repeat(39));
+    expect(validSlug('ok-1')).toBe(true);
+    expect(validSlug('ab')).toBe(false);
+    expect(validSlug('a--b')).toBe(false);
+    expect(validSlug('-ab')).toBe(false);
+    expect(validSlug('a'.repeat(41))).toBe(false);
   });
 });

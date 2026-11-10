@@ -8,7 +8,8 @@ import type { Prisma } from '../../generated/prisma/client';
 type Tx = Pick<Prisma.TransactionClient, 'billingPeriod' | 'platformInvoice'>;
 const day = (d: Date) => d.toISOString().slice(0, 10);
 
-export async function readInvoices(tx: Tx): Promise<Invoice[]> {
+/** `staff`: incluye el motivo de las anulaciones (solo el panel). */
+export async function readInvoices(tx: Tx, opts: { staff?: boolean } = {}): Promise<Invoice[]> {
   const rows = await tx.platformInvoice.findMany({
     include: {
       lines: { orderBy: { kind: 'asc' } },
@@ -41,6 +42,8 @@ export async function readInvoices(tx: Tx): Promise<Invoice[]> {
       reference: p.reference,
       paidAt: p.paidAt.toISOString(),
       status: p.status,
+      reversedAt: p.reversedAt?.toISOString() ?? null,
+      ...(opts.staff ? { reversalReason: p.reversalReason } : {}),
     })),
   }));
 }

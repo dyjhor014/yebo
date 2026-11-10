@@ -466,7 +466,8 @@ model PlatformUser {
   opOverridesGranted TenantOperationOverride[] @relation("OpOverrideGrantedBy")
   opOverridesEnded   TenantOperationOverride[] @relation("OpOverrideEndedBy")
   invitationsSent    MembershipInvitation[]
-  paymentsRecorded   SubscriptionPayment[]
+  paymentsRecorded   SubscriptionPayment[]     @relation("PaymentRecordedBy")
+  paymentsReversed   SubscriptionPayment[]     @relation("PaymentReversedBy")
   supportGrants      SupportAccessGrant[]
 
   @@map("platform_users")
@@ -1097,9 +1098,14 @@ model SubscriptionPayment {
   recordedByPlatformUserId String        @map("recorded_by_platform_user_id") @db.Uuid
   status                   PaymentStatus @default(CONFIRMED)
   createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// Anulación (Fase 4.7b): CONFIRMED → REVERSED, final; repone el saldo de la factura. Las tres o ninguna.
+  reversedAt               DateTime?     @map("reversed_at") @db.Timestamptz(6)
+  reversedByPlatformUserId String?       @map("reversed_by_platform_user_id") @db.Uuid
+  reversalReason           String?       @map("reversal_reason")
 
   invoice    PlatformInvoice @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
-  recordedBy PlatformUser    @relation(fields: [recordedByPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  recordedBy PlatformUser    @relation("PaymentRecordedBy", fields: [recordedByPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reversedBy PlatformUser?   @relation("PaymentReversedBy", fields: [reversedByPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@unique([tenantId, id])
   @@index([invoiceId])

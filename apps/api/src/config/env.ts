@@ -96,6 +96,11 @@ export const EnvSchema = z
       .string()
       .regex(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/)
       .default('yebo.pe'),
+    /** Dominio de correo del staff (Fase 4.7b, maqueta aprobada): solo `<nombre>@<dominio>` entra al staff. */
+    PLATFORM_STAFF_EMAIL_DOMAIN: z
+      .string()
+      .regex(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/)
+      .default('yebo.pe'),
     PLATFORM_SESSION_IDLE_MINUTES: z.coerce.number().int().min(5).max(240).default(30),
     PLATFORM_SESSION_ABSOLUTE_HOURS: z.coerce.number().int().min(1).max(24).default(12),
     /** Cifrado de campo (ADR-019): clave AES-256 en base64 (32 bytes). Opcional para el worker. */

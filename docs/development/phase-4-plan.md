@@ -606,3 +606,35 @@ La maqueta v2 se aprobó el 2026-11-10. La implementación se divide en tres par
 - **Pendiente de la 4.7a, explícito:**
   - el código QR para activar la MFA (se muestra la clave para escribirla a mano); necesita una dependencia que hay que inspeccionar antes de instalarla;
   - «Anular este pago» de la maqueta pasa a la 4.7b, porque la API aún no tiene la anulación.
+
+### Resultado de la 4.7b
+
+- **Decisiones del responsable (2026-11-10) sobre la anulación de pagos:**
+  - si al anular la factura queda vencida y la empresa estaba «Al día», vuelve a «Pago vencido»;
+  - anulan Cobros y Superadmin, con motivo obligatorio y sin límite de tiempo.
+- **Migración `20261111050000_fase4_7_payment_reversal`** (reversión documentada en su cabecera):
+  - columnas de la anulación en `subscription_payments`, con su CHECK;
+  - trigger que solo admite `CONFIRMED → REVERSED`;
+  - `UPDATE` de esas columnas para `yebo_backoffice`.
+- **API:**
+  - `POST /platform/tenants/{id}/payments/{paymentId}/reverse`;
+  - el motivo solo se devuelve al staff;
+  - el staff solo admite correos de `PLATFORM_STAFF_EMAIL_DOMAIN` (por defecto `yebo.pe`), comprobado en el servidor;
+  - las transiciones manuales de estado viven en `@yebo/contracts` (`TENANT_MANUAL_TRANSITIONS`), compartidas por la API y el panel.
+- **Panel:**
+  - ficha con las acciones de cabecera (invitar a la empresa, cambiar plan, abrir acceso de soporte; «Suspender o cancelar…» aparte, y cancelar exige escribir el nombre);
+  - cinco pestañas: Resumen, Facturación y consumo (con «Anular» en cada pago), Accesos de soporte (entrar y revocar), Módulos y excepciones (crear y terminar) e Historial;
+  - «Nueva empresa», con subdominio propuesto y la invitación del primer administrador;
+  - «Planes»: versiones, publicar y retirar;
+  - «Staff de YEBO»: invitar con Superadmin separado y confirmado, nuevo enlace y desactivar;
+  - el carril solo muestra las secciones permitidas;
+  - los enlaces de un solo uso usan «Copiar» como única acción principal y piden confirmación si se cierra sin copiar (también con Esc).
+- **Pruebas:**
+  - integración: 21 suites, 356 pruebas;
+  - unitarias del panel: 18;
+  - todas las mutaciones no equivalentes de la anulación (servicio y trigger) se detectan.
+- **Pendiente, explícito:**
+  - crear planes y versiones desde el panel (hoy por la API);
+  - las vistas globales de «Cobros» y «Accesos de soporte» (hoy están en la ficha de cada empresa);
+  - el código QR de la MFA;
+  - los fines de excepción se calculan con la hora de Perú (UTC−5); otras zonas horarias, cuando haya empresas fuera de Perú.

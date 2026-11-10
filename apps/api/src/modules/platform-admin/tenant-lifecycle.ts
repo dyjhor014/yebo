@@ -1,4 +1,5 @@
 import type { SubscriptionStatus, TenantStatus } from '../../generated/prisma/client';
+import { TENANT_MANUAL_TRANSITIONS } from '@yebo/contracts';
 
 /**
  * Máquina de estados del tenant (multitenancy §5.2, ADR-023; Fase 4.3a). Fuente única de las transiciones: la usan
@@ -11,14 +12,8 @@ import type { SubscriptionStatus, TenantStatus } from '../../generated/prisma/cl
  * - SUSPENDED / EXPIRED → ACTIVE (reactivación inmediata al registrarse el pago) o CANCELLED.
  * - CANCELLED es final: el periodo de cierre se deriva de `cancelled_at` (tenant-operation.ts).
  */
-export const MANUAL_TRANSITIONS: Readonly<Record<TenantStatus, readonly TenantStatus[]>> = {
-  TRIAL: ['ACTIVE', 'EXPIRED', 'CANCELLED'],
-  ACTIVE: ['PAST_DUE', 'CANCELLED'],
-  PAST_DUE: ['ACTIVE', 'SUSPENDED', 'CANCELLED'],
-  SUSPENDED: ['ACTIVE', 'CANCELLED'],
-  EXPIRED: ['ACTIVE', 'CANCELLED'],
-  CANCELLED: [],
-};
+export const MANUAL_TRANSITIONS: Readonly<Record<TenantStatus, readonly TenantStatus[]>> =
+  TENANT_MANUAL_TRANSITIONS;
 
 export function isManualTransitionAllowed(from: TenantStatus, to: TenantStatus): boolean {
   return MANUAL_TRANSITIONS[from].includes(to);

@@ -69,6 +69,10 @@ export class StaffService {
     meta: RequestMeta,
   ): Promise<{ platformUserId: string; setupUrl: string; setupExpiresAt: string }> {
     const email = input.email.trim().toLowerCase();
+    const domain = this.env.PLATFORM_STAFF_EMAIL_DOMAIN;
+    if (!email.endsWith(`@${domain}`)) {
+      throw new AppError('VALIDATION_FAILED', `El staff solo admite correos @${domain}`, 400);
+    }
     return this.db.client.$transaction(async (tx) => {
       const exists = await tx.platformUser.findUnique({ where: { email }, select: { id: true } });
       if (exists) throw new AppError('CONFLICT', 'Ya existe un miembro del staff con ese correo', 409);
