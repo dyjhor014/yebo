@@ -18,3 +18,8 @@ body {
 .yebo-rail :focus-visible {
   outline-color: var(--focus-ring-on-rail);
 }
+
+/* Casillas y radios con la paleta (no el azul del navegador): navy en claro, cloud en oscuro. */
+:root {
+  accent-color: var(--text-primary);
+}

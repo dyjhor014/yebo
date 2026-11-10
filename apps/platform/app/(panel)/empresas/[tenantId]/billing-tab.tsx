@@ -11,7 +11,7 @@ import type {
 import { useState } from 'react';
 import { can, useSession } from '@/components/session';
 import { Pill } from '@/components/status-pill';
-import { Success } from '@/components/ui';
+import { Success, ScrollRegion } from '@/components/ui';
 import { addDays, date, money, period, today } from '@/lib/format';
 import { ReversePayment } from './actions/reverse-payment';
 import { RecordPayment } from './record-payment';
@@ -137,7 +137,7 @@ export function BillingTab({
                 Aún no hay facturas: se emiten al cerrar cada período.
               </p>
             ) : (
-              <div className="overflow-x-auto">
+              <ScrollRegion label="Tabla de facturas">
                 <table className="w-full min-w-[46rem] border-collapse text-[0.9375rem]">
                   <thead>
                     <tr className="text-left text-[0.8125rem] text-ink-muted">
@@ -172,8 +172,10 @@ export function BillingTab({
                         </td>
                         <td className="px-3 py-3.5 whitespace-nowrap">{date(i.issueDate)}</td>
                         <td className="px-3 py-3.5 whitespace-nowrap">{date(i.dueDate)}</td>
-                        <td className="px-3 py-3.5 text-right tabular-nums">{money(i.total, i.currency)}</td>
-                        <td className="px-3 py-3.5 text-right font-semibold tabular-nums">
+                        <td className="px-3 py-3.5 text-right whitespace-nowrap tabular-nums">
+                          {money(i.total, i.currency)}
+                        </td>
+                        <td className="px-3 py-3.5 text-right font-semibold whitespace-nowrap tabular-nums">
                           {money(i.balance, i.currency)}
                         </td>
                         <td className="px-5 py-3.5">
@@ -183,7 +185,7 @@ export function BillingTab({
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </ScrollRegion>
             )}
           </section>
 
@@ -209,11 +211,12 @@ export function BillingTab({
                         {p.invoice.code}
                       </span>
                       {reversed ? (
-                        <span className="flex flex-col items-end gap-0.5 text-right">
+                        // Anulado: debajo del pago tachado, en una línea propia (etiqueta, fecha y motivo).
+                        <span className="flex basis-full flex-wrap items-center gap-2 text-[0.8125rem] text-ink-muted">
                           <Pill tone="neutral">Anulado</Pill>
                           {p.reversedAt && (
-                            <span className="text-[0.8125rem] text-ink-muted">
-                              {date(today(tz, new Date(p.reversedAt)))}
+                            <span>
+                              el {date(today(tz, new Date(p.reversedAt)))}
                               {p.reversalReason ? ` · ${p.reversalReason}` : ''}
                             </span>
                           )}

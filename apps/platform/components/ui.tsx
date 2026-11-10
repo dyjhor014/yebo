@@ -149,3 +149,20 @@ export function Warning({ children }: { children: ReactNode }) {
     </div>
   );
 }
+
+/**
+ * Contenedor de una tabla ancha que se desplaza en horizontal en pantallas estrechas. Enfocable y con nombre,
+ * para que el desplazamiento también se pueda hacer con el teclado (WCAG 2.1.1; regla axe scrollable-region-focusable).
+ */
+export function ScrollRegion({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div
+      role="region"
+      aria-label={label}
+      tabIndex={0}
+      className="overflow-x-auto focus-visible:outline-offset-[-2px]"
+    >
+      {children}
+    </div>
+  );
+}

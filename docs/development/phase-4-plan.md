@@ -638,3 +638,38 @@ La maqueta v2 se aprobó el 2026-11-10. La implementación se divide en tres par
   - las vistas globales de «Cobros» y «Accesos de soporte» (hoy están en la ficha de cada empresa);
   - el código QR de la MFA;
   - los fines de excepción se calculan con la hora de Perú (UTC−5); otras zonas horarias, cuando haya empresas fuera de Perú.
+
+### Resultado de la 4.7c
+
+- **Recorridos E2E** (`tests/e2e`, guía en `docs/development/e2e.md`):
+  - 12 pruebas con Playwright 1.64.1 y axe 4.14.0 (WCAG 2.1 AA), en escritorio claro, modo oscuro y móvil de 390 px, contra `yebo_test`;
+  - cubren el acceso con activación de la MFA y el recorrido completo de la maqueta v2;
+  - se comprobó que axe detecta de verdad: quitando el nombre de un botón, el recorrido falla.
+- **Defectos encontrados y corregidos:**
+  - las tablas desplazables no eran accesibles con el teclado en pantallas estrechas (axe `scrollable-region-focusable`, WCAG 2.1.1): ahora son regiones enfocables con nombre (`ScrollRegion`);
+  - los importes de la tabla de facturas se partían en dos líneas;
+  - la etiqueta «Anulado» quedaba descolocada;
+  - la pista del subdominio vacío decía «Será ….».
+- **Revisión con Impeccable** (detector 0.1.18 sobre las pantallas renderizadas, sin telemetría): 63 avisos de tres tipos.
+  - `overused-font`: Inter es la tipografía de la marca, así que es un falso positivo, igual que en la crítica de la maqueta.
+  - `marquee`: es la animación de «Entrando» de la web, que el panel no usa y que ya se detiene con «reducir movimiento».
+  - `cramped-padding`: las capturas muestran márgenes interiores de 16 a 20 px; el detector no interpreta bien los contenedores sin relleno propio.
+  - La revisión visual de las capturas sí encontró los dos defectos de presentación de arriba.
+- **Pendiente de la Fase 4:** lo que cada etapa dejó anotado. La 4.8 es el cierre de la fase.
+
+#### «Nueva empresa»: compacto y pulido con Impeccable (2026-11-10, a petición del responsable)
+
+- **Objetivo:** el formulario entero cabe sin desplazar en 1440×900. Antes medía 1338 px; ahora «Dar de alta» queda en 757 px rellenado y en 834 px con todos los errores. El E2E lo comprueba.
+- **`polish` de Impeccable, solo sobre este formulario** (modo Operate; sin `context`, que este binario no trae, y sin PRODUCT.md ni DESIGN.md):
+  - **Disposición:** dos columnas desde 1280 px y una por debajo. A 1024 px las dos columnas cortaban el RUC y los nombres, y los servicios se salían de la tarjeta. Nombre comercial y razón social van a ancho completo.
+  - **Servicios:** filas sin cajas, agrupadas por modalidad. En oscuro los bordes de las cajas no se veían.
+  - **Casillas y radios:** con la paleta (`accent-color`), no en el azul del navegador.
+  - **Errores:** el foco va al primer campo con error, y el subdominio no repite el error cuando falta el nombre comercial.
+  - **Plan:** la pista dice el precio, los usuarios incluidos y si la empresa empieza en prueba o «Al día». Si no hay planes publicados, un aviso enlaza a «Planes».
+  - **Subdominio:** el dominio base aparece como sufijo del campo, en lugar de repetir la dirección completa en la pista.
+- **Verificación:**
+  - capturas en 390, 1024 y 1440 px, en claro y en oscuro, vacío, con errores y rellenado (`tests/e2e/specs/05-estados-nueva-empresa.spec.ts`, con `YEBO_E2E_CAPTURAS=1`);
+  - axe sin fallos y E2E en verde;
+  - el detector solo repite los falsos positivos ya documentados.
+- **Móvil del panel (pedido después):** el carril pasa a ser una barra superior con «Menú», que abre la navegación y la sesión en vertical. Se cierra al navegar y con Esc, devolviendo el foco al botón. Antes era una franja que se desplazaba en horizontal y cortaba «Staff de YEBO». El E2E del proyecto `movil` lo comprueba. En el formulario, los servicios de Terrestre y Fluvial van en dos columnas también en móvil.
+

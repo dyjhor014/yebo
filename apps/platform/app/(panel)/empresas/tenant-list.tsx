@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { can, useSession } from '@/components/session';
 import { StatusPill } from '@/components/status-pill';
-import { PRIMARY } from '@/components/ui';
+import { PRIMARY, ScrollRegion } from '@/components/ui';
 import { get } from '@/lib/api';
 import { date, money } from '@/lib/format';
 import { byUrgency, extraUsers, matches, milestoneLabel, operationLine, type Filter } from '@/lib/tenants';
@@ -122,7 +122,7 @@ export function TenantList() {
                   : 'Ninguna empresa en esta situación.'}
               </p>
             ) : (
-              <div className="overflow-x-auto">
+              <ScrollRegion label="Tabla de empresas">
                 <table className="w-full min-w-[56rem] border-collapse text-[0.9375rem]">
                   <thead>
                     <tr className="text-left text-[0.8125rem] text-ink-muted">
@@ -197,7 +197,7 @@ export function TenantList() {
                     })}
                   </tbody>
                 </table>
-              </div>
+              </ScrollRegion>
             )}
           </section>
         </>

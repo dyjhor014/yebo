@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - tests/*
 
 # pnpm 10 bloquea los scripts de instalación por defecto; solo se permiten los necesarios.
 onlyBuiltDependencies:
