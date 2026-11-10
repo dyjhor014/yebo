@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
+import { PERMISSION_CATALOG, ROLE_TEMPLATES } from '../../../apps/api/src/modules/access/permission-catalog';
 import { E2E, ROOT } from './env';
 
 /**
@@ -24,6 +25,25 @@ export default async function globalSetup() {
                 tenant_memberships, authorization_codes, refresh_tokens, tenant_sessions, identity_sessions, users,
                 tenant_domains, tenants CASCADE`,
     );
+    // Catálogo de permisos y plantilla Administrador desde la fuente única (permission-catalog.ts): las suites de
+    // integración vacían y resiembran estas tablas a su manera, así que el E2E no depende del estado que dejen.
+    for (const [code, p] of Object.entries(PERMISSION_CATALOG)) {
+      await owner.query(
+        `INSERT INTO permissions (id, code, module_code, description, is_sensitive, updated_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, now())
+         ON CONFLICT (code) DO UPDATE SET module_code = EXCLUDED.module_code, description = EXCLUDED.description,
+                                          is_sensitive = EXCLUDED.is_sensitive`,
+        [code, p.module, p.description, p.sensitive],
+      );
+    }
+    for (const [code, t] of Object.entries(ROLE_TEMPLATES)) {
+      await owner.query(
+        `INSERT INTO role_templates (id, code, name, permission_codes, updated_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, now())
+         ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, permission_codes = EXCLUDED.permission_codes`,
+        [code, t.name, [...t.permissions]],
+      );
+    }
   } finally {
     await owner.end();
   }

@@ -197,3 +197,34 @@ CONFIGURE queda bloqueado en `SUSPENDED`, `EXPIRED` y `CANCELLED` (ADR-023). El 
 - Migraciones de la 5.1 y la 5.2 a `yebo_dev`: con autorización y copia previa.
 - Retirar archivos desde el editor (`DELETED`) y limpiar objetos huérfanos: con el editor de la 5.4.
 
+## Etapa 5.3 · Portal público en `apps/web` (implementada el 2026-11-10; pendiente de revisión)
+
+### Decisiones de implementación
+
+| Tema | Decisión |
+|---|---|
+| Raíz de cada host | La página de estado de la Fase 2 pasa a `/estado` (F5-Q6). En `/`, el servidor de Next lee `GET /api/v1/public/site` reenviando el host original (`X-Forwarded-Host`; ADR-004). Empresa → su portal; hub de cuentas → redirección a `/login`; host desconocido → 404; API caída → error, no un 404 engañoso |
+| Una sola compilación | El portal es un componente de servidor que pinta el documento publicado: lo que cambia entre empresas son los datos, nunca el código ni la compilación (criterio de la fase) |
+| Tema | `themeStyle` convierte los tokens en variables CSS (`--site-*`): superficie y texto de `SITE_SURFACES`, texto sobre el principal con `textOnPrimary` y radio en 3 pasos. El acento solo se usa sobre la superficie pura, la misma contra la que la API validó el contraste. Los tintes (portada, líneas) se derivan con `color-mix` y nunca llevan texto de acento |
+| Fuentes | Las 6 de la lista blanca, con `next/font`: se descargan al compilar y se sirven desde el propio dominio, sin contactar con Google |
+| Contenido (F5-Q1) | Cabecera con logo o nombre, navegación por secciones (≥ md), portada con llamada a la acción (WhatsApp, si no teléfono) y la imagen de portada, y las secciones activas que tienen datos, en su orden. Servicios por modalidad, sucursales, horarios (`dl`), FAQ y políticas (`details`), y contacto (`tel:`, `mailto:`, `wa.me`). Pie con su texto y redes. Aviso «Reserva de pasajes y seguimiento de envíos en línea: próximamente» si opera pasajeros o encomiendas |
+| Metadatos | El título es el nombre de la empresa; la descripción, el subtítulo; el icono, el **favicon generado de su logo**; la imagen Open Graph, la portada |
+| Accesibilidad | Enlace «Ir al contenido», regiones con su título, un solo `h1` y los indicadores de FAQ y políticas dibujados en SVG (no un carácter), respetando «reducir movimiento» |
+
+### Pruebas
+
+- **E2E `06-portal.spec.ts` (5).** El harness sirve ahora también `apps/web`, y el proxy enruta por host como Nginx (`admin.*` → panel; el resto → web; `/api` → API).
+  - **Naviera Ucayali**, con `WHITE_LABEL`: tema oscuro, Lora y verde lima, con sus 6 secciones; se comprueban el fondo y la fuente calculados, la llamada a la acción y los enlaces `tel:`/`mailto:`.
+  - **Transportes del Oriente**, sin el módulo: tema YEBO, portada con su nombre y solo servicios, sucursales y contacto.
+  - **Los dos en 390 px**, sin desplazamiento horizontal.
+  - **Hub → login; host desconocido → 404; `/estado` se conserva.**
+  - **axe (WCAG 2.1 AA)** en todo.
+- **Los sitios del E2E** se preparan por SQL (rol de pruebas) y se validan antes con `SiteConfigSchema` y `themeContrastProblems`. La publicación por la API ya la cubren `site.int-spec` y `site-assets.int-spec`.
+- **Arreglo del harness:** la preparación global resiembra el catálogo de permisos y la plantilla Administrador desde `permission-catalog.ts`. Antes dependía del estado que dejaban las suites de integración, y un alta falló con «Falta la plantilla ADMIN». La API vuelca sus avisos y errores en la salida del E2E.
+- **Totales:** E2E, 18 + 3 opcionales ✅; tipos, lint y formato ✅. La API no cambia en esta etapa.
+- **Comprobado en el modo HTTPS** con `yebo_dev`: portal de la empresa real (200), raíz del hub → `/login` y `/estado` (200).
+
+### Pendiente
+
+- **Revisión visual con Impeccable** de los portales: en escritorio, a varias secciones les sobra ancho. Va con el editor de la 5.4, que decide cómo se ven las vistas previas.
+
