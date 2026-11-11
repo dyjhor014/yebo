@@ -14,36 +14,148 @@ import { AppModule } from '../../src/app.module';
 import { AppPrismaService } from '../../src/infrastructure/database/app-prisma.service';
 import { PlatformPrismaService } from '../../src/infrastructure/database/platform-prisma.service';
 import { IdentityPrismaService } from '../../src/modules/identity/identity-prisma.service';
+import { BackofficePrismaService } from '../../src/modules/platform-admin/backoffice-prisma.service';
 import { testBypassUrl, testDbUrl, testPool } from '../support/db';
 
 const DB = 'yebo_test';
 const API_ROOT = resolve(__dirname, '..', '..');
-const RUNTIME = ['yebo_app', 'yebo_platform', 'yebo_identity'] as const;
+const RUNTIME = ['yebo_app', 'yebo_platform', 'yebo_identity', 'yebo_backoffice', 'yebo_metering'] as const;
 
 /** Matriz esperada de privilegios de TABLA (explícitos) de los roles de ejecución en el esquema public. */
 const EXPECTED_TABLE_GRANTS = [
+  'yebo_app billing_periods SELECT',
+  'yebo_app membership_invitations INSERT,SELECT',
   'yebo_app membership_roles DELETE,INSERT,SELECT,UPDATE',
+  'yebo_app membership_status_history INSERT,SELECT',
+  'yebo_app modules SELECT',
   'yebo_app permissions SELECT',
+  'yebo_app plan_version_modules SELECT',
+  'yebo_app platform_invoice_lines SELECT',
+  'yebo_app platform_invoices SELECT',
   'yebo_app role_permissions DELETE,INSERT,SELECT,UPDATE',
   'yebo_app role_templates SELECT',
   'yebo_app roles DELETE,INSERT,SELECT,UPDATE',
+  'yebo_app subscription_payments SELECT',
+  'yebo_app subscriptions SELECT',
+  'yebo_app support_access_grants SELECT',
+  'yebo_app support_access_logs SELECT',
   'yebo_app tenant_memberships SELECT',
+  'yebo_app tenant_module_overrides SELECT',
+  'yebo_app tenant_operation_overrides SELECT',
+  'yebo_app tenant_services SELECT',
+  'yebo_app tenant_settings SELECT',
+  'yebo_app tenant_status_history SELECT',
+  'yebo_app usage_daily_snapshots SELECT',
+  'yebo_app usage_period_calculations SELECT',
+  'yebo_backoffice billing_periods INSERT,SELECT',
+  'yebo_backoffice membership_invitations INSERT,SELECT',
+  'yebo_backoffice membership_status_history SELECT',
+  'yebo_backoffice modules SELECT',
+  'yebo_backoffice permissions SELECT',
+  'yebo_backoffice plan_version_modules DELETE,INSERT,SELECT',
+  'yebo_backoffice plan_versions INSERT,SELECT,UPDATE',
+  'yebo_backoffice plans INSERT,SELECT,UPDATE',
+  'yebo_backoffice platform_audit_logs INSERT,SELECT',
+  'yebo_backoffice platform_invoice_lines SELECT',
+  'yebo_backoffice platform_invoices SELECT',
+  'yebo_backoffice platform_sessions INSERT,SELECT,UPDATE',
+  'yebo_backoffice platform_setup_tokens INSERT,SELECT,UPDATE',
+  'yebo_backoffice platform_users INSERT,SELECT,UPDATE',
+  'yebo_backoffice role_permissions INSERT',
+  'yebo_backoffice role_templates SELECT',
+  'yebo_backoffice roles INSERT,SELECT',
+  'yebo_backoffice subscription_payments INSERT,SELECT',
+  'yebo_backoffice subscriptions INSERT,SELECT',
+  'yebo_backoffice support_access_grants INSERT,SELECT',
+  'yebo_backoffice support_access_logs INSERT,SELECT',
+  'yebo_backoffice support_handoffs INSERT,SELECT',
+  'yebo_backoffice support_sessions INSERT,SELECT',
+  'yebo_backoffice tenant_domains INSERT,SELECT',
+  'yebo_backoffice tenant_module_overrides INSERT,SELECT,UPDATE',
+  'yebo_backoffice tenant_operation_overrides INSERT,SELECT,UPDATE',
+  'yebo_backoffice tenant_services INSERT,SELECT',
+  'yebo_backoffice tenant_settings INSERT,SELECT',
+  'yebo_backoffice tenant_status_history INSERT,SELECT',
+  'yebo_backoffice tenants INSERT,SELECT',
+  'yebo_backoffice usage_daily_snapshots SELECT',
+  'yebo_backoffice usage_period_calculations SELECT',
   'yebo_identity authorization_codes INSERT,SELECT,UPDATE',
   'yebo_identity identity_sessions INSERT,SELECT,UPDATE',
+  'yebo_identity membership_invitations SELECT',
+  'yebo_identity membership_roles INSERT,SELECT',
+  'yebo_identity membership_status_history INSERT,SELECT',
   'yebo_identity refresh_tokens INSERT,SELECT,UPDATE',
+  'yebo_identity roles SELECT',
   'yebo_identity tenant_domains SELECT',
-  'yebo_identity tenant_memberships SELECT',
+  'yebo_identity tenant_memberships INSERT,SELECT',
+  'yebo_identity tenant_operation_overrides SELECT',
   'yebo_identity tenant_sessions INSERT,SELECT,UPDATE',
-  'yebo_identity users SELECT',
+  'yebo_identity users INSERT,SELECT',
+  'yebo_metering billing_periods INSERT,SELECT',
+  'yebo_metering membership_status_history SELECT',
+  'yebo_metering plan_versions SELECT',
+  'yebo_metering platform_invoice_lines INSERT,SELECT',
+  'yebo_metering platform_invoices INSERT,SELECT',
+  'yebo_metering subscriptions INSERT,SELECT',
+  'yebo_metering tenants SELECT',
+  'yebo_metering usage_daily_snapshots INSERT,SELECT',
+  'yebo_metering usage_period_calculations INSERT,SELECT',
   'yebo_platform tenant_domains SELECT',
   'yebo_platform tenants SELECT',
 ];
 
 /** Privilegios de COLUMNA explícitos (Fase 3.3). */
 const EXPECTED_COLUMN_GRANTS = [
+  'yebo_app membership_invitations.revoked_at UPDATE',
+  'yebo_app membership_status_history.valid_to UPDATE',
+  'yebo_app support_access_grants.approved_at UPDATE',
+  'yebo_app support_access_grants.approved_by_membership_id UPDATE',
+  'yebo_app support_access_grants.revoked_at UPDATE',
+  'yebo_app support_access_grants.revoked_by_id UPDATE',
+  'yebo_app support_access_grants.revoked_by_kind UPDATE',
   'yebo_app tenant_memberships.permissions_version UPDATE',
   'yebo_app tenant_memberships.status UPDATE',
   'yebo_app tenant_memberships.updated_at UPDATE',
+  'yebo_app tenant_settings.support_requires_approval UPDATE',
+  'yebo_app tenant_settings.updated_at UPDATE',
+  'yebo_backoffice billing_periods.cut_off UPDATE',
+  'yebo_backoffice platform_invoices.balance UPDATE',
+  'yebo_backoffice platform_invoices.status UPDATE',
+  'yebo_backoffice platform_invoices.updated_at UPDATE',
+  'yebo_backoffice subscription_payments.reversal_reason UPDATE',
+  'yebo_backoffice subscription_payments.reversed_at UPDATE',
+  'yebo_backoffice subscription_payments.reversed_by_platform_user_id UPDATE',
+  'yebo_backoffice subscription_payments.status UPDATE',
+  'yebo_backoffice subscriptions.is_current UPDATE',
+  'yebo_backoffice subscriptions.next_plan_version_id UPDATE',
+  'yebo_backoffice subscriptions.status UPDATE',
+  'yebo_backoffice subscriptions.updated_at UPDATE',
+  'yebo_backoffice support_access_grants.revoked_at UPDATE',
+  'yebo_backoffice support_access_grants.revoked_by_id UPDATE',
+  'yebo_backoffice support_access_grants.revoked_by_kind UPDATE',
+  'yebo_backoffice support_handoffs.consumed_at UPDATE',
+  'yebo_backoffice support_sessions.idle_expires_at UPDATE',
+  'yebo_backoffice support_sessions.last_seen_at UPDATE',
+  'yebo_backoffice support_sessions.revoked_at UPDATE',
+  'yebo_backoffice tenants.activated_at UPDATE',
+  'yebo_backoffice tenants.cancelled_at UPDATE',
+  'yebo_backoffice tenants.status UPDATE',
+  'yebo_backoffice tenants.status_changed_at UPDATE',
+  'yebo_backoffice tenants.trial_ends_at UPDATE',
+  'yebo_backoffice tenants.updated_at UPDATE',
+  'yebo_identity membership_invitations.accepted_at UPDATE',
+  'yebo_identity membership_invitations.accepted_membership_id UPDATE',
+  'yebo_identity membership_status_history.valid_to UPDATE',
+  'yebo_identity tenant_memberships.permissions_version UPDATE',
+  'yebo_identity tenant_memberships.status UPDATE',
+  'yebo_identity tenant_memberships.updated_at UPDATE',
+  'yebo_metering billing_periods.closed_at UPDATE',
+  'yebo_metering billing_periods.status UPDATE',
+  'yebo_metering subscriptions.current_period_end UPDATE',
+  'yebo_metering subscriptions.current_period_start UPDATE',
+  'yebo_metering subscriptions.is_current UPDATE',
+  'yebo_metering subscriptions.next_plan_version_id UPDATE',
+  'yebo_metering subscriptions.updated_at UPDATE',
 ];
 
 function walk(dir: string): string[] {
@@ -85,6 +197,10 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
         user: 'yebo_identity',
         bypass: false,
       });
+      expect(await whoami(app.get(BackofficePrismaService, { strict: false }).client)).toEqual({
+        user: 'yebo_backoffice',
+        bypass: false,
+      });
     });
   });
 
@@ -93,7 +209,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
       const { rows } = await owner.query(
         `SELECT rolname, rolbypassrls, rolinherit, rolsuper, rolcreaterole, rolreplication,
                 (rolname <> 'yebo_owner' AND rolcreatedb) AS creates_db
-           FROM pg_roles WHERE rolname IN ('yebo_owner', 'yebo_app', 'yebo_platform', 'yebo_identity') ORDER BY rolname`,
+           FROM pg_roles WHERE rolname IN ('yebo_owner', 'yebo_app', 'yebo_platform', 'yebo_identity', 'yebo_backoffice', 'yebo_metering') ORDER BY rolname`,
       );
       for (const r of rows) {
         expect(r).toEqual({
@@ -106,7 +222,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
           creates_db: false,
         });
       }
-      expect(rows).toHaveLength(4);
+      expect(rows).toHaveLength(6);
     });
 
     it('el rol de pruebas salta RLS pero no hereda, no es superusuario ni crea roles', async () => {
@@ -139,10 +255,19 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
           .map((r) => r.grantee)
           .sort();
       expect(access('yebo_shadow')).toEqual(['yebo_owner']);
-      expect(access('yebo_dev')).toEqual(['yebo_app', 'yebo_identity', 'yebo_owner', 'yebo_platform']);
+      expect(access('yebo_dev')).toEqual([
+        'yebo_app',
+        'yebo_backoffice',
+        'yebo_identity',
+        'yebo_metering',
+        'yebo_owner',
+        'yebo_platform',
+      ]);
       expect(access('yebo_test')).toEqual([
         'yebo_app',
+        'yebo_backoffice',
         'yebo_identity',
+        'yebo_metering',
         'yebo_owner',
         'yebo_platform',
         'yebo_test_bypass',
@@ -176,7 +301,7 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
       expect(rows.map((r) => r.line)).toEqual(EXPECTED_TABLE_GRANTS);
     });
 
-    it('privilegios de columna explícitos: solo el UPDATE de membresías de la 3.3', async () => {
+    it('privilegios de columna explícitos: membresías, estados, invitaciones, historial, facturación, soporte y anulación de pagos (3.3–4.7)', async () => {
       const { rows } = await owner.query<{ line: string }>(
         `SELECT r.rolname || ' ' || c.relname || '.' || att.attname || ' ' || a.privilege_type AS line
            FROM pg_attribute att JOIN pg_class c ON c.oid = att.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace,
@@ -232,10 +357,19 @@ describe('ADR-034 · separación efectiva de privilegios', () => {
           'SELECT 1 FROM refresh_tokens',
           'SELECT 1 FROM authorization_codes',
           'SELECT 1 FROM _prisma_migrations',
+          'SELECT 1 FROM platform_users',
+          'SELECT 1 FROM platform_sessions',
         ]) {
           await expect(platform.query(sql)).rejects.toMatchObject({ code: '42501' });
         }
-        for (const role of ['yebo_app', 'yebo_owner', 'yebo_test_bypass', 'yebo_identity']) {
+        for (const role of [
+          'yebo_app',
+          'yebo_owner',
+          'yebo_test_bypass',
+          'yebo_identity',
+          'yebo_backoffice',
+          'yebo_metering',
+        ]) {
           await expect(platform.query(`SET ROLE ${role}`)).rejects.toMatchObject({ code: '42501' });
         }
       } finally {

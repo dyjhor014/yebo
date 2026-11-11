@@ -1,6 +1,21 @@
 import { Pool } from 'pg';
 import { buildPostgresUrl, type DbConnectionEnv, type DbRole } from '../../src/config/database-urls';
 
+/**
+ * Vacía los datos de empresas e identidad (como yebo_owner) antes de una suite. UNA sola lista para todas las suites:
+ * al añadir una tabla que referencie a `tenants` o `users`, se añade aquí y ninguna suite se queda atrás.
+ * El catálogo comercial (módulos, planes) y el staff de plataforma no se tocan.
+ */
+export const RESET_TENANT_DATA =
+  'TRUNCATE authorization_codes, refresh_tokens, tenant_sessions, identity_sessions, membership_roles, ' +
+  'role_permissions, roles, tenant_memberships, tenant_module_overrides, subscriptions, tenant_settings, ' +
+  'tenant_services, tenant_status_history, tenant_operation_overrides, membership_invitations, membership_status_history, ' +
+  'support_access_logs, support_sessions, support_handoffs, support_access_grants, ' +
+  'subscription_payments, platform_invoice_lines, platform_invoices, usage_period_calculations, billing_periods, ' +
+  'usage_daily_snapshots, users, ' +
+  'permissions, ' +
+  'role_templates, tenant_domains, tenants';
+
 /** Roles de EJECUCIÓN (los mismos que usa la API): yebo_owner, yebo_app, yebo_platform, yebo_identity. */
 export function testDbUrl(role: DbRole, database: string): string {
   return buildPostgresUrl(process.env as unknown as DbConnectionEnv, role, database);

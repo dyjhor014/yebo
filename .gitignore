@@ -32,3 +32,7 @@ infrastructure/**/data/
 # Clientes Prisma generados (se regeneran con pnpm generate)
 apps/api/src/generated/
 apps/api/test/poc/**/generated/
+
+# Modo HTTPS local (docs/development/https-local.md): claves y certificados, procesos y registros.
+infrastructure/docker/https/certs/
+.run/

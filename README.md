@@ -7,6 +7,8 @@ Plataforma para empresas de transporte terrestre y fluvial: pasajeros, encomiend
 - Auditoría inicial: [`docs/development/phase-0-audit.md`](docs/development/phase-0-audit.md)
 - Resultados de la Fase 2: [`docs/development/phase-2-results.md`](docs/development/phase-2-results.md)
 - Resultados de la Fase 3: [`docs/development/phase-3-results.md`](docs/development/phase-3-results.md)
+- Modo HTTPS local (pruebas desde la red): [`docs/development/https-local.md`](docs/development/https-local.md)
+- Recorridos E2E del panel (Playwright y axe): [`docs/development/e2e.md`](docs/development/e2e.md)
 - Decisiones de arquitectura: [`docs/architecture/architecture-decisions.md`](docs/architecture/architecture-decisions.md)
 
 ## Requisitos de desarrollo

@@ -21,6 +21,25 @@ export const PERMISSION_CATALOG = {
   },
   'roles.read': { module: 'ACCESS', sensitive: false, description: 'Ver los roles de la empresa' },
   'roles.assign': { module: 'ACCESS', sensitive: true, description: 'Asignar roles a los miembros' },
+  // Fase 4.3b: invitar es USERS_ADD (aumenta el consumo facturable).
+  'members.invite': { module: 'ACCESS', sensitive: true, description: 'Invitar personas a la empresa' },
+  // Fase 4.5: «Obligaciones con YEBO» (BILLING_SELF).
+  'billing.read': {
+    module: 'ACCESS',
+    sensitive: false,
+    description: 'Ver las obligaciones de la empresa con YEBO',
+  },
+  // Fase 4.6: accesos de soporte de YEBO (ver, aprobar, revocar y exigir aprobación).
+  'support.read': {
+    module: 'ACCESS',
+    sensitive: false,
+    description: 'Ver los accesos de soporte de YEBO y su registro',
+  },
+  'support.manage': {
+    module: 'ACCESS',
+    sensitive: true,
+    description: 'Aprobar o revocar accesos de soporte de YEBO',
+  },
 } as const satisfies Record<string, { module: string; sensitive: boolean; description: string }>;
 
 export type PermissionCode = keyof typeof PERMISSION_CATALOG;

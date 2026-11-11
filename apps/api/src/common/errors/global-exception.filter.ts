@@ -33,6 +33,7 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   PERMISSIONS_CHANGED: 'Tus permisos cambiaron; renueva la sesión',
   FORBIDDEN: 'No tiene permiso para realizar esta operación',
   TENANT_RESTRICTED: 'El estado de la empresa no permite esta operación',
+  MODULE_NOT_ENABLED: 'La empresa no tiene habilitado este módulo',
   NOT_FOUND: 'Recurso no encontrado',
   CONFLICT: 'La operación entra en conflicto con el estado actual',
   PAYLOAD_TOO_LARGE: 'El contenido enviado excede el tamaño permitido',
@@ -46,6 +47,24 @@ export interface MappedError {
   code: ErrorCode;
   message: string;
   issues?: ValidationIssue[];
+  /** Cabecera Retry-After (segundos) para errores transitorios. */
+  retryAfterSeconds?: number;
+}
+
+/**
+ * Saturación transitoria de la base: el pool no dio conexión a tiempo (P2028 al iniciar una transacción, P2024 en
+ * una consulta suelta). Es un 503 reintentable, no un error interno (diagnóstico del 2026-11-10).
+ */
+const DB_SATURATION_CODES: ReadonlySet<string> = new Set(['P2028', 'P2024']);
+
+function isDbSaturation(exception: unknown): boolean {
+  if (typeof exception !== 'object' || exception === null) return false;
+  const e = exception as { name?: unknown; code?: unknown };
+  return (
+    e.name === 'PrismaClientKnownRequestError' &&
+    typeof e.code === 'string' &&
+    DB_SATURATION_CODES.has(e.code)
+  );
 }
 
 function mapZodIssues(error: ZodError): ValidationIssue[] {
@@ -74,6 +93,14 @@ export function mapException(exception: unknown): MappedError {
     const code = STATUS_TO_CODE[status] ?? (status >= 500 ? 'INTERNAL_ERROR' : 'BAD_REQUEST');
     return { status, code, message: DEFAULT_MESSAGES[code] };
   }
+  if (isDbSaturation(exception)) {
+    return {
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      code: 'SERVICE_UNAVAILABLE',
+      message: DEFAULT_MESSAGES.SERVICE_UNAVAILABLE,
+      retryAfterSeconds: 1,
+    };
+  }
   // Errores de body-parser (p. ej. cuerpo demasiado grande o JSON malformado) llegan como errores con `status`.
   if (typeof exception === 'object' && exception !== null && 'status' in exception) {
     const status = Number((exception as { status: unknown }).status);
@@ -101,7 +128,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const traceId =
       (this.cls.isActive() && this.cls.getId()) || String(response.getHeader('x-request-id') ?? 'unknown');
 
-    if (mapped.status >= 500) {
+    if (mapped.retryAfterSeconds !== undefined) {
+      // Transitorio (p. ej. pool saturado): se avisa sin tratarlo como un fallo del código.
+      this.logger.warn({ err: exception, traceId, event: 'transient_unavailable' }, 'Servicio saturado');
+      response.setHeader('Retry-After', String(mapped.retryAfterSeconds));
+    } else if (mapped.status >= 500) {
       // Se registra el error completo (con stack) en el servidor; el cliente solo recibe el código y el traceId.
       this.logger.error({ err: exception, traceId }, 'Error no controlado');
     }

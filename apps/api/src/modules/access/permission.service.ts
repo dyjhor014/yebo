@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import type { RequestContextStore } from '../../infrastructure/context/request-context';
 import { TenantDbService } from '../../infrastructure/database/tenant-db.service';
+import { PERMISSION_CODES } from './permission-catalog';
 
 /**
  * Permisos efectivos de una membresía: unión de los permisos de sus roles no archivados (security.md §2).
@@ -22,6 +23,13 @@ export class PermissionService {
   async current(): Promise<ReadonlySet<string>> {
     const cached = this.cls.get('permissions');
     if (cached) return cached;
+    // Soporte del staff (Fase 4.6): todos los permisos de empresa; el alcance READ_ONLY lo limita el guard por
+    // categoría, y las rutas de gestión del propio acceso de soporte lo rechazan.
+    if (this.cls.get('supportPrincipal')) {
+      const all: ReadonlySet<string> = new Set(PERMISSION_CODES);
+      this.cls.set('permissions', all);
+      return all;
+    }
     const principal = this.cls.get('principal');
     if (!principal) throw new Error('PermissionService.current() requiere una sesión verificada');
     const permissions = await this.forMembership(principal.membershipId);

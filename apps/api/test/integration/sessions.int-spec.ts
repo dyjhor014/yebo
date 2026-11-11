@@ -16,7 +16,7 @@ import { Clock } from '../../src/modules/identity/clock';
 import { IdentityPrismaService } from '../../src/modules/identity/identity-prisma.service';
 import { SessionService, type IssuedTokens } from '../../src/modules/identity/session.service';
 import { decryptSuccessor } from '../../src/modules/identity/successor-crypto';
-import { testBypassPool, testPool } from '../support/db';
+import { testBypassPool, testPool, RESET_TENANT_DATA } from '../support/db';
 
 const DB = 'yebo_test';
 const A = '0190f0a0-0000-7000-8000-00000000a002';
@@ -61,9 +61,7 @@ describe('Fase 3.2a · sesiones y refresh tokens (PostgreSQL y Redis reales, rol
     appPool = testPool('app', DB, 2);
     seed = testBypassPool(DB, 2);
     identityPool = testPool('identity', DB, 2);
-    await owner.query(
-      'TRUNCATE authorization_codes, refresh_tokens, tenant_sessions, identity_sessions, membership_roles, role_permissions, roles, tenant_memberships, users, permissions, role_templates, tenant_domains, tenants',
-    );
+    await owner.query(RESET_TENANT_DATA);
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(Clock)
       .useValue(clock)
@@ -173,24 +171,38 @@ describe('Fase 3.2a · sesiones y refresh tokens (PostgreSQL y Redis reales, rol
       }
     });
 
-    it('yebo_identity: solo lectura de users, tenant_memberships y tenant_domains', async () => {
+    it('yebo_identity: lee users, tenant_memberships y tenant_domains; nunca borra ni cambia identidades', async () => {
       for (const t of ['users', 'tenant_memberships', 'tenant_domains']) {
         await expect(identityPool.query(`SELECT count(*) FROM ${t}`)).resolves.toBeDefined();
-        await expect(identityPool.query(`UPDATE ${t} SET updated_at = now()`)).rejects.toMatchObject({
-          code: '42501',
-        });
         await expect(identityPool.query(`DELETE FROM ${t}`)).rejects.toMatchObject({ code: '42501' });
+      }
+      // 4.3b: crea cuentas y membresías al aceptar invitaciones, pero no modifica cuentas existentes ni la
+      // persona o la empresa de una membresía (solo estado y versión de permisos, con RLS).
+      for (const sql of [
+        'UPDATE users SET updated_at = now()',
+        'UPDATE users SET password_hash = password_hash',
+        'UPDATE tenant_memberships SET user_id = user_id',
+        'UPDATE tenant_memberships SET tenant_id = tenant_id',
+        'UPDATE tenant_domains SET updated_at = now()',
+      ]) {
+        await expect(identityPool.query(sql)).rejects.toMatchObject({ code: '42501' });
       }
     });
 
     it('yebo_identity no accede a tenants ni a datos de negocio o configuración de las empresas', async () => {
+      // roles y membership_roles: lectura con RLS desde la 4.3b (aceptar invitaciones); sin contexto, 0 filas.
+      for (const t of ['roles', 'membership_roles']) {
+        const { rows } = await identityPool.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${t}`);
+        expect({ t, n: rows[0]?.n }).toEqual({ t, n: 0 });
+      }
       for (const t of [
         'tenants',
-        'roles',
         'role_permissions',
-        'membership_roles',
         'permissions',
         'role_templates',
+        'tenant_settings',
+        'tenant_services',
+        'subscriptions',
       ]) {
         await expect(identityPool.query(`SELECT 1 FROM ${t} LIMIT 1`)).rejects.toMatchObject({
           code: '42501',

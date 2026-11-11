@@ -99,6 +99,8 @@ describe('Fase 3.2a · fronteras y configuración', () => {
   describe('ESLint · denegar por defecto (frontera 3, Fase 3.3)', () => {
     const PUBLIC_ROUTE = `import { Controller, Get } from '@nestjs/common';\nimport { Public } from '../access/route-policy';\n@Controller('x')\nexport class X {\n  @Public('tenant')\n  @Get()\n  x(): void {}\n}\n`;
     const REGISTER_GUARD = `import { APP_GUARD } from '@nestjs/core';\nexport const p = { provide: APP_GUARD, useValue: { canActivate: () => true } };\n`;
+    const BACKOFFICE = `import { BackofficePrismaService } from '../platform-admin/backoffice-prisma.service';\nexport const b = BackofficePrismaService;\n`;
+    const METERING = `import { MeteringPrismaService } from '../metering/metering-prisma.service';\nexport const m = MeteringPrismaService;\n`;
     const USE_GLOBAL = `export function f(app: { useGlobalGuards: (...g: unknown[]) => void }): void {\n  app.useGlobalGuards();\n}\n`;
     const RULE = 'no-restricted-syntax';
     let results: Map<string, string[]>;
@@ -115,6 +117,19 @@ describe('Fase 3.2a · fronteras y configuración', () => {
         ['apps/api/src/modules/identity/http/x.ts', 'guard', REGISTER_GUARD],
         ['apps/api/src/infrastructure/core.module.ts', 'guard', REGISTER_GUARD],
         ['apps/api/src/modules/access/access.module.ts', 'guard', REGISTER_GUARD],
+        ['apps/api/src/modules/platform-admin/http/x.controller.ts', 'public', PUBLIC_ROUTE],
+        ['apps/api/src/modules/platform-admin/x.service.ts', 'public', PUBLIC_ROUTE],
+        ['apps/api/src/modules/access/x.service.ts', 'backoffice', BACKOFFICE],
+        ['apps/api/src/modules/identity/x.service.ts', 'backoffice', BACKOFFICE],
+        ['apps/api/src/modules/tenancy/x.service.ts', 'backoffice', BACKOFFICE],
+        ['apps/api/src/modules/access/access.module.ts', 'backoffice', BACKOFFICE],
+        ['apps/api/src/modules/platform-admin/x.service.ts', 'backoffice', BACKOFFICE],
+        ['apps/api/src/modules/metering/x.service.ts', 'backoffice', BACKOFFICE],
+        ['apps/api/src/modules/access/x.service.ts', 'metering', METERING],
+        ['apps/api/src/modules/platform-admin/x.service.ts', 'metering', METERING],
+        ['apps/api/src/modules/platform-admin/http/x.controller.ts', 'metering', METERING],
+        ['apps/api/src/modules/identity/http/x.ts', 'metering', METERING],
+        ['apps/api/src/modules/metering/x.service.ts', 'metering', METERING],
         ['apps/api/src/main.ts', 'global', USE_GLOBAL],
         ['apps/api/src/modules/access/access.module.ts', 'global', USE_GLOBAL],
       ] as const;
@@ -144,6 +159,40 @@ describe('Fase 3.2a · fronteras y configuración', () => {
       'apps/api/src/infrastructure/core.module.ts',
     ])('registrar un APP_GUARD está prohibido en %s', (file) => {
       expect(results.get(`${file}#guard`)).toContain(RULE);
+    });
+
+    it('@Public() se permite en platform-admin/http (login del panel) y no en el resto de platform-admin', () => {
+      expect(results.get('apps/api/src/modules/platform-admin/http/x.controller.ts#public')).not.toContain(
+        RULE,
+      );
+      expect(results.get('apps/api/src/modules/platform-admin/x.service.ts#public')).toContain(RULE);
+    });
+
+    it.each([
+      'apps/api/src/modules/access/x.service.ts',
+      'apps/api/src/modules/identity/x.service.ts',
+      'apps/api/src/modules/tenancy/x.service.ts',
+      'apps/api/src/modules/access/access.module.ts',
+    ])('BackofficePrismaService (yebo_backoffice) está prohibido en %s (frontera 4)', (file) => {
+      expect(results.get(`${file}#backoffice`)).toContain(RULE);
+    });
+
+    it.each([
+      'apps/api/src/modules/access/x.service.ts',
+      'apps/api/src/modules/platform-admin/x.service.ts',
+      'apps/api/src/modules/platform-admin/http/x.controller.ts',
+      'apps/api/src/modules/identity/http/x.ts',
+    ])('MeteringPrismaService (yebo_metering) está prohibido en %s (frontera 5)', (file) => {
+      expect(results.get(`${file}#metering`)).toContain(RULE);
+    });
+
+    it('MeteringPrismaService se permite dentro de metering; BackofficePrismaService, no', () => {
+      expect(results.get('apps/api/src/modules/metering/x.service.ts#metering')).not.toContain(RULE);
+      expect(results.get('apps/api/src/modules/metering/x.service.ts#backoffice')).toContain(RULE);
+    });
+
+    it('BackofficePrismaService se permite dentro de platform-admin', () => {
+      expect(results.get('apps/api/src/modules/platform-admin/x.service.ts#backoffice')).not.toContain(RULE);
     });
 
     it('APP_GUARD solo se registra en access.module.ts', () => {
@@ -200,6 +249,15 @@ describe('Fase 3.2a · fronteras y configuración', () => {
       expect(error).toBeInstanceOf(InvalidConfigurationError);
       expect(String(error)).toMatch(/PG_IDENTITY_PASSWORD/);
     });
+
+    it.each(['PG_BACKOFFICE_PASSWORD', 'FIELD_ENCRYPTION_KEY'])(
+      'sin %s la API no arranca (Fase 4.1)',
+      async (v) => {
+        const error = await compileWithout(v);
+        expect(error).toBeInstanceOf(InvalidConfigurationError);
+        expect(String(error)).toMatch(new RegExp(v));
+      },
+    );
   });
 
   describe('scripts/dev/init-env.sh', () => {

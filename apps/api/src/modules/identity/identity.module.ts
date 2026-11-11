@@ -3,8 +3,9 @@ import { PermissionsModule } from '../access/permissions.module';
 import { TenancyModule } from '../tenancy/tenancy.module';
 import { AccessTokenService } from './access-token.service';
 import { AuthorizationCodeService } from './authorization-code.service';
-import { Clock, SystemClock } from './clock';
+import { ClockModule } from './clock.module';
 import { HubAuthService } from './hub-auth.service';
+import { InvitationAcceptanceService } from './invitation-acceptance.service';
 import { AuthController } from './http/auth.controller';
 import { CookieSigner } from './http/cookie-signer';
 import { HubController } from './http/hub.controller';
@@ -24,10 +25,9 @@ import { UserDirectoryService } from './user-directory.service';
  * - 3.2b: hub (`/api/v1/hub/*`, solo en AUTH_HUB_HOST) y sesión de empresa (`/api/v1/auth/*`, host del tenant).
  */
 @Module({
-  imports: [TenancyModule, PermissionsModule],
+  imports: [ClockModule, TenancyModule, PermissionsModule],
   controllers: [HubController, AuthController],
   providers: [
-    { provide: Clock, useClass: SystemClock },
     IdentityPrismaService,
     PasswordHasher,
     AccessTokenService,
@@ -38,7 +38,15 @@ import { UserDirectoryService } from './user-directory.service';
     CookieSigner,
     HubHostGuard,
     UserDirectoryService,
+    InvitationAcceptanceService,
   ],
-  exports: [Clock, PasswordHasher, AccessTokenService, SessionService, UserDirectoryService],
+  exports: [
+    PasswordHasher,
+    AccessTokenService,
+    SessionService,
+    UserDirectoryService,
+    RateLimiterService,
+    CookieSigner,
+  ],
 })
 export class IdentityModule {}

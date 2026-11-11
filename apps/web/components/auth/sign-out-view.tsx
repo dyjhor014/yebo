@@ -1,6 +1,6 @@
-import { AccessShell } from '../identity/access-shell';
-import { Button, ButtonLink } from '../ui/button';
-import { Notice } from '../ui/notice';
+import { AccessShell } from '@yebo/ui/access-shell';
+import { Button, ButtonLink } from '@yebo/ui/button';
+import { Notice } from '@yebo/ui/notice';
 import { AccessHeading } from './heading';
 
 export type SignOutState = 'pending' | 'done' | 'error';

@@ -46,6 +46,9 @@
   /* Estados (funcionales, fuera de la marca) */
   --state-danger: #b42318; /* 6,05:1 sobre cloud */
   --state-danger-surface: color-mix(in srgb, #b42318 8%, var(--yebo-cloud-white));
+  /* Aviso (Fase 4.7, aprobado el 2026-11-10): pago vencido, riesgos. 6,64:1 sobre su superficie. */
+  --state-warning: #7a4b00;
+  --state-warning-surface: #fff1d6;
 
   /* Ritmo */
   --radius-control: var(--yebo-radius-sm);
@@ -87,6 +90,8 @@
     /* Estados */
     --state-danger: #ff8b7e; /* 7,5:1 sobre navy */
     --state-danger-surface: color-mix(in srgb, #ff8b7e 14%, var(--yebo-midnight-navy)); /* texto 6,0:1 */
+    --state-warning: #f5c46b; /* 10,4:1 sobre navy */
+    --state-warning-surface: color-mix(in srgb, #f5c46b 14%, var(--yebo-midnight-navy));
   }
 }
 
@@ -122,4 +127,6 @@
   /* Estados */
   --state-danger: #ff8b7e; /* 7,5:1 sobre navy */
   --state-danger-surface: color-mix(in srgb, #ff8b7e 14%, var(--yebo-midnight-navy)); /* texto 6,0:1 */
+  --state-warning: #f5c46b; /* 10,4:1 sobre navy */
+  --state-warning-surface: color-mix(in srgb, #f5c46b 14%, var(--yebo-midnight-navy));
 }

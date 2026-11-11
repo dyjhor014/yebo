@@ -2,27 +2,34 @@
   "name": "@yebo/platform",
   "version": "0.1.0",
   "private": true,
-  "description": "Panel superadministrador SaaS de YEBO (ADR-002)",
+  "description": "Panel del staff de YEBO (admin.yebo.pe, Fase 4.7): empresas, cobros, soporte y staff",
   "scripts": {
     "dev": "next dev --port 3101",
     "build": "next build",
     "start": "next start --port 3101",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint app lib"
+    "lint": "eslint app lib components",
+    "test": "jest"
   },
   "dependencies": {
     "@yebo/contracts": "workspace:*",
+    "@yebo/ui": "workspace:*",
     "next": "16.4.5",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "server-only": "0.0.1"
+    "server-only": "0.0.1",
+    "zod": "4.6.7"
   },
   "devDependencies": {
+    "@swc/core": "1.16.22",
+    "@swc/jest": "0.2.39",
     "@tailwindcss/postcss": "4.3.4",
+    "@types/jest": "30.0.0",
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@yebo/config": "workspace:*",
+    "jest": "30.5.2",
     "tailwindcss": "4.3.4",
     "typescript": "5.9.3"
   }

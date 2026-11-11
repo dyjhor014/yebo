@@ -27,38 +27,42 @@ Los `enum` son cerrados; los `→ catálogo` son tablas extensibles.
 | timezone | text | Default `America/Lima` |
 | default_currency | char(3) | `PEN` |
 | trial_ends_at, activated_at, cancelled_at | timestamptz? | |
+| status_changed_at | timestamptz | Inicio del estado vigente; desde él se cuentan los días de gracia de `PAST_DUE` (Fase 4.3a) |
 
 ### 🌐 tenant_domains
 `tenant_id → tenants`, `host citext UNIQUE`, `kind enum SUBDOMAIN|CUSTOM`, `is_primary bool` (único parcial por tenant), `verification_status enum PENDING|VERIFIED|FAILED`, `verified_at?`.
 
 ### tenant_settings (1:1)
-`require_delivery_pin bool NOT NULL DEFAULT false` · `delivery_pin_max_attempts int DEFAULT 5` · `booking_hold_minutes int` · `allow_partial_payments bool` · `require_recipient_id_on_delivery bool` · `exceptional_delivery_enabled bool DEFAULT false` · `exceptional_delivery_second_approval_threshold numeric(14,2)?` · `exceptional_delivery_required_evidence text[]` · `public_tracking_show_recipient_initials bool` · `settings jsonb` (resto, validado por esquema).
+`require_delivery_pin bool NOT NULL DEFAULT false` · `delivery_pin_max_attempts int DEFAULT 5` · `booking_hold_minutes int` · `allow_partial_payments bool` · `require_recipient_id_on_delivery bool` · `exceptional_delivery_enabled bool DEFAULT false` · `exceptional_delivery_second_approval_threshold numeric(14,2)?` · `exceptional_delivery_required_evidence text[]` · `public_tracking_show_recipient_initials bool` · `settings jsonb` (resto, validado por esquema). PK `tenant_id`. Valores iniciales del alta en [phase-4-plan](../development/phase-4-plan.md) (4.3a).
 
 ### tenant_services
-`modality enum LAND|RIVER` · `service enum PASSENGER|PARCEL|CARGO|VEHICLE_TRANSPORT` · `enabled bool`. UNIQUE (tenant_id, modality, service). Nuevas modalidades = nuevo valor del enum vía migración (decisión consciente: la modalidad cambia reglas de negocio).
+`modality enum LAND|RIVER` · `service enum PASSENGER|PARCEL|CARGO|VEHICLE_TRANSPORT` · `enabled bool`. UNIQUE (tenant_id, modality, service). Nuevas modalidades = nuevo valor del enum vía migración (decisión consciente: la modalidad cambia reglas de negocio). Un módulo de servicio del plan solo es efectivo si la empresa opera ese servicio (multitenancy §6).
 
 ### tenant_status_history
-`from_status`, `to_status`, `reason text`, `actor_platform_user_id?`, `occurred_at`. Append-only.
+`from_status?` (nulo = alta), `to_status`, `reason text`, `actor_platform_user_id?` (nulo = job de estados), `occurred_at`. Append-only (trigger). RLS de tenant.
+
+### tenant_operation_overrides
+`category enum USERS_ADD`, `valid_from`, `valid_to` (obligatorio; como mucho 30 días), `reason`, `granted_by_platform_user_id`, `ended_at?`, `ended_by_platform_user_id?`. Excepción temporal de YEBO a la matriz de estados (multitenancy §5.2, nota 2), solo en `SUSPENDED` y `EXPIRED`. Decisión del 2026-11-10 (Fase 4.3a).
 
 ### 🌐 modules
 `code text UNIQUE` (`PASSENGERS`, `PARCELS`, `CARGO`, `VEHICLE_TRANSPORT`, `EINVOICING`, `AGENCIES`, `OWNER_SETTLEMENTS`, `WHITE_LABEL`, `OFFLINE_OPS`…), `name`, `description`, `is_active`.
 
 ### 🌐 plans / plan_versions / plan_version_modules
 - **plans:** `code UNIQUE`, `name`, `description`, `status enum DRAFT|ACTIVE|RETIRED`.
-- **plan_versions:** `plan_id → plans`, `version int` (UNIQUE plan_id+version), `status enum DRAFT|PUBLISHED|RETIRED`, `currency`, `base_price numeric(14,2)`, `billing_interval enum MONTHLY|QUARTERLY|YEARLY`, `included_users int`, `extra_user_price numeric(14,2)`, `usage_metric enum PEAK_DAILY|AVERAGE_DAILY|END_OF_PERIOD` (default `PEAK_DAILY`, D5), `daily_aggregation enum PEAK_CONCURRENT|DISTINCT_ACTIVE` (default `PEAK_CONCURRENT`), `min_active_seconds int DEFAULT 0`, `trial_days int`, `limits jsonb` (sucursales, vehículos, almacenamiento GB; esquema validado), `suspension_policy jsonb` (por defecto: 7 días de gracia en PAST_DUE, 30 días de cierre en CANCELLED, matriz de operaciones de multitenancy §5), `published_at`. **Inmutable al publicarse** (trigger).
+- **plan_versions:** `plan_id → plans`, `version int` (UNIQUE plan_id+version), `status enum DRAFT|PUBLISHED|RETIRED`, `currency`, `base_price numeric(14,2)`, `billing_interval enum MONTHLY|QUARTERLY|YEARLY`, `included_users int`, `extra_user_price numeric(14,2)`, `usage_metric enum PEAK_DAILY|AVERAGE_DAILY|END_OF_PERIOD` (default `PEAK_DAILY`, D5), `daily_aggregation enum PEAK_CONCURRENT|DISTINCT_ACTIVE` (default `PEAK_CONCURRENT`), `min_active_seconds int DEFAULT 0`, `trial_days int`, `limits jsonb` (sucursales, vehículos, almacenamiento GB; esquema validado), `suspension_policy jsonb` (por defecto: 7 días de gracia en PAST_DUE, 30 días de cierre en CANCELLED, matriz de operaciones de multitenancy §5), `published_at`, `retired_at`, `created_by_id → platform_users`. **Inmutable al publicarse** (trigger: solo admite `PUBLISHED → RETIRED`; sus módulos tampoco cambian). Implementado en la Fase 4.2.
 - **plan_version_modules:** `plan_version_id`, `module_id`, `config jsonb?`. PK compuesta.
 
 ### tenant_module_overrides
-`module_id → modules`, `effect enum GRANT|REVOKE`, `valid_from`, `valid_to?`, `reason`, `granted_by_platform_user_id`.
+`module_id → modules`, `effect enum GRANT|REVOKE`, `valid_from`, `valid_to?`, `reason`, `granted_by_platform_user_id`, `ended_at?`, `ended_by_platform_user_id?`. No se borra: se termina y queda en el historial. REVOKE gana sobre GRANT.
 
 ### subscriptions
-`plan_version_id → plan_versions`, `status enum TRIALING|ACTIVE|PAST_DUE|SUSPENDED|CANCELLED|EXPIRED`, `current_period_start`, `current_period_end`, `cancel_at?`, `grace_until?`, `price_override jsonb?` (acuerdos comerciales especiales, auditado). Una sola suscripción vigente: índice único parcial `(tenant_id) WHERE status IN (...)`.
+`plan_version_id → plan_versions`, `status enum TRIALING|ACTIVE|PAST_DUE|SUSPENDED|CANCELLED|EXPIRED`, `current_period_start`, `current_period_end`, `cancel_at?`, `grace_until?`, `price_override jsonb?` (acuerdos comerciales especiales, auditado). Una sola suscripción vigente: `is_current` (TRUE o NULL, con CHECK) y `UNIQUE (tenant_id, is_current)`; sustituye al índice único parcial por estado, que Prisma no representa (prueba de deriva, ADR-024).
 
 ### billing_periods
-`subscription_id`, `period_start date`, `period_end date` (fechas locales), `timezone text` (copiada del tenant al abrir; fija durante el período), `status enum OPEN|CLOSING|CLOSED`. UNIQUE (subscription_id, period_start). Tras `CLOSED`, un trigger bloquea cambios en el período, sus snapshots y su cálculo.
+`subscription_id`, `period_start date`, `period_end date` (fechas locales), `timezone text` (copiada del tenant al abrir; fija durante el período), `status enum OPEN|CLOSING|CLOSED`. UNIQUE (subscription_id, period_start). Tras `CLOSED`, un trigger bloquea cambios en el período, sus snapshots y su cálculo. Fase 4.5: `period_end` exclusivo, `is_trial`, `closed_at`, `cut_off?` (upgrade a mitad de período: fin real y prorrateo); de tenant (RLS). `subscriptions.next_plan_version_id?`: downgrade programado para el período siguiente.
 
 ### usage_daily_snapshots
-`usage_date date`, `timezone text`, `day_range tstzrange`, `peak_concurrent int`, `distinct_active int`, `status enum PROVISIONAL|FINAL`, `algorithm_version int`, `detail jsonb` (IDs de membresías contadas e intervalos), `computed_at`. UNIQUE (tenant_id, usage_date). Ver [billing.md](../modules/billing.md).
+`usage_date date`, `timezone text`, `day_range tstzrange`, `peak_concurrent int`, `distinct_active int`, `status enum PROVISIONAL|FINAL`, `algorithm_version int`, `detail jsonb` (IDs de membresías contadas e intervalos), `computed_at`. UNIQUE (tenant_id, usage_date). Ver [billing.md](../modules/billing.md). Fase 4.4: solo se guardan los `FINAL` (inmutables por trigger); el día en curso se calcula al vuelo como `PROVISIONAL`. `detail` = intervalos recortados al día y `minActiveSeconds` aplicado.
 
 ### usage_period_calculations
 `billing_period_id UNIQUE`, `usage_metric`, `daily_aggregation`, `metric_value int` (p. ej. pico), `included_users`, `extra_users`, `base_amount`, `extra_amount`, `total_amount`, `currency`, `plan_version_snapshot snap`, `daily_series jsonb`, `computed_at`. Inmutable.
@@ -66,7 +70,7 @@ Los `enum` son cerrados; los `→ catálogo` son tablas extensibles.
 ### platform_invoices / platform_invoice_lines / subscription_payments
 - **platform_invoices:** `code UNIQUE`, `billing_period_id?`, `status enum DRAFT|ISSUED|PAID|PARTIALLY_PAID|VOID|OVERDUE`, `issue_date`, `due_date`, `currency`, `subtotal`, `tax`, `total`, `balance`, `fiscal_document_ref jsonb?` (comprobante emitido por YEBO a la empresa, vía el mismo puerto de facturación con la configuración de la plataforma).
 - **lines:** `kind enum BASE|EXTRA_USERS|ADDON|ADJUSTMENT|CREDIT`, `description`, `quantity`, `unit_price`, `amount`.
-- **subscription_payments:** `platform_invoice_id`, `amount`, `method`, `reference`, `paid_at`, `recorded_by_platform_user_id`, `evidence_asset_id?`, `status enum CONFIRMED|REVERSED`. Registro manual en el MVP (sin pagos simulados).
+- **subscription_payments:** `platform_invoice_id`, `amount`, `method`, `reference`, `paid_at`, `recorded_by_platform_user_id`, `evidence_asset_id?`, `status enum CONFIRMED|REVERSED`. Registro manual en el MVP (sin pagos simulados). Fase 4.5: las tres tablas son de tenant (RLS); código de factura `YB-AAAAMM-XXXXXXXX`; importes de la factura inmutables (solo cambian estado y saldo); `plan_versions.payment_terms_days` y `tax_rate` (0 hasta validar S5). Fase 4.7b: `reversed_at`, `reversed_by_platform_user_id` y `reversal_reason` (las tres o ninguna, CHECK `subscription_payments_reversal`); el trigger `subscription_payments_reversal_only` solo admite `CONFIRMED → REVERSED` sin tocar el resto de la fila, y los pagos nunca se borran.
 
 ### support_incidents / incident_comments / incident_events / incident_attachments
 - **support_incidents:** `code UNIQUE`, `reported_by_membership_id?`, `reported_by_platform_user_id?`, `category → incident_categories (catálogo)`, `priority enum LOW|MEDIUM|HIGH|CRITICAL`, `status enum OPEN|IN_PROGRESS|WAITING_CUSTOMER|RESOLVED|CLOSED`, `title`, `description`, `assignee_platform_user_id?`, `resolved_at?`, `closed_at?`.
@@ -76,7 +80,9 @@ Los `enum` son cerrados; los `→ catálogo` son tablas extensibles.
 
 ### 🌐 platform_users / support_access_grants
 - **platform_users:** `email citext UNIQUE`, `password_hash`, `mfa_secret enc`, `status`, `platform_role` (o una tabla de roles de plataforma).
+  - *Fase 4.1 (2026-11-10):* `role enum SUPERADMIN|BILLING|SUPPORT|VIEWER` (permisos `platform.*` en código), `status enum ACTIVE|DISABLED`, `password_hash?` (nulo hasta usar el enlace de configuración), `mfa_secret_ciphertext` + `mfa_key_version` (AES-256-GCM), `mfa_enabled_at?`, `mfa_last_step?` (anti-reutilización TOTP), `created_by_id?`. Tablas nuevas: **`platform_sessions`** (hash SHA-256 del token opaco, caducidades, revocación), **`platform_setup_tokens`** (enlace de un solo uso, ≤ 72 h) y **`platform_audit_logs`** (append-only; `tenant_id?` de la empresa afectada). Solo `yebo_backoffice`.
 - **support_access_grants:** `tenant_id`, `platform_user_id`, `reason`, `incident_id?`, `scope enum READ_ONLY|FULL`, `starts_at`, `expires_at`, `revoked_at?`, `approved_by_membership_id?` (si la empresa exige aprobación).
+  - *Fase 4.6 (2026-11-10):* de tenant (RLS), no global; ventana ≤ 8 h; copia de `staff_name` y `staff_email`; `requires_approval`, `approved_at?`, `revoked_by_kind?` y `revoked_by_id?`. Tablas nuevas: **`support_handoffs`** (código de un solo uso, 60 s), **`support_sessions`** (sesión opaca, 30 min de inactividad) y **`support_access_logs`** (cada petición, append-only). `tenant_settings.support_requires_approval`. `incident_id` queda fuera (F4-Q5).
 
 ## 2. Identidad y acceso
 
@@ -87,7 +93,7 @@ Los `enum` son cerrados; los `→ catálogo` son tablas extensibles.
 `user_id → users`, `status enum INVITED|ACTIVE|SUSPENDED|REVOKED`, `kind enum HUMAN` (reservado para extensiones), `billable bool DEFAULT true` (solo modificable por la plataforma), `display_name?`, `default_branch_id?`, `permissions_version int`, `agency_id?` (si es usuario de agencia externa). UNIQUE (tenant_id, user_id).
 
 ### membership_status_history
-`membership_id`, `status`, `billable bool`, `user_active bool`, `effective_billable bool` (ACTIVE ∧ billable ∧ usuario activo), `valid_from timestamptz` (siempre `now()` del servidor), `valid_to timestamptz?`, `changed_by_kind`, `changed_by_id`, `reason?`. **Fuente de la medición D5.** `EXCLUDE USING gist (membership_id WITH =, tstzrange(valid_from, valid_to) WITH &&)`; un trigger impide fechas retroactivas, `DELETE` y cualquier `UPDATE` que no sea cerrar `valid_to` de la fila vigente.
+`membership_id`, `status`, `billable bool`, `user_active bool`, `effective_billable bool` (ACTIVE ∧ billable ∧ usuario activo), `valid_from timestamptz` (siempre `now()` del servidor), `valid_to timestamptz?`, `user_id`, `changed_by_kind enum MEMBERSHIP|USER|PLATFORM_USER|SYSTEM`, `changed_by_id?` (solo `SYSTEM` sin id), `reason?`. **Fuente de la medición D5.** Implementado en la Fase 4.4: la escriben triggers `SECURITY INVOKER` en `tenant_memberships` y `users`, en la misma transacción que el cambio; `effective_billable` lo garantiza un `CHECK`. El autor lo declara cada servicio en la transacción y lo copian los triggers; sin autor, un rol de ejecución no puede cambiar membresías ni usuarios. `EXCLUDE USING gist (membership_id WITH =, tstzrange(valid_from, valid_to) WITH &&)`; un trigger impide fechas retroactivas, `DELETE` y cualquier `UPDATE` que no sea cerrar `valid_to` de la fila vigente.
 
 ### roles / role_permissions / membership_roles / 🌐 role_templates / 🌐 permissions
 - **permissions 🌐:** `code text UNIQUE` (`shipments.deliver`), `module_code`, `description`, `is_sensitive bool`.
@@ -100,7 +106,7 @@ Los `enum` son cerrados; los `→ catálogo` son tablas extensibles.
 (`membership_id`, `branch_id`) PK. Si no hay filas, la membresía accede a todas las sucursales.
 
 ### membership_invitations
-`email citext`, `role_ids uuid[]`, `token_hash`, `expires_at`, `accepted_at?`, `invited_by_membership_id`.
+`email citext` (normalizado), `role_ids uuid[]` (1–20), `token_hash bytea` (SHA-256 del secreto, UNIQUE), `expires_at` (72 h; máximo 7 días por CHECK), `invited_by_membership_id?` **o** `invited_by_platform_user_id?` (exactamente uno), `accepted_at?`, `accepted_membership_id?`, `revoked_at?`, `created_at`. RLS de tenant: el token del enlace lleva el id del tenant (`<tenant>.<secreto>`) para fijar el contexto antes de buscar el hash. Fase 4.3b.
 
 ### 🌐 identity_sessions / tenant_sessions / refresh_tokens / authorization_codes / password_reset_tokens
 Ver [identity-and-sessions.md](../architecture/identity-and-sessions.md).

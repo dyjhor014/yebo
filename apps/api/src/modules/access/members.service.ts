@@ -4,6 +4,7 @@ import { ClsService } from 'nestjs-cls';
 import { z } from 'zod';
 import { AppError } from '../../common/errors/app-error';
 import type { Principal, RequestContextStore } from '../../infrastructure/context/request-context';
+import { declareChangeActor } from '../../infrastructure/database/change-actor';
 import { TenantDbService } from '../../infrastructure/database/tenant-db.service';
 import { SessionService } from '../identity/session.service';
 import { UserDirectoryService } from '../identity/user-directory.service';
@@ -154,6 +155,14 @@ export class MembersService {
         throw new AppError('CONFLICT', `La membresía no está en el estado requerido (${from})`, 409);
       }
       const revokedSessions = await beforeUpdate();
+      // Autor del cambio para el historial de medición (lo copian los triggers).
+      const support = this.cls.get('supportPrincipal');
+      await declareChangeActor(tx, {
+        // Fase 4.6: el staff de soporte queda como autor con su id de plataforma.
+        kind: support ? 'PLATFORM_USER' : 'MEMBERSHIP',
+        id: support ? support.platformUserId : this.principal().membershipId,
+        reason: to === 'SUSPENDED' ? 'members.suspend' : 'members.reactivate',
+      });
       await tx.tenantMembership.updateMany({ where: { id: membershipId }, data: { status: to } });
       return { status: to, revokedSessions };
     });
@@ -169,6 +178,7 @@ export class MembersService {
   }
 
   private assertNotSelf(membershipId: string, message: string): void {
+    if (this.cls.get('supportPrincipal')) return; // el staff no tiene membresía propia
     if (membershipId === this.principal().membershipId) throw new AppError('FORBIDDEN', message, 403);
   }
 

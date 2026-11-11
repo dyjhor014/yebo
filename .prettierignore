@@ -10,3 +10,9 @@ infrastructure/docker/postgres/init/
 
 # Generado por Next.js
 next-env.d.ts
+
+# Artefactos de los E2E (tests/e2e/.gitignore)
+tests/e2e/.auth/
+tests/e2e/capturas/
+tests/e2e/results/
+tests/e2e/report/

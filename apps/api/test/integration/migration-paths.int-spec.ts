@@ -12,6 +12,11 @@ import { cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Pool } from 'pg';
+import {
+  GLOBAL_TABLES_WITH_TENANT_ID,
+  TENANT_SCOPED_TABLES,
+  TENANT_TABLES_WITHOUT_APP_READ,
+} from '../../src/infrastructure/database/tenant-scoped-models';
 import { grantTestBypass, testBypassPool, testPool } from '../support/db';
 
 const API_ROOT = resolve(__dirname, '..', '..');
@@ -157,6 +162,10 @@ async function verifyFinalState(set: MigrationSet, owner: Pool, app: Pool): Prom
     expect(p.check).toMatch(/NULLIF\(current_setting\('app\.tenant_id'::text, true\), ''::text\)/);
   }
   for (const t of set.tenantTables) {
+    if (TENANT_TABLES_WITHOUT_APP_READ.has(t)) {
+      await expect(countAs(app, t, null)).rejects.toMatchObject({ code: '42501' }); // ni siquiera puede leerla
+      continue;
+    }
     await expect(countAs(app, t, null)).resolves.toBe(0); // sin contexto
     await expect(countAs(app, t, '')).resolves.toBe(0); // contexto vacío explícito
   }
@@ -167,8 +176,9 @@ const SETS: MigrationSet[] = [
     name: 'producción',
     schema: 'prisma/schema.prisma',
     migrations: 'prisma/migrations',
-    tenantTables: ['tenant_memberships', 'roles', 'role_permissions', 'membership_roles'],
-    globalTablesWithTenantId: ['tenant_domains', 'tenant_sessions', 'authorization_codes'],
+    tenantTables: [...TENANT_SCOPED_TABLES],
+    // Del registro de modelos: una excepción global nueva no puede olvidarse aquí.
+    globalTablesWithTenantId: [...GLOBAL_TABLES_WITH_TENANT_ID],
     extensions: ['btree_gist', 'citext'],
     // Esquema anterior = el de la etapa 3.1, con datos. Prueba que la migración de sesiones (3.2) se aplica
     // sobre membresías existentes (añade un índice único compuesto a tenant_memberships).

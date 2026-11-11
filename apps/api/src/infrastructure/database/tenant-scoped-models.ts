@@ -13,18 +13,74 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set<string>([
   'Role',
   'RolePermission',
   'MembershipRole',
+  'TenantModuleOverride',
+  'Subscription',
+  'TenantSetting',
+  'TenantService',
+  'TenantStatusHistory',
+  'TenantOperationOverride',
+  'MembershipInvitation',
+  'MembershipStatusHistory',
+  'UsageDailySnapshot',
+  'BillingPeriod',
+  'UsagePeriodCalculation',
+  'PlatformInvoice',
+  'PlatformInvoiceLine',
+  'SubscriptionPayment',
+  'SupportAccessGrant',
+  'SupportHandoff',
+  'SupportSession',
+  'SupportAccessLog',
 ]);
+
+/**
+ * Tablas de tenant que `yebo_app` NO puede leer (Fase 4.6): guardan hashes de credenciales del staff de soporte y
+ * solo las usa `yebo_backoffice`. Para ellas, las pruebas de cobertura de RLS exigen permiso denegado en vez de 0 filas.
+ */
+export const TENANT_TABLES_WITHOUT_APP_READ: ReadonlySet<string> = new Set([
+  'support_handoffs',
+  'support_sessions',
+]);
+
+/** Nombres de tabla de TENANT_SCOPED_MODELS, para las verificaciones sobre el catálogo de PostgreSQL. */
+export const TENANT_SCOPED_TABLES: readonly string[] = [
+  'tenant_memberships',
+  'roles',
+  'role_permissions',
+  'membership_roles',
+  'tenant_module_overrides',
+  'subscriptions',
+  'tenant_settings',
+  'tenant_services',
+  'tenant_status_history',
+  'tenant_operation_overrides',
+  'membership_invitations',
+  'membership_status_history',
+  'usage_daily_snapshots',
+  'billing_periods',
+  'usage_period_calculations',
+  'platform_invoices',
+  'platform_invoice_lines',
+  'subscription_payments',
+  'support_access_grants',
+  'support_handoffs',
+  'support_sessions',
+  'support_access_logs',
+];
 
 /**
  * - tenant_domains: el resolver la consulta para DESCUBRIR el tenant a partir del host (ADR-004).
  * - tenant_sessions: se consulta para validar el token ANTES de abrir el contexto de tenant (ADR-009);
  *   la gestiona identidad con yebo_identity (Fase 3.2).
  * - authorization_codes: se canjea antes de que exista la sesión de empresa (Fase 3.2b); solo yebo_identity.
+ * - platform_audit_logs: auditoría del staff de YEBO (Fase 4.1); `tenant_id` indica la empresa afectada. Solo
+ *   yebo_backoffice, que no tiene contexto de tenant.
  */
 export const GLOBAL_MODELS_WITH_TENANT_ID: ReadonlySet<string> = new Set<string>([
   'TenantDomain',
   'TenantSession',
   'AuthorizationCode',
+  'PlatformAuditLog',
 ]);
 
 /** Nombres de tabla equivalentes, para las verificaciones sobre el catálogo de PostgreSQL. */
@@ -32,4 +88,5 @@ export const GLOBAL_TABLES_WITH_TENANT_ID: readonly string[] = [
   'tenant_domains',
   'tenant_sessions',
   'authorization_codes',
+  'platform_audit_logs',
 ];

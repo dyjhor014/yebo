@@ -107,7 +107,7 @@ Empresa en Lima, día 10/11/2026 (hora local):
 
 ## 4. Snapshots diarios
 
-- Un job horario (rol `yebo_platform`) busca, por empresa, los días **ya terminados en su zona horaria** (+15 min de margen) que aún no tienen snapshot `FINAL`, y los calcula. Es idempotente: `UNIQUE (tenant_id, usage_date)` + `UPSERT`.
+- Un job horario (rol `yebo_metering` desde la Fase 4.4, con el contexto de cada empresa; F4-Q2) busca, por empresa, los días **ya terminados en su zona horaria** (+15 min de margen) que aún no tienen snapshot `FINAL`, y los calcula. Es idempotente: `UNIQUE (tenant_id, usage_date)` + `UPSERT`.
 - Como el historial no puede modificarse hacia atrás, un día terminado no puede cambiar: el snapshot `FINAL` es definitivo.
 - El panel muestra el valor del día en curso calculado al vuelo (`PROVISIONAL`, sin guardar).
 - Cada snapshot guarda `timezone`, `day_range`, `algorithm_version`, ambas medidas y el detalle (IDs de las membresías contadas) para la auditoría.
@@ -147,8 +147,9 @@ Eliminar o desactivar usuarios **después** del cierre no altera nada: el cálcu
 | Caso | Regla |
 |---|---|
 | Trial | Se mide igual (útil para la conversión). La factura del trial tiene importe 0 o no se emite, según el plan |
-| Cambio de plan a mitad del período | MVP: el nuevo plan aplica **desde el período siguiente**. El prorrateo queda como evolución (por validar) |
+| Cambio de plan a mitad del período | **Decisión del 2026-11-10 (Fase 4.5)**:<br>• **Upgrade:** el plan nuevo (módulos, límites y precio) aplica **desde el día en que se registra**. El período en curso se corta ese día y se factura con la **base prorrateada** (días usados / días del período) más los usuarios adicionales medidos en esos días; el plan nuevo empieza ese día su propio ciclo y se cobra a su cierre.<br>• **Downgrade:** aplica desde el período siguiente.<br>Upgrade = la base mensual equivalente sube, o es igual con más usuarios incluidos |
 | Altas y bajas por error en pocos minutos | Cuentan mientras estuvieron activas. Opcional por plan: `min_active_seconds` para ignorar intervalos muy cortos (por defecto 0, por validar) |
+| Pago anulado | **Decisión del 2026-11-10 (Fase 4.7b)**: lo anulan Cobros o Superadmin (`platform.billing.manage`), con motivo obligatorio y sin límite de tiempo. El pago no se borra: pasa a `REVERSED` con quién, cuándo y por qué, y la factura recupera el saldo (vencida si su vencimiento ya pasó en la zona de la empresa; si no, emitida o con pago parcial). Si queda vencida y la empresa estaba «Al día», vuelve a `PAST_DUE` en la misma operación (la gracia cuenta desde ahí); nunca pasa directamente a `SUSPENDED`. La empresa ve la fecha de la anulación, no el motivo |
 | Tenant `SUSPENDED` | La medición continúa: las membresías activas siguen siendo accesos habilitados. El tenant puede reducir usuarios (`USERS_REDUCE`) |
 
 ## 8. Pruebas (Fase 4)

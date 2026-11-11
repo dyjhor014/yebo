@@ -15,6 +15,7 @@ import { AppError } from '../../../common/errors/app-error';
 import { ENV } from '../../../config/env.module';
 import type { Env } from '../../../config/env';
 import type { RequestContextStore } from '../../../infrastructure/context/request-context';
+import { EffectiveModulesService } from '../../access/effective-modules.service';
 import { PermissionService } from '../../access/permission.service';
 import { AuthenticatedOnly, Public, TenantOperation } from '../../access/route-policy';
 import { isLoginAllowed, tenantPhase } from '../../access/tenant-operation';
@@ -63,6 +64,7 @@ export class AuthController {
     private readonly clock: Clock,
     private readonly cls: ClsService<RequestContextStore>,
     private readonly permissions: PermissionService,
+    private readonly modules: EffectiveModulesService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -191,6 +193,10 @@ export class AuthController {
   @TenantOperation('READ')
   async session(@Res({ passthrough: true }) res: Response): Promise<AuthSessionResponse> {
     noStore(res);
+    if (this.cls.get('supportPrincipal')) {
+      // El staff de soporte no tiene sesión de persona en la empresa (Fase 4.6).
+      throw new AppError('FORBIDDEN', 'No disponible en una sesión de soporte', 403);
+    }
     const principal = this.cls.get('principal');
     const tenantId = this.cls.get('tenantId');
     if (!principal || !tenantId) throw new Error('AuthenticationGuard no fijó la sesión');
@@ -200,6 +206,7 @@ export class AuthController {
       membershipId: principal.membershipId,
       accessTokenExpiresAt: new Date(principal.accessTokenExpiresAt * 1000).toISOString(),
       permissions: [...(await this.permissions.current())].sort(),
+      modules: [...(await this.modules.current())].sort(),
     };
   }
 

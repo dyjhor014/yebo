@@ -97,6 +97,7 @@ CREATE POLICY tenant_isolation ON shipments
 | `yebo_app` | API y worker en contexto de tenant | **Aplica** |
 | `yebo_platform` | Resolver de dominios y health check. En la Fase 4, superadmin y jobs entre tenants con permisos explícitos | **Aplica** (sin BYPASSRLS desde ADR-034). Solo SELECT sobre `tenants` y `tenant_domains`; credenciales y *pool* separados |
 | `yebo_identity` | **Solo el módulo identity** (Fase 3.2a): sesiones y tokens; lectura de `users`, `tenant_memberships` y `tenant_domains` | **Aplica** (sin BYPASSRLS); política propia de solo lectura sobre `tenant_memberships`. Permisos explícitos, nunca por defecto. Detalle en [phase-3-plan](../development/phase-3-plan.md) |
+| `yebo_backoffice` | **Solo la API del superadmin** (Fase 4.1, F4-Q2): staff, sesiones, enlaces y auditoría de plataforma; en etapas posteriores, planes, suscripciones y facturación | **Aplica** (sin BYPASSRLS). Permisos explícitos por migración; nunca toca datos de tenant sin contexto de tenant |
 
 > **ADR-034 (aplicado el 2026-11-10):** ningún rol de ejecución salta RLS, hereda privilegios ni pertenece a otro rol. Los permisos sobre tablas son una **lista blanca** que concede cada migración (sin privilegios por defecto), y una prueba compara la foto de privilegios con una matriz versionada. Solo las pruebas usan un rol con BYPASSRLS (`yebo_test_bypass`), que no existe en producción ni tiene acceso a `yebo_dev`. Ver [ADR-034](architecture-decisions.md) y [phase-3-plan](../development/phase-3-plan.md#adr-034--implementación-2026-11-10).
 
@@ -118,6 +119,8 @@ CREATE POLICY tenant_isolation ON shipments
 > **Precisión de la Fase 3.2a (2026-11-09):**
 > - Las sesiones (`identity_sessions`, `tenant_sessions`, `refresh_tokens`) son **exclusivas del rol `yebo_identity`**; ni `yebo_app` ni `yebo_platform` tienen acceso.
 > - `tenant_sessions` y `tenant_domains` son las **excepciones globales con `tenant_id`** (sin RLS de tenant), declaradas en el registro de modelos y en la prueba de cobertura de RLS.
+>
+> **Precisión de la Fase 4.3a (2026-11-10):** las transiciones (manuales y del job cada 15 minutos) están en `platform-admin/tenant-lifecycle.ts`. Los días de gracia de `PAST_DUE` se leen de la política del plan; el periodo de cierre sigue siendo la constante de 30 días.
 >
 > **Precisión de la Fase 3.3 (2026-11-10):** `yebo_app` puede actualizar **solo** `status`, `permissions_version` y `updated_at` de `tenant_memberships` (privilegio por columna, con RLS forzado), para suspender y reactivar membresías y versionar permisos sin usar `yebo_platform`. No puede insertar ni borrar membresías, ni cambiar `billable`, `user_id` ni `tenant_id`.
 
@@ -164,7 +167,7 @@ Cada endpoint de negocio se etiqueta con **una** categoría (`@TenantOperation(.
 | Notificaciones a clientes finales sobre operaciones existentes | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
 
 1. Los operadores necesitan entrar para embarcar, recibir y entregar. Lo que pueden hacer dentro lo limita la matriz, no el login.
-2. Si hace falta reemplazar a un operador para cumplir obligaciones (p. ej., el único almacenero), YEBO puede otorgar una excepción temporal auditada (`tenant_module_overrides`).
+2. Si hace falta reemplazar a un operador para cumplir obligaciones (p. ej., el único almacenero), YEBO puede otorgar una excepción temporal auditada (`tenant_module_overrides`). **Precisión de la Fase 4.3a (2026-11-10):** la excepción se guarda en una tabla propia, `tenant_operation_overrides`, porque `tenant_module_overrides` va ligada a un módulo.
 
 **Transiciones:**
 - `TRIAL` → `EXPIRED` al vencer el trial sin pago.
@@ -203,7 +206,9 @@ efectivo = módulos del plan contratado (plan_version_modules)
          + overrides otorgados por YEBO (tenant_module_overrides, con vigencia)
 ```
 
-- Guard `@RequiresModule('PARCELS')` en los controladores. El frontend recibe la lista efectiva y oculta lo no habilitado, pero **la autoridad es el backend**.
+Las excepciones REVOKE vigentes restan y ganan sobre las GRANT. Implementado en la Fase 4.2 sin la capa de `tenant_services`, que llega con la 4.3 (ver [phase-4-plan](../development/phase-4-plan.md)).
+
+- Guard `@RequiresModule('PARCELS')` en los controladores (`403 MODULE_NOT_ENABLED`). El frontend recibe la lista efectiva y oculta lo no habilitado, pero **la autoridad es el backend**.
 - Los límites del plan (sucursales, vehículos, almacenamiento) se validan en los servicios al crear recursos.
 
 ## 7. Pruebas de aislamiento (criterio de la Fase 3)

@@ -1,6 +1,6 @@
 # Estado del proyecto — YEBO
 
-**Última actualización:** 2026-11-10 (ADR-034)
+**Última actualización:** 2026-11-10 (Fase 4.8, cierre de la Fase 4)
 
 ## Fase actual
 
@@ -18,6 +18,18 @@ La **3.3** (autorización y estado del tenant: guards globales con denegación p
 La **3.4** (cierre: aislamiento de extremo a extremo y medición del coste de una transacción por operación) está en un **commit local** (`da999d8`, rama `fase-3/3.4-cierre`). **Criterio de aceptación de la Fase 3 cumplido**; resultados en [phase-3-results.md](docs/development/phase-3-results.md).
 
 **ADR-034 aplicado** y **regla de §4.2 adoptada** (2026-11-10), en la rama `fase-3/adr-034-privilegios`, sin commit. `yebo_platform` ya no salta RLS. El clúster de desarrollo está endurecido y **`yebo_dev` migrada** (7 migraciones).
+
+**Fase 4 implementada (4.1–4.8), pendiente de revisión** (rama `fase-4/plan`, solo commits locales). **Criterio de aceptación cumplido:** una prueba de extremo a extremo crea la empresa, le asigna el plan, mide sus usuarios durante un mes y calcula la factura (S/ 174.00), en la CI como parte de `pnpm test:integration`. Incluye:
+- el staff con MFA;
+- el catálogo comercial;
+- el alta y los estados de las empresas;
+- las invitaciones;
+- la medición diaria;
+- los períodos, las facturas, los pagos (con su anulación) y el cambio de plan;
+- el acceso de soporte;
+- el panel del staff (`apps/platform`), con E2E de Playwright y axe.
+
+Todas las migraciones están aplicadas a `yebo_dev` con copia previa. Hay además un modo HTTPS local para probar desde la red (`pnpm https:up`). **Push y PR en espera** por decisión del responsable. Resultados en [phase-4-results.md](docs/development/phase-4-results.md); plan en [phase-4-plan.md](docs/development/phase-4-plan.md).
 
 La Fase 2 sigue en revisión mediante el PR #1, sin merge. Orden de integración previsto: #1 → #3 → #2.
 
@@ -65,7 +77,7 @@ D1 (cliente piloto), D6 (propietarios), D7 (agencias), S2 (contrato de la API de
 
 ## Errores conocidos
 
-Ninguno abierto.
+Ninguno abierto. El `500` intermitente bajo carga de `isolation-e2e` se corrigió el 2026-11-10 (aprobado y en un commit local): espera configurable `PG_TX_MAX_WAIT_MS` y `503` reintentable si se agota. Detalle en [phase-4-plan.md](docs/development/phase-4-plan.md) (4.3b, «Pendiente»).
 
 ## Próximas tareas
 

@@ -23,7 +23,7 @@ import { RolesService } from '../../src/modules/access/roles.service';
 import { routePolicyOf, type RoutePolicy } from '../../src/modules/access/route-policy';
 import { SessionService } from '../../src/modules/identity/session.service';
 import { TenantResolverService } from '../../src/modules/tenancy/tenant-resolver.service';
-import { testBypassPool, testPool } from '../support/db';
+import { testBypassPool, testPool, RESET_TENANT_DATA } from '../support/db';
 
 const DB = 'yebo_test';
 const A = '0190f0a0-0000-7000-8000-00000000a033';
@@ -32,6 +32,15 @@ const HOST_A = 'acceso-a.yebo.test';
 const HOST_B = 'acceso-b.yebo.test';
 const CSRF = 'csrf-de-prueba-0123456789abcdef';
 const MIGRATION = resolve(__dirname, '../../prisma/migrations/20261110120000_fase3_3_access/migration.sql');
+/** Permisos que añaden migraciones posteriores (4.3b: members.invite): se toma su bloque de siembra tal cual. */
+const LATER_SEEDS = [
+  resolve(__dirname, '../../prisma/migrations/20261110210000_fase4_3b_membership_invitations/migration.sql'),
+  resolve(__dirname, '../../prisma/migrations/20261111020000_fase4_5_billing/migration.sql'),
+  resolve(__dirname, '../../prisma/migrations/20261111040000_fase4_6_support_access/migration.sql'),
+].map((file) => {
+  const sql = readFileSync(file, 'utf8');
+  return sql.slice(sql.indexOf('INSERT INTO "permissions"'), sql.indexOf('-- Roles ya creados'));
+});
 
 interface Route {
   method: string;
@@ -97,11 +106,10 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
   beforeAll(async () => {
     owner = testPool('owner', DB, 2);
     seed = testBypassPool(DB, 2);
-    await owner.query(
-      'TRUNCATE authorization_codes, refresh_tokens, tenant_sessions, identity_sessions, membership_roles, role_permissions, roles, tenant_memberships, users, permissions, role_templates, tenant_domains, tenants',
-    );
+    await owner.query(RESET_TENANT_DATA);
     // Otras suites vacían el catálogo: se vuelve a aplicar la migración (idempotente) para probar su contenido.
     await owner.query(readFileSync(MIGRATION, 'utf8'));
+    for (const seed of LATER_SEEDS) await owner.query(seed);
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     const nest = moduleRef.createNestApplication<NestExpressApplication>({ bufferLogs: true });
@@ -360,6 +368,15 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
         [m.A.beto],
       );
       expect(live.rowCount).toBe(0);
+      // Historial de medición (Fase 4.4): la suspensión queda con su autor, la membresía de Ana.
+      const history = await seed.query(
+        `SELECT status::text, changed_by_kind::text AS kind, changed_by_id AS id, reason
+           FROM membership_status_history WHERE membership_id = $1 AND valid_to IS NULL`,
+        [m.A.beto],
+      );
+      expect(history.rows).toEqual([
+        { status: 'SUSPENDED', kind: 'MEMBERSHIP', id: m.A.ana, reason: 'members.suspend' },
+      ]);
       // Suspender dos veces es un conflicto, no un éxito silencioso.
       expect((await call('POST', `/api/v1/members/${m.A.beto}/suspend`, { token: ana.token })).status).toBe(
         409,

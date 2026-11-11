@@ -24,7 +24,7 @@ import { TenantDbService } from '../../src/infrastructure/database/tenant-db.ser
 import { RolesService } from '../../src/modules/access/roles.service';
 import { SessionService } from '../../src/modules/identity/session.service';
 import { TenantResolverService } from '../../src/modules/tenancy/tenant-resolver.service';
-import { testBypassPool, testBypassUrl, testPool } from '../support/db';
+import { testBypassPool, testBypassUrl, testPool, RESET_TENANT_DATA } from '../support/db';
 
 const DB = 'yebo_test';
 const A = '0190f0a0-0000-7000-8000-00000000a0b1';
@@ -100,9 +100,7 @@ describe('Fase 3.4 · medición del coste de una transacción por operación', (
   it('mide', async () => {
     owner = testPool('owner', DB, 2);
     seed = testBypassPool(DB, 2);
-    await owner.query(
-      'TRUNCATE authorization_codes, refresh_tokens, tenant_sessions, identity_sessions, membership_roles, role_permissions, roles, tenant_memberships, users, permissions, role_templates, tenant_domains, tenants',
-    );
+    await owner.query(RESET_TENANT_DATA);
     await owner.query(
       `INSERT INTO permissions (id, code, module_code, description, is_sensitive, updated_at)
          SELECT gen_random_uuid(), c, 'ACCESS', c, false, now()
@@ -164,6 +162,7 @@ describe('Fase 3.4 · medición del coste de una transacción por operación', (
       connectionString: testBypassUrl(DB),
       max: WORKERS,
       applicationName: 'yebo-bench-ref',
+      txMaxWaitMs: 10_000,
     });
     const member = memberships[0] ?? '';
     const reference = () =>

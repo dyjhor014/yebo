@@ -11,6 +11,15 @@ const GLOBAL_GUARDS = {
   selector: "Identifier[name='APP_GUARD']",
   message: 'La cadena de guards globales solo se registra en modules/access/access.module.ts (Fase 3.3).',
 };
+const BACKOFFICE_IMPORT = {
+  selector: 'ImportDeclaration[source.value=/backoffice-prisma\\.service/]',
+  message:
+    'BackofficePrismaService (rol yebo_backoffice) es exclusivo del módulo platform-admin (Fase 4, F4-Q2).',
+};
+const METERING_IMPORT = {
+  selector: 'ImportDeclaration[source.value=/metering-prisma\\.service/]',
+  message: 'MeteringPrismaService (rol yebo_metering) es exclusivo del módulo metering (Fase 4.4, F4-Q2).',
+};
 const USE_GLOBAL_GUARDS = {
   selector: "MemberExpression[property.name='useGlobalGuards']",
   message:
@@ -92,10 +101,20 @@ export default tseslint.config(
   {
     // Frontera 3 · Denegar por defecto (Fase 3.3, diseño aceptado el 2026-11-09). Las rutas públicas solo se
     // declaran en los módulos autorizados (y además figuran en PUBLIC_ROUTES), y la cadena de guards globales solo
-    // se registra en access.module.ts. Las dos reglas comparten `no-restricted-syntax`: los bloques siguientes
-    // sustituyen la lista completa para sus archivos, así que cada uno repite lo que sigue prohibido.
+    // se registra en access.module.ts. Frontera 4 (Fase 4.1): el cliente de yebo_backoffice solo dentro de
+    // platform-admin. Frontera 5 (Fase 4.4): el cliente de yebo_metering solo dentro de metering. Las reglas comparten `no-restricted-syntax`: cada bloque siguiente sustituye la lista completa
+    // para sus archivos, así que repite lo que sigue prohibido.
     files: ['apps/api/src/**/*.ts'],
-    rules: { 'no-restricted-syntax': ['error', PUBLIC_DECORATOR, GLOBAL_GUARDS, USE_GLOBAL_GUARDS] },
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        PUBLIC_DECORATOR,
+        GLOBAL_GUARDS,
+        USE_GLOBAL_GUARDS,
+        BACKOFFICE_IMPORT,
+        METERING_IMPORT,
+      ],
+    },
   },
   {
     files: [
@@ -103,10 +122,42 @@ export default tseslint.config(
       'apps/api/src/modules/tenancy/**/*.ts',
       'apps/api/src/modules/identity/http/**/*.ts',
     ],
-    rules: { 'no-restricted-syntax': ['error', GLOBAL_GUARDS, USE_GLOBAL_GUARDS] },
+    rules: {
+      'no-restricted-syntax': ['error', GLOBAL_GUARDS, USE_GLOBAL_GUARDS, BACKOFFICE_IMPORT, METERING_IMPORT],
+    },
+  },
+  {
+    files: ['apps/api/src/modules/platform-admin/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': ['error', PUBLIC_DECORATOR, GLOBAL_GUARDS, USE_GLOBAL_GUARDS, METERING_IMPORT],
+    },
+  },
+  {
+    files: ['apps/api/src/modules/platform-admin/http/**/*.ts'],
+    rules: { 'no-restricted-syntax': ['error', GLOBAL_GUARDS, USE_GLOBAL_GUARDS, METERING_IMPORT] },
+  },
+  {
+    files: ['apps/api/src/modules/metering/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        PUBLIC_DECORATOR,
+        GLOBAL_GUARDS,
+        USE_GLOBAL_GUARDS,
+        BACKOFFICE_IMPORT,
+      ],
+    },
   },
   {
     files: ['apps/api/src/modules/access/access.module.ts'],
-    rules: { 'no-restricted-syntax': ['error', PUBLIC_DECORATOR, USE_GLOBAL_GUARDS] },
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        PUBLIC_DECORATOR,
+        USE_GLOBAL_GUARDS,
+        BACKOFFICE_IMPORT,
+        METERING_IMPORT,
+      ],
+    },
   },
 );

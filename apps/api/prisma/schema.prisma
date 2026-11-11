@@ -61,6 +61,8 @@ model Tenant {
   trialEndsAt     DateTime?    @map("trial_ends_at") @db.Timestamptz(6)
   activatedAt     DateTime?    @map("activated_at") @db.Timestamptz(6)
   cancelledAt     DateTime?    @map("cancelled_at") @db.Timestamptz(6)
+  /// Inicio del estado vigente (Fase 4.3): los días de gracia de PAST_DUE se cuentan desde aquí.
+  statusChangedAt DateTime     @default(now()) @map("status_changed_at") @db.Timestamptz(6)
   createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -69,6 +71,16 @@ model Tenant {
   roles              Role[]
   tenantSessions     TenantSession[]
   authorizationCodes AuthorizationCode[]
+  moduleOverrides    TenantModuleOverride[]
+  subscriptions      Subscription[]
+  settings           TenantSetting?
+  services           TenantService[]
+  statusHistory      TenantStatusHistory[]
+  operationOverrides TenantOperationOverride[]
+  invitations        MembershipInvitation[]
+  usageSnapshots     UsageDailySnapshot[]
+  invoices           PlatformInvoice[]
+  supportGrants      SupportAccessGrant[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -135,9 +147,10 @@ model User {
   createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  memberships      TenantMembership[]
-  identitySessions IdentitySession[]
-  tenantSessions   TenantSession[]
+  memberships       TenantMembership[]
+  membershipHistory MembershipStatusHistory[]
+  identitySessions  IdentitySession[]
+  tenantSessions    TenantSession[]
 
   @@map("users")
 }
@@ -157,10 +170,14 @@ model TenantMembership {
   createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  user           User             @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  roles          MembershipRole[]
-  tenantSessions TenantSession[]
+  tenant              Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  roles               MembershipRole[]
+  tenantSessions      TenantSession[]
+  invitationsSent     MembershipInvitation[]    @relation("InvitationInvitedBy")
+  invitationsAccepted MembershipInvitation[]    @relation("InvitationAcceptedAs")
+  statusHistory       MembershipStatusHistory[]
+  supportApprovals    SupportAccessGrant[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, userId])
@@ -381,4 +398,809 @@ model AuthorizationCode {
   @@index([identitySessionId])
   @@index([tenantSessionId])
   @@map("authorization_codes")
+}
+
+// ============================================================================
+// Fase 4.1 · Staff de YEBO (realm de plataforma, separado de la identidad de clientes). Tablas globales 🌐,
+// exclusivas del rol yebo_backoffice (ADR-034, decisión F4-Q2). Nadie más tiene acceso.
+// ============================================================================
+
+enum PlatformRole {
+  /// Todo, incluida la gestión del staff.
+  SUPERADMIN
+  /// Planes, suscripciones, períodos, facturas y pagos; lectura de empresas.
+  BILLING
+  /// Lectura de empresas y accesos de soporte (4.6).
+  SUPPORT
+  /// Solo lectura.
+  VIEWER
+
+  @@map("platform_role")
+}
+
+enum PlatformUserStatus {
+  ACTIVE
+  DISABLED
+
+  @@map("platform_user_status")
+}
+
+enum PlatformSessionRevokeReason {
+  LOGOUT
+  USER_DISABLED
+  ADMIN_REVOKED
+
+  @@map("platform_session_revoke_reason")
+}
+
+model PlatformUser {
+  id                  String             @id @default(uuid(7)) @db.Uuid
+  email               String             @unique @db.Citext
+  fullName            String             @map("full_name")
+  /// Nulo hasta que la persona fija su contraseña con el enlace de configuración.
+  passwordHash        String?            @map("password_hash")
+  role                PlatformRole
+  status              PlatformUserStatus @default(ACTIVE)
+  /// Secreto TOTP cifrado (ADR-019: AES-256-GCM, IV + etiqueta incluidos) y versión de la clave.
+  mfaSecretCiphertext Bytes?             @map("mfa_secret_ciphertext")
+  mfaKeyVersion       Int?               @map("mfa_key_version")
+  mfaEnabledAt        DateTime?          @map("mfa_enabled_at") @db.Timestamptz(6)
+  /// Último paso TOTP aceptado: un código no puede reutilizarse (RFC 6238 §5.2).
+  mfaLastStep         BigInt?            @map("mfa_last_step")
+  passwordChangedAt   DateTime?          @map("password_changed_at") @db.Timestamptz(6)
+  lastLoginAt         DateTime?          @map("last_login_at") @db.Timestamptz(6)
+  createdById         String?            @map("created_by_id") @db.Uuid
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdBy          PlatformUser?             @relation("PlatformUserCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  created            PlatformUser[]            @relation("PlatformUserCreatedBy")
+  sessions           PlatformSession[]
+  setupTokens        PlatformSetupToken[]      @relation("SetupTokenFor")
+  issuedTokens       PlatformSetupToken[]      @relation("SetupTokenIssuedBy")
+  auditEntries       PlatformAuditLog[]
+  planVersions       PlanVersion[]
+  overridesGranted   TenantModuleOverride[]    @relation("OverrideGrantedBy")
+  overridesEnded     TenantModuleOverride[]    @relation("OverrideEndedBy")
+  statusChanges      TenantStatusHistory[]
+  opOverridesGranted TenantOperationOverride[] @relation("OpOverrideGrantedBy")
+  opOverridesEnded   TenantOperationOverride[] @relation("OpOverrideEndedBy")
+  invitationsSent    MembershipInvitation[]
+  paymentsRecorded   SubscriptionPayment[]     @relation("PaymentRecordedBy")
+  paymentsReversed   SubscriptionPayment[]     @relation("PaymentReversedBy")
+  supportGrants      SupportAccessGrant[]
+
+  @@map("platform_users")
+}
+
+model PlatformSession {
+  id                String                       @id @default(uuid(7)) @db.Uuid
+  platformUserId    String                       @map("platform_user_id") @db.Uuid
+  /// SHA-256 del token opaco de la cookie. El token nunca se guarda.
+  tokenHash         Bytes                        @unique @map("token_hash")
+  ip                String?                      @db.Inet
+  userAgent         String?                      @map("user_agent")
+  lastSeenAt        DateTime                     @map("last_seen_at") @db.Timestamptz(6)
+  idleExpiresAt     DateTime                     @map("idle_expires_at") @db.Timestamptz(6)
+  absoluteExpiresAt DateTime                     @map("absolute_expires_at") @db.Timestamptz(6)
+  revokedAt         DateTime?                    @map("revoked_at") @db.Timestamptz(6)
+  revokeReason      PlatformSessionRevokeReason? @map("revoke_reason")
+  createdAt         DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  platformUser PlatformUser @relation(fields: [platformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([platformUserId])
+  @@map("platform_sessions")
+}
+
+/// Enlace de un solo uso para que un miembro del staff fije su contraseña (alta o restablecimiento).
+model PlatformSetupToken {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  platformUserId String    @map("platform_user_id") @db.Uuid
+  tokenHash      Bytes     @unique @map("token_hash")
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt     DateTime? @map("consumed_at") @db.Timestamptz(6)
+  issuedById     String?   @map("issued_by_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  platformUser PlatformUser  @relation("SetupTokenFor", fields: [platformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  issuedBy     PlatformUser? @relation("SetupTokenIssuedBy", fields: [issuedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([platformUserId])
+  @@map("platform_setup_tokens")
+}
+
+/// Auditoría de las acciones del staff (append-only: el rol de ejecución solo puede insertar y leer).
+model PlatformAuditLog {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  platformUserId String?  @map("platform_user_id") @db.Uuid
+  action         String
+  targetType     String?  @map("target_type")
+  targetId       String?  @map("target_id")
+  tenantId       String?  @map("tenant_id") @db.Uuid
+  detail         Json     @default("{}")
+  ip             String?  @db.Inet
+  occurredAt     DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  platformUser PlatformUser? @relation(fields: [platformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([platformUserId, occurredAt])
+  @@index([tenantId, occurredAt])
+  @@map("platform_audit_logs")
+}
+
+// ============================================================================
+// Fase 4.2 · Catálogo comercial: módulos, planes y versiones (globales 🌐), excepciones de módulo y
+// suscripciones (de tenant, con RLS). Ningún precio se fija aquí: los planes los crea el superadmin.
+// ============================================================================
+
+enum PlanStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+
+  @@map("plan_status")
+}
+
+enum PlanVersionStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+
+  @@map("plan_version_status")
+}
+
+enum BillingInterval {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+
+  @@map("billing_interval")
+}
+
+enum UsageMetric {
+  PEAK_DAILY
+  AVERAGE_DAILY
+  END_OF_PERIOD
+
+  @@map("usage_metric")
+}
+
+enum DailyAggregation {
+  PEAK_CONCURRENT
+  DISTINCT_ACTIVE
+
+  @@map("daily_aggregation")
+}
+
+enum ModuleOverrideEffect {
+  GRANT
+  REVOKE
+
+  @@map("module_override_effect")
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+  EXPIRED
+
+  @@map("subscription_status")
+}
+
+/// Catálogo de módulos funcionales. Fuente en código (module-catalog.ts); se siembra por migración.
+model Module {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  code        String   @unique
+  name        String
+  description String
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  planVersions PlanVersionModule[]
+  overrides    TenantModuleOverride[]
+
+  @@map("modules")
+}
+
+model Plan {
+  id          String     @id @default(uuid(7)) @db.Uuid
+  code        String     @unique
+  name        String
+  description String     @default("")
+  status      PlanStatus @default(DRAFT)
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  versions PlanVersion[]
+
+  @@map("plans")
+}
+
+/// Inmutable al publicarse (trigger; ADR-010). Solo admite PUBLISHED → RETIRED.
+model PlanVersion {
+  id               String            @id @default(uuid(7)) @db.Uuid
+  planId           String            @map("plan_id") @db.Uuid
+  version          Int
+  status           PlanVersionStatus @default(DRAFT)
+  currency         String            @db.Char(3)
+  basePrice        Decimal           @map("base_price") @db.Decimal(14, 2)
+  billingInterval  BillingInterval   @map("billing_interval")
+  includedUsers    Int               @map("included_users")
+  extraUserPrice   Decimal           @map("extra_user_price") @db.Decimal(14, 2)
+  usageMetric      UsageMetric       @default(PEAK_DAILY) @map("usage_metric")
+  dailyAggregation DailyAggregation  @default(PEAK_CONCURRENT) @map("daily_aggregation")
+  minActiveSeconds Int               @default(0) @map("min_active_seconds")
+  trialDays        Int               @default(0) @map("trial_days")
+  /// Límites del plan (sucursales, vehículos, almacenamiento GB); esquema validado. null = sin límite.
+  limits           Json              @default("{}")
+  /// Política de estados (días de gracia y de cierre); esquema validado. Por defecto, la de multitenancy §5.
+  suspensionPolicy Json              @default("{}") @map("suspension_policy")
+  /// Vencimiento de la factura = emisión + N días (Fase 4.5).
+  paymentTermsDays Int               @default(7) @map("payment_terms_days")
+  /// Tasa de impuesto sobre el subtotal; 0 hasta validar S5 (Fase 4.5).
+  taxRate          Decimal           @default(0) @map("tax_rate") @db.Decimal(5, 4)
+  publishedAt      DateTime?         @map("published_at") @db.Timestamptz(6)
+  retiredAt        DateTime?         @map("retired_at") @db.Timestamptz(6)
+  createdById      String?           @map("created_by_id") @db.Uuid
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  plan          Plan                @relation(fields: [planId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy     PlatformUser?       @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  modules       PlanVersionModule[]
+  subscriptions Subscription[]
+
+  scheduledSubscriptions Subscription[] @relation("SubscriptionNextPlan")
+
+  @@unique([planId, version])
+  @@map("plan_versions")
+}
+
+model PlanVersionModule {
+  planVersionId String @map("plan_version_id") @db.Uuid
+  moduleId      String @map("module_id") @db.Uuid
+  config        Json?
+
+  planVersion PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  module      Module      @relation(fields: [moduleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([planVersionId, moduleId])
+  @@index([moduleId])
+  @@map("plan_version_modules")
+}
+
+/// Excepción temporal y auditada de YEBO sobre los módulos de un tenant (multitenancy §5.2 nota 2 y §6).
+model TenantModuleOverride {
+  id                      String               @id @default(uuid(7)) @db.Uuid
+  tenantId                String               @map("tenant_id") @db.Uuid
+  moduleId                String               @map("module_id") @db.Uuid
+  effect                  ModuleOverrideEffect
+  validFrom               DateTime             @map("valid_from") @db.Timestamptz(6)
+  validTo                 DateTime?            @map("valid_to") @db.Timestamptz(6)
+  reason                  String
+  grantedByPlatformUserId String               @map("granted_by_platform_user_id") @db.Uuid
+  endedAt                 DateTime?            @map("ended_at") @db.Timestamptz(6)
+  endedByPlatformUserId   String?              @map("ended_by_platform_user_id") @db.Uuid
+  createdAt               DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  module    Module        @relation(fields: [moduleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  grantedBy PlatformUser  @relation("OverrideGrantedBy", fields: [grantedByPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  endedBy   PlatformUser? @relation("OverrideEndedBy", fields: [endedByPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, moduleId])
+  @@map("tenant_module_overrides")
+}
+
+/// Suscripción del tenant a una versión de plan. La crea el alta de empresas (4.3); aquí se define y se lee.
+model Subscription {
+  id                 String             @id @default(uuid(7)) @db.Uuid
+  tenantId           String             @map("tenant_id") @db.Uuid
+  planVersionId      String             @map("plan_version_id") @db.Uuid
+  status             SubscriptionStatus
+  currentPeriodStart DateTime           @map("current_period_start") @db.Date
+  currentPeriodEnd   DateTime           @map("current_period_end") @db.Date
+  cancelAt           DateTime?          @map("cancel_at") @db.Timestamptz(6)
+  graceUntil         DateTime?          @map("grace_until") @db.Timestamptz(6)
+  /// Acuerdo comercial especial (auditado). F4-Q1: el cálculo del precio tiene un único punto de entrada.
+  priceOverride      Json?              @map("price_override")
+  /// TRUE o NULL (CHECK en SQL): UNIQUE(tenant_id, is_current) garantiza una sola suscripción vigente.
+  isCurrent          Boolean?           @map("is_current")
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  planVersion PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  /// Downgrade programado: aplica desde el período siguiente (billing §7).
+  nextPlanVersionId String?         @map("next_plan_version_id") @db.Uuid
+  nextPlanVersion   PlanVersion?    @relation("SubscriptionNextPlan", fields: [nextPlanVersionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  billingPeriods    BillingPeriod[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, isCurrent])
+  @@index([planVersionId])
+  @@map("subscriptions")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 4.3a · Alta de empresas y máquina de estados del tenant (multitenancy §5; data-dictionary §1)
+// ---------------------------------------------------------------------------------------------------------------
+
+enum ServiceModality {
+  LAND
+  RIVER
+
+  @@map("service_modality")
+}
+
+enum TransportService {
+  PASSENGER
+  PARCEL
+  CARGO
+  VEHICLE_TRANSPORT
+
+  @@map("transport_service")
+}
+
+enum TenantOperationOverrideCategory {
+  USERS_ADD
+
+  @@map("tenant_operation_override_category")
+}
+
+/// Configuración operativa de la empresa (1:1). RLS de tenant.
+model TenantSetting {
+  tenantId                                   String   @id @map("tenant_id") @db.Uuid
+  requireDeliveryPin                         Boolean  @default(false) @map("require_delivery_pin")
+  deliveryPinMaxAttempts                     Int      @default(5) @map("delivery_pin_max_attempts")
+  bookingHoldMinutes                         Int      @default(15) @map("booking_hold_minutes")
+  allowPartialPayments                       Boolean  @default(false) @map("allow_partial_payments")
+  requireRecipientIdOnDelivery               Boolean  @default(true) @map("require_recipient_id_on_delivery")
+  exceptionalDeliveryEnabled                 Boolean  @default(false) @map("exceptional_delivery_enabled")
+  exceptionalDeliverySecondApprovalThreshold Decimal? @map("exceptional_delivery_second_approval_threshold") @db.Decimal(14, 2)
+  exceptionalDeliveryRequiredEvidence        String[] @default([]) @map("exceptional_delivery_required_evidence")
+  publicTrackingShowRecipientInitials        Boolean  @default(true) @map("public_tracking_show_recipient_initials")
+  /// Fase 4.6: la empresa exige aprobar cada acceso de soporte de YEBO.
+  supportRequiresApproval                    Boolean  @default(false) @map("support_requires_approval")
+  settings                                   Json     @default("{}")
+  createdAt                                  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                                  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("tenant_settings")
+}
+
+/// Servicios y modalidades que la empresa opera. Los módulos de servicio del plan solo cuentan si están aquí.
+model TenantService {
+  id        String           @id @default(uuid(7)) @db.Uuid
+  tenantId  String           @map("tenant_id") @db.Uuid
+  modality  ServiceModality
+  service   TransportService
+  enabled   Boolean          @default(true)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, modality, service])
+  @@map("tenant_services")
+}
+
+/// Historial de estados del tenant. Append-only (trigger). `fromStatus` nulo = alta.
+model TenantStatusHistory {
+  id                  String        @id @default(uuid(7)) @db.Uuid
+  tenantId            String        @map("tenant_id") @db.Uuid
+  fromStatus          TenantStatus? @map("from_status")
+  toStatus            TenantStatus  @map("to_status")
+  reason              String
+  /// Nulo = transición automática (job de estados).
+  actorPlatformUserId String?       @map("actor_platform_user_id") @db.Uuid
+  occurredAt          DateTime      @map("occurred_at") @db.Timestamptz(6)
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor  PlatformUser? @relation(fields: [actorPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, occurredAt])
+  @@map("tenant_status_history")
+}
+
+/// Excepción temporal de YEBO a la matriz de estados (multitenancy §5.2, nota 2). Hoy solo USERS_ADD.
+model TenantOperationOverride {
+  id                      String                          @id @default(uuid(7)) @db.Uuid
+  tenantId                String                          @map("tenant_id") @db.Uuid
+  category                TenantOperationOverrideCategory
+  validFrom               DateTime                        @map("valid_from") @db.Timestamptz(6)
+  validTo                 DateTime                        @map("valid_to") @db.Timestamptz(6)
+  reason                  String
+  grantedByPlatformUserId String                          @map("granted_by_platform_user_id") @db.Uuid
+  endedAt                 DateTime?                       @map("ended_at") @db.Timestamptz(6)
+  endedByPlatformUserId   String?                         @map("ended_by_platform_user_id") @db.Uuid
+  createdAt               DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  grantedBy PlatformUser  @relation("OpOverrideGrantedBy", fields: [grantedByPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  endedBy   PlatformUser? @relation("OpOverrideEndedBy", fields: [endedByPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, category])
+  @@map("tenant_operation_overrides")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 4.3b · Invitaciones de membresía (multitenancy §1.1; F4-Q3)
+// ---------------------------------------------------------------------------------------------------------------
+
+/// Invitación de un solo uso. RLS de tenant: el token del enlace lleva el id del tenant para fijar el contexto antes
+/// de buscar el hash. Solo se guarda el SHA-256 del secreto.
+model MembershipInvitation {
+  id                      String    @id @default(uuid(7)) @db.Uuid
+  tenantId                String    @map("tenant_id") @db.Uuid
+  email                   String    @db.Citext
+  roleIds                 String[]  @map("role_ids") @db.Uuid
+  tokenHash               Bytes     @unique @map("token_hash")
+  expiresAt               DateTime  @map("expires_at") @db.Timestamptz(6)
+  invitedByMembershipId   String?   @map("invited_by_membership_id") @db.Uuid
+  invitedByPlatformUserId String?   @map("invited_by_platform_user_id") @db.Uuid
+  acceptedAt              DateTime? @map("accepted_at") @db.Timestamptz(6)
+  acceptedMembershipId    String?   @map("accepted_membership_id") @db.Uuid
+  revokedAt               DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt               DateTime  @map("created_at") @db.Timestamptz(6)
+
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  invitedBy         TenantMembership? @relation("InvitationInvitedBy", fields: [tenantId, invitedByMembershipId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  acceptedAs        TenantMembership? @relation("InvitationAcceptedAs", fields: [tenantId, acceptedMembershipId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  invitedByPlatform PlatformUser?     @relation(fields: [invitedByPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, createdAt])
+  @@map("membership_invitations")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 4.4 · Medición de usuarios (billing §1–4; D5; ADR-016)
+// ---------------------------------------------------------------------------------------------------------------
+
+enum MembershipChangeActor {
+  MEMBERSHIP
+  USER
+  PLATFORM_USER
+  SYSTEM
+
+  @@map("membership_change_actor")
+}
+
+enum UsageSnapshotStatus {
+  PROVISIONAL
+  FINAL
+
+  @@map("usage_snapshot_status")
+}
+
+/// Intervalos de cada membresía con sus factores de facturación. La escriben TRIGGERS en la misma transacción que el
+/// cambio de la membresía o del usuario; nunca la aplicación. EXCLUDE (sin solapes), guarda (sin fechas retroactivas,
+/// sin DELETE, solo se cierra la vigente) y CHECK de effective_billable, en SQL.
+model MembershipStatusHistory {
+  id                String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String                @map("tenant_id") @db.Uuid
+  membershipId      String                @map("membership_id") @db.Uuid
+  userId            String                @map("user_id") @db.Uuid
+  status            MembershipStatus
+  billable          Boolean
+  userActive        Boolean               @map("user_active")
+  effectiveBillable Boolean               @map("effective_billable")
+  validFrom         DateTime              @map("valid_from") @db.Timestamptz(6)
+  validTo           DateTime?             @map("valid_to") @db.Timestamptz(6)
+  /// Autor del cambio: lo declara cada servicio en la transacción (app.actor_kind / app.actor_id / app.change_reason).
+  changedByKind     MembershipChangeActor @map("changed_by_kind")
+  changedById       String?               @map("changed_by_id") @db.Uuid
+  reason            String?
+
+  membership TenantMembership @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, validFrom])
+  @@index([membershipId, validTo])
+  @@map("membership_status_history")
+}
+
+/// Valor de un día terminado (FINAL, inmutable por trigger). Lo escribe el job de medición con yebo_metering.
+model UsageDailySnapshot {
+  id               String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String                   @map("tenant_id") @db.Uuid
+  usageDate        DateTime                 @map("usage_date") @db.Date
+  timezone         String
+  dayRange         Unsupported("tstzrange") @map("day_range")
+  peakConcurrent   Int                      @map("peak_concurrent")
+  distinctActive   Int                      @map("distinct_active")
+  status           UsageSnapshotStatus
+  algorithmVersion Int                      @map("algorithm_version")
+  detail           Json
+  computedAt       DateTime                 @map("computed_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, usageDate])
+  @@map("usage_daily_snapshots")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 4.5 · Períodos, importe y cobro (billing §5–7)
+// ---------------------------------------------------------------------------------------------------------------
+
+enum BillingPeriodStatus {
+  OPEN
+  CLOSING
+  CLOSED
+
+  @@map("billing_period_status")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  PARTIALLY_PAID
+  VOID
+  OVERDUE
+
+  @@map("invoice_status")
+}
+
+enum InvoiceLineKind {
+  BASE
+  EXTRA_USERS
+  ADDON
+  ADJUSTMENT
+  CREDIT
+
+  @@map("invoice_line_kind")
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CASH
+  CARD
+  OTHER
+
+  @@map("payment_method")
+}
+
+enum PaymentStatus {
+  CONFIRMED
+  REVERSED
+
+  @@map("payment_status")
+}
+
+/// Período de facturación con zona horaria FIJA. OPEN → CLOSING → CLOSED; cerrado, inmutable (trigger).
+model BillingPeriod {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String              @map("tenant_id") @db.Uuid
+  subscriptionId String              @map("subscription_id") @db.Uuid
+  periodStart    DateTime            @map("period_start") @db.Date
+  /// Exclusivo: el período cubre [period_start, period_end).
+  periodEnd      DateTime            @map("period_end") @db.Date
+  timezone       String
+  isTrial        Boolean             @map("is_trial")
+  /// Upgrade a mitad de período: el período termina este día (exclusivo) y se factura prorrateado.
+  cutOff         DateTime?           @map("cut_off") @db.Date
+  status         BillingPeriodStatus @default(OPEN)
+  closedAt       DateTime?           @map("closed_at") @db.Timestamptz(6)
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  subscription Subscription            @relation(fields: [tenantId, subscriptionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  calculation  UsagePeriodCalculation?
+  invoice      PlatformInvoice?
+
+  @@unique([tenantId, id])
+  @@unique([subscriptionId, periodStart])
+  @@index([tenantId, status])
+  @@map("billing_periods")
+}
+
+/// Cálculo del período con la copia de la versión de plan y la serie diaria. Inmutable (trigger).
+model UsagePeriodCalculation {
+  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String           @map("tenant_id") @db.Uuid
+  billingPeriodId     String           @map("billing_period_id") @db.Uuid
+  usageMetric         UsageMetric      @map("usage_metric")
+  dailyAggregation    DailyAggregation @map("daily_aggregation")
+  metricValue         Int              @map("metric_value")
+  includedUsers       Int              @map("included_users")
+  extraUsers          Int              @map("extra_users")
+  currency            String           @db.Char(3)
+  baseAmount          Decimal          @map("base_amount") @db.Decimal(14, 2)
+  extraUserPrice      Decimal          @map("extra_user_price") @db.Decimal(14, 2)
+  extraAmount         Decimal          @map("extra_amount") @db.Decimal(14, 2)
+  subtotal            Decimal          @db.Decimal(14, 2)
+  taxRate             Decimal          @map("tax_rate") @db.Decimal(5, 4)
+  taxAmount           Decimal          @map("tax_amount") @db.Decimal(14, 2)
+  totalAmount         Decimal          @map("total_amount") @db.Decimal(14, 2)
+  planVersionSnapshot Json             @map("plan_version_snapshot")
+  pricing             Json
+  dailySeries         Json             @map("daily_series")
+  computedAt          DateTime         @map("computed_at") @db.Timestamptz(6)
+
+  period BillingPeriod @relation(fields: [tenantId, billingPeriodId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, billingPeriodId])
+  @@map("usage_period_calculations")
+}
+
+/// Factura de YEBO a la empresa. Importes inmutables; solo cambian estado y saldo (trigger).
+model PlatformInvoice {
+  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String        @map("tenant_id") @db.Uuid
+  code              String        @unique
+  billingPeriodId   String?       @map("billing_period_id") @db.Uuid
+  status            InvoiceStatus
+  issueDate         DateTime      @map("issue_date") @db.Date
+  dueDate           DateTime      @map("due_date") @db.Date
+  currency          String        @db.Char(3)
+  subtotal          Decimal       @db.Decimal(14, 2)
+  tax               Decimal       @db.Decimal(14, 2)
+  total             Decimal       @db.Decimal(14, 2)
+  balance           Decimal       @db.Decimal(14, 2)
+  fiscalDocumentRef Json?         @map("fiscal_document_ref")
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  period   BillingPeriod?        @relation(fields: [tenantId, billingPeriodId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  lines    PlatformInvoiceLine[]
+  payments SubscriptionPayment[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, billingPeriodId])
+  @@index([tenantId, status])
+  @@map("platform_invoices")
+}
+
+model PlatformInvoiceLine {
+  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String          @map("tenant_id") @db.Uuid
+  invoiceId   String          @map("invoice_id") @db.Uuid
+  kind        InvoiceLineKind
+  description String
+  quantity    Int
+  unitPrice   Decimal         @map("unit_price") @db.Decimal(14, 2)
+  amount      Decimal         @db.Decimal(14, 2)
+
+  invoice PlatformInvoice @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([invoiceId])
+  @@map("platform_invoice_lines")
+}
+
+/// Pago registrado a mano por el staff (sin pagos simulados).
+model SubscriptionPayment {
+  id                       String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                 String        @map("tenant_id") @db.Uuid
+  invoiceId                String        @map("invoice_id") @db.Uuid
+  amount                   Decimal       @db.Decimal(14, 2)
+  method                   PaymentMethod
+  reference                String
+  paidAt                   DateTime      @map("paid_at") @db.Timestamptz(6)
+  recordedByPlatformUserId String        @map("recorded_by_platform_user_id") @db.Uuid
+  status                   PaymentStatus @default(CONFIRMED)
+  createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// Anulación (Fase 4.7b): CONFIRMED → REVERSED, final; repone el saldo de la factura. Las tres o ninguna.
+  reversedAt               DateTime?     @map("reversed_at") @db.Timestamptz(6)
+  reversedByPlatformUserId String?       @map("reversed_by_platform_user_id") @db.Uuid
+  reversalReason           String?       @map("reversal_reason")
+
+  invoice    PlatformInvoice @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  recordedBy PlatformUser    @relation("PaymentRecordedBy", fields: [recordedByPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reversedBy PlatformUser?   @relation("PaymentReversedBy", fields: [reversedByPlatformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([invoiceId])
+  @@map("subscription_payments")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 4.6 · Acceso de soporte del staff de YEBO
+// ---------------------------------------------------------------------------------------------------------------
+
+enum SupportScope {
+  READ_ONLY
+  FULL
+
+  @@map("support_scope")
+}
+
+/// Acceso temporal (≤ 8 h), personal, con motivo, visible para la empresa, aprobable y revocable.
+model SupportAccessGrant {
+  id                     String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId               String                 @map("tenant_id") @db.Uuid
+  platformUserId         String                 @map("platform_user_id") @db.Uuid
+  staffName              String                 @map("staff_name")
+  staffEmail             String                 @map("staff_email") @db.Citext
+  reason                 String
+  scope                  SupportScope
+  startsAt               DateTime               @map("starts_at") @db.Timestamptz(6)
+  expiresAt              DateTime               @map("expires_at") @db.Timestamptz(6)
+  requiresApproval       Boolean                @map("requires_approval")
+  approvedAt             DateTime?              @map("approved_at") @db.Timestamptz(6)
+  approvedByMembershipId String?                @map("approved_by_membership_id") @db.Uuid
+  revokedAt              DateTime?              @map("revoked_at") @db.Timestamptz(6)
+  revokedByKind          MembershipChangeActor? @map("revoked_by_kind")
+  revokedById            String?                @map("revoked_by_id") @db.Uuid
+  createdAt              DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  staff      PlatformUser       @relation(fields: [platformUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  approvedBy TenantMembership?  @relation(fields: [tenantId, approvedByMembershipId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  handoffs   SupportHandoff[]
+  sessions   SupportSession[]
+  logs       SupportAccessLog[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, expiresAt])
+  @@map("support_access_grants")
+}
+
+/// Código de un solo uso (≤ 2 min) que el navegador canjea en el host de la empresa.
+model SupportHandoff {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  grantId    String    @map("grant_id") @db.Uuid
+  codeHash   Bytes     @unique @map("code_hash")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  grant SupportAccessGrant @relation(fields: [tenantId, grantId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@map("support_handoffs")
+}
+
+/// Sesión de soporte en la empresa (cookie opaca, solo su SHA-256), verificada en PostgreSQL en cada petición.
+model SupportSession {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  grantId       String    @map("grant_id") @db.Uuid
+  tokenHash     Bytes     @unique @map("token_hash")
+  lastSeenAt    DateTime  @map("last_seen_at") @db.Timestamptz(6)
+  idleExpiresAt DateTime  @map("idle_expires_at") @db.Timestamptz(6)
+  revokedAt     DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  grant SupportAccessGrant @relation(fields: [tenantId, grantId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([grantId])
+  @@map("support_sessions")
+}
+
+/// Cada petición del staff en la empresa (append-only). La empresa lo ve.
+model SupportAccessLog {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  grantId        String   @map("grant_id") @db.Uuid
+  platformUserId String   @map("platform_user_id") @db.Uuid
+  method         String
+  route          String
+  occurredAt     DateTime @map("occurred_at") @db.Timestamptz(6)
+
+  grant SupportAccessGrant @relation(fields: [tenantId, grantId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, grantId, occurredAt])
+  @@map("support_access_logs")
 }
