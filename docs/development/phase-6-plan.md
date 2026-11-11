@@ -1,6 +1,6 @@
 # Fase 6 · Ubicaciones, agencias, flota y capacidades (plan)
 
-- **Estado:** ✅ Decisiones F6-Q1 a F6-Q7 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapas 6.1 y 6.2 aprobadas; sigue la 6.3.
+- **Estado:** ✅ Decisiones F6-Q1 a F6-Q7 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapas 6.1 a 6.3 aprobadas; sigue la 6.4.
 - **Rama:** `fase-6/plan`, desde el cierre de la Fase 5 (`8b580c0`).
 - **Criterio de aceptación** ([roadmap](roadmap.md)): «Embarcación con camarotes, zona libre, bodega y cubierta; bus con asientos y bodega».
 
@@ -259,7 +259,7 @@
 - ✅ Migración aplicada a `yebo_dev` el 2026-11-11, con copia previa (`~/yebo-backups/yebo_dev-antes-6.2-20261111115336.dump`). Los archivos del sitio ya existentes cumplen los CHECK nuevos de `file_assets`.
 - Limpieza de archivos subidos que nunca se usaron en un documento (como los del sitio): tarea programada, fuera de la 6.2.
 
-## Etapa 6.3 · Layouts: modelo y reglas (implementada el 2026-11-11; pendiente de revisión)
+## Etapa 6.3 · Layouts: modelo y reglas (implementada el 2026-11-11; aprobada, `3bd5e6d`)
 
 ### Decisiones de implementación
 
@@ -358,5 +358,5 @@
 
 ### Pendiente
 
-- Migración a `yebo_dev`: con autorización y copia previa.
+- ✅ Migración aplicada a `yebo_dev` el 2026-11-11, con copia previa (`~/yebo-backups/yebo_dev-antes-6.3-20261111122227.dump`).
 - La 6.4 (editor y pantallas del panel) usará `validateLayout`, `deriveInventory`, los generadores y las plantillas.
