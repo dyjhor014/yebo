@@ -31,7 +31,7 @@ La **3.4** (cierre: aislamiento de extremo a extremo y medición del coste de un
 
 Todas las migraciones están aplicadas a `yebo_dev` con copia previa. Hay además un modo HTTPS local para probar desde la red (`pnpm https:up`). **Push y PR en espera** por decisión del responsable. Resultados en [phase-4-results.md](docs/development/phase-4-results.md); plan en [phase-4-plan.md](docs/development/phase-4-plan.md).
 
-**Fase 5 (white label) implementada (5.1–5.5), pendiente de revisión** (rama `fase-5/plan`, desde `c98ab2e`). **Criterio de aceptación cumplido:** «Dos portales visualmente distintos sin duplicar apps».
+**Fase 5 (white label) implementada (5.1–5.5), pendiente de revisión** (rama `fase-5/plan`, desde `c98ab2e`; PR #11). **Criterio de aceptación cumplido:** «Dos portales visualmente distintos sin duplicar apps».
 - **CI:** tres empresas configuran y publican su sitio por la API y cada host sirve solo el suyo; el mismo código de `apps/web` resuelve tokens distintos.
 - **E2E:** la misma compilación de `apps/web` sirve dos portales con estilos y capturas distintos (más del 50 % de los píxeles).
 
@@ -90,5 +90,5 @@ Ninguno abierto. El `500` intermitente bajo carga de `isolation-e2e` se corrigi�
 1. Revisión de los PR abiertos por el responsable del proyecto; el merge lo hace él. Orden de integración previsto: #1 (Fase 2) → #3 (Impeccable) → #2 (MKT-01) → #4 (Fase 3.1, apilado sobre la rama de la Fase 2).
 2. Tras el cierre de la Fase 2: activar la protección de `main` exigiendo el check de CI.
 3. Revisión de la etapa 3.1 (PR #4) y de la etapa 3.2a.
-4. Revisión de la Fase 3 completa: 3.2 (`83df1c1`), 3.3 (`1c695b1`), 3.4 (`da999d8`) y ADR-034 (sin commit). Push y PR **solo con autorización expresa**. Las fases 4 y 5, también.
-5. Revisión de la Fase 5. La Fase 6 no empieza sin aprobación expresa.
+4. Revisión de los PR apilados (subidos el 2026-11-10 con autorización del responsable): #6 (3.2) → #7 (3.3) → #8 (3.4) → #9 (ADR-034) → #10 (Fase 4) → #11 (Fase 5), cada uno sobre el anterior y este sobre el #4. El merge lo hace el responsable.
+5. La Fase 6 no empieza sin aprobación expresa.
