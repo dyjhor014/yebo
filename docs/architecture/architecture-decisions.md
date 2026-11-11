@@ -216,13 +216,13 @@ Surgen de las pruebas de concepto. Evidencia en [phase-2-results.md](../developm
 
 > **Numeración:** ADR-027 a 033 existen en otras ramas sin integrar (PR #2: 027 y 028; PR #5: 029 a 033). Para no chocar con ellos al integrar, este ADR es el **034**. El salto 026 → 034 en esta rama es intencionado.
 
-### ADR-034 · Separación efectiva de privilegios de PostgreSQL por rol (aceptado como dirección; implementación pendiente)
+### ADR-034 · Separación efectiva de privilegios de PostgreSQL por rol (aceptado; implementado el 2026-11-10)
 
-- **Estado:** dirección arquitectónica **aprobada** por el responsable el 2026-11-09. El SQL concreto (ver [phase-3-plan](../development/phase-3-plan.md), "SQL propuesto para ADR-034") y su implementación están **pendientes de revisión**. Hasta entonces sigue vigente lo que describe ADR-003.
+- **Estado:** dirección **aprobada** el 2026-11-09; **aplicado** por decisión del responsable el 2026-11-10 (migración `20261110130000_adr034_privilege_separation`, init de PostgreSQL y `scripts/dev/harden-roles.sh`), y aplicado también al clúster de desarrollo. Detalle, pruebas y reversión en [phase-3-plan](../development/phase-3-plan.md#adr-034--implementación-2026-11-10).
 - **Relación con ADR aceptados:**
   - **precisa ADR-003** en un punto: ADR-003 define `yebo_platform` como "`BYPASSRLS`, acceso restringido"; este ADR le **quita `BYPASSRLS`** y lo reduce a lectura. El resto de ADR-003 (BD compartida, FK compuestas, RLS forzado, contexto por transacción) no cambia, y su texto no se edita;
   - es **coherente con ADR-025** (contexto de tenant por transacción) y con el patrón de rol dedicado de **ADR-028** (`yebo_leads`) y de la etapa 3.2a (`yebo_identity`);
-  - **multitenancy §4.2** describe hoy `yebo_platform` con BYPASSRLS; se actualizará al implementar.
+  - **multitenancy §4.2** se actualizó al implementarlo (2026-11-10).
 - **Contexto:**
   - los privilegios por defecto del esquema conceden SELECT, INSERT, UPDATE y DELETE sobre toda tabla nueva a `yebo_app` y `yebo_platform`, y cada migración tiene que retirar lo que sobra (lista negra);
   - `yebo_platform` tiene `BYPASSRLS` y DML sobre casi todo;

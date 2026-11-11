@@ -20,7 +20,7 @@ import { PasswordHasher } from '../../src/modules/identity/password-hasher';
 import { codeChallengeS256, newCodeVerifier } from '../../src/modules/identity/pkce';
 import { SessionService } from '../../src/modules/identity/session.service';
 import { TenantResolverService } from '../../src/modules/tenancy/tenant-resolver.service';
-import { testPool } from '../support/db';
+import { testBypassPool, testPool } from '../support/db';
 
 const DB = 'yebo_test';
 const HUB = 'cuentas.yebo.pe';
@@ -71,7 +71,7 @@ function setCookieLine(res: request.Response, name: string): string | undefined 
 describe('Fase 3.2b · hub de cuentas y sesión de empresa (HTTP)', () => {
   let app: INestApplication;
   let owner: Pool;
-  let platformPool: Pool;
+  let seed: Pool;
   let redis: RedisService;
   let cls: ClsService<RequestContextStore>;
   const clock = new FakeClock();
@@ -82,7 +82,7 @@ describe('Fase 3.2b · hub de cuentas y sesión de empresa (HTTP)', () => {
 
   beforeAll(async () => {
     owner = testPool('owner', DB, 2);
-    platformPool = testPool('platform', DB, 2);
+    seed = testBypassPool(DB, 2);
     await owner.query(
       'TRUNCATE authorization_codes, refresh_tokens, tenant_sessions, identity_sessions, membership_roles, role_permissions, roles, tenant_memberships, users, permissions, role_templates, tenant_domains, tenants',
     );
@@ -122,8 +122,8 @@ describe('Fase 3.2b · hub de cuentas y sesión de empresa (HTTP)', () => {
     );
     const [anaId, betoId] = users.rows.map((r) => r.id) as [string, string];
     ana = anaId;
-    // tenant_memberships tiene RLS forzado: se siembra con yebo_platform (BYPASSRLS), como en el resto de suites.
-    const m = await platformPool.query<{ id: string }>(
+    // tenant_memberships tiene RLS forzado: se siembra con el rol exclusivo de pruebas (ADR-034).
+    const m = await seed.query<{ id: string }>(
       `INSERT INTO tenant_memberships (id, tenant_id, user_id, status, updated_at) VALUES
          (gen_random_uuid(), $1, $3, 'ACTIVE', now()),
          (gen_random_uuid(), $2, $3, 'ACTIVE', now()),
@@ -135,7 +135,7 @@ describe('Fase 3.2b · hub de cuentas y sesión de empresa (HTTP)', () => {
 
   afterAll(async () => {
     await app.close();
-    await Promise.all([owner.end(), platformPool.end()]);
+    await Promise.all([owner.end(), seed.end()]);
   });
 
   beforeEach(async () => {
@@ -638,7 +638,7 @@ describe('Fase 3.2b · hub de cuentas y sesión de empresa (HTTP)', () => {
 
     it('permisos cambiados → 401 PERMISSIONS_CHANGED; tras renovar, el token vuelve a valer', async () => {
       const { tenant } = await loginToTenant(HOST_A);
-      await platformPool.query(
+      await seed.query(
         `UPDATE tenant_memberships SET permissions_version = permissions_version + 1 WHERE id = $1`,
         [membershipA],
       );

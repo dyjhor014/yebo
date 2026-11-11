@@ -404,7 +404,7 @@ Sin esta verificación, un access token de una sesión revocada seguiría valien
 | **B4** | Esquema estricto de claims (compatibilidad al añadir uno) | No | **3.3** (documentar) | Procedimiento: desplegar primero quien verifica y después quien firma |
 | **B7** | Caso límite de la cadena de tokens dentro de la gracia | No | **3.2b** (evaluar) y **Fases 5/13** (frontend) | Lo mitiga Web Locks en el frontend; en el backend se valorará al implementar el endpoint de refresh |
 
-## SQL propuesto para ADR-034 (pendiente de revisión; NO aplicado)
+## SQL propuesto para ADR-034 (aplicado el 2026-11-10, con los ajustes de la sección de implementación)
 
 ### Inventario previo (lecturas sobre el clúster local, PostgreSQL 17.6, 2026-11-09)
 
@@ -830,3 +830,50 @@ Rama `fase-3/3.4-cierre`, creada desde el commit local de la 3.3 (`1c695b1`). **
 - **Medición de §4.2** (`pnpm --filter @yebo/api bench`, fuera de CI): una transacción por operación cuesta unas 4 idas y vueltas (×3,2 frente a una lectura simple). Con varias lecturas por petición, agruparlas en una transacción reduce la latencia a la mitad y sube el rendimiento ×1,76. La recomendación queda pendiente de decisión ([resultados §3](phase-3-results.md#3-coste-de-una-transacción-por-operación-multitenancy-42)).
 - **CI:** las siete pruebas de §7 forman parte de `pnpm test:integration`, que CI ya ejecuta en cada PR.
 - **Arreglo menor:** las suites nuevas usan un único servidor HTTP escuchando, como `tenancy`, para evitar la fuga de escuchadores con carga.
+
+## ADR-034 · implementación (2026-11-10)
+
+Rama `fase-3/adr-034-privilegios`, desde el commit local de la 3.4 (`da999d8`). Decisión del responsable del
+2026-11-10: aplicar ADR-034, adoptar la regla de §4.2 y migrar `yebo_dev`.
+
+### Qué se aplicó
+
+| Pieza | Contenido |
+|---|---|
+| Parte A · volúmenes nuevos y CI | `01-roles-and-databases.sh` crea los roles sin BYPASSRLS (salvo el de pruebas), NOINHERIT y sin pertenencias. El acceso a las bases queda por rol (`yebo_shadow`, solo el propietario; las PoC, solo `yebo_app`) y las bases de la aplicación no tienen privilegios por defecto. Si existe `TEST_PG_BYPASS_PASSWORD`, crea `yebo_test_bypass` con acceso solo a `yebo_test`, a las PoC y a `yebo_migrations` |
+| Parte A · volúmenes existentes | `scripts/dev/harden-roles.sh [--test-role]`: lo mismo sobre un clúster en marcha. Es idempotente y deja una comprobación final de atributos y pertenencias |
+| Parte B · migración `20261110130000_adr034_privilege_separation` | Quita los privilegios por defecto (incluido EXECUTE para PUBLIC en funciones futuras). Parte de cero en las tablas y concede la lista blanca, que ahora incluye lo de la 3.2b (`authorization_codes`) y lo de la 3.3 (UPDATE por columna de `yebo_app`). `_prisma_migrations` queda solo para `yebo_owner` |
+| Configuración | `init-env.sh` genera `TEST_PG_BYPASS_PASSWORD` en `infrastructure/docker/.env` y `apps/api/.env.test`, que solo carga `test/support`. El compose pasa la contraseña al init. El esquema de entorno de la API rechaza cualquier rol de ejecución que contenga «bypass» |
+| Pruebas | Las siembras pasan de `yebo_platform` a `yebo_test_bypass` (`testBypassPool`, `testBypassUrl`). `global-setup` concede al rol de pruebas sus permisos de tabla tras migrar, sin `_prisma_migrations` |
+
+**Ajustes respecto al SQL propuesto:**
+- La lista blanca incluye lo que añadieron la 3.2b y la 3.3, posteriores al borrador.
+- En las bases de las PoC, que son solo de pruebas y cuyas migraciones no llevan GRANT, `yebo_app` conserva DML por defecto; `yebo_platform` y `yebo_identity` pierden el acceso a ellas.
+- La regla de configuración rechaza «bypass» en lugar del nombre del rol, porque el nombre no puede aparecer en `apps/api/src`.
+
+**Regla de §4.2 adoptada:** `MembersService.reactivate` hacía dos operaciones de tenant por separado y, si la membresía no estaba suspendida, cerraba sus sesiones antes de responder `409`. Ahora usa una sola transacción: bloquea, comprueba el estado, cierra las sesiones y reactiva. Una prueba nueva cubre el `409` sin cierre de sesiones.
+
+### Verificación
+
+| Prueba | Resultado |
+|---|---|
+| `privileges.int-spec.ts` (18) | Foto de privilegios igual a la matriz versionada, por tabla y por columna. También: sin privilegios por defecto, sin `SECURITY DEFINER` y sin pertenencias; atributos de los 5 roles; acceso a las bases; los tres servicios Prisma con su rol y sin BYPASSRLS. Negativas de `yebo_platform` (escrituras, otras tablas, `SET ROLE`) y del historial de migraciones; el rol de pruebas no entra en `yebo_dev`, y su nombre no aparece en `apps/api/src`, en las migraciones ni en `.env.example` |
+| Mutaciones de privilegios | Se detectan cuatro: BYPASSRLS devuelto a `yebo_platform`, un INSERT sobrante, una pertenencia a `pg_read_all_data` y un privilegio por defecto |
+| Volumen nuevo (init endurecido) | Integración 13 suites / 232 ✅ · unitarias 102 ✅ |
+| Volumen heredado (init anterior + migraciones + `harden-roles.sh --test-role`, ejecutado dos veces) | Integración 232 ✅ |
+| **Clúster de desarrollo** | Copia de `yebo_dev` y foto de privilegios previas. Después: `init-env.sh`, `harden-roles.sh --test-role` y `db:migrate:deploy`, que aplicó las 4 migraciones pendientes. Integración 232 ✅; `yebo_dev` con la matriz exacta; la API arranca contra `yebo_dev` y el health check responde `ok` para `yebo_app`, `yebo_platform` y Redis |
+
+### ADR-034 · reversión
+
+1. **Parte B**, como `yebo_owner` en cada base de la aplicación:
+   - restaurar los `ALTER DEFAULT PRIVILEGES … GRANT` anteriores para `yebo_app` y `yebo_platform` (tablas: SELECT, INSERT, UPDATE y DELETE; secuencias: USAGE y SELECT; funciones: EXECUTE) y `GRANT EXECUTE ON FUNCTIONS TO PUBLIC`;
+   - volver a conceder DML general a `yebo_app` y `yebo_platform`, y repetir los `REVOKE` de las migraciones 3.1, 3.2 y 3.2b;
+   - `DELETE FROM _prisma_migrations WHERE migration_name = '20261110130000_adr034_privilege_separation'`.
+2. **Parte A**, como superusuario:
+   - `ALTER ROLE yebo_platform BYPASSRLS INHERIT` e `INHERIT` en los demás;
+   - devolver `CONNECT` sobre `yebo_shadow` a los tres roles de ejecución, y sobre las PoC a `yebo_platform` y `yebo_identity`.
+3. **Rol de pruebas:**
+   - en cada base de prueba, `REVOKE ALL ON ALL TABLES IN SCHEMA public FROM yebo_test_bypass; DROP OWNED BY yebo_test_bypass;`;
+   - después, `DROP ROLE yebo_test_bypass`.
+
+La copia de `yebo_dev` previa a la migración está en el directorio temporal de la sesión, fuera del repositorio. `yebo_dev` estaba vacía.

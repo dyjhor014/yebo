@@ -64,13 +64,16 @@ export class MembersService {
     return { status: 'SUSPENDED', revokedSessions };
   }
 
-  /** Reactiva una membresía SUSPENDED. Primero cierra cualquier sesión que quedara de antes de la suspensión. */
+  /**
+   * Reactiva una membresía SUSPENDED. En UNA transacción de tenant (regla de multitenancy §4.2, adoptada el
+   * 2026-11-10): bloquea la membresía, comprueba el estado, cierra cualquier sesión que quedara de antes de la
+   * suspensión y la reactiva. Si no está suspendida, responde 409 sin tocar sus sesiones.
+   */
   async reactivate(membershipId: string): Promise<{ status: MembershipStatus; revokedSessions: number }> {
     this.assertNotSelf(membershipId, 'No puedes reactivar tu propio acceso');
-    await this.requireMembership(membershipId);
-    const revokedSessions = await this.sessions.revokeMembershipSessions(membershipId, 'ADMIN_REVOKED');
-    await this.transition(membershipId, 'SUSPENDED', 'ACTIVE');
-    return { status: 'ACTIVE', revokedSessions };
+    return this.transition(membershipId, 'SUSPENDED', 'ACTIVE', () =>
+      this.sessions.revokeMembershipSessions(membershipId, 'ADMIN_REVOKED'),
+    );
   }
 
   /** "Cerrar las sesiones del usuario" en ESTA empresa (identity-and-sessions §8). No afecta a otras empresas. */
@@ -132,20 +135,27 @@ export class MembersService {
     });
   }
 
+  /**
+   * Cambia el estado con la membresía bloqueada (`FOR UPDATE`). `beforeUpdate` se ejecuta con el bloqueo tomado y
+   * el estado ya comprobado (p. ej., cerrar sesiones con yebo_identity, que no toca tenant_memberships).
+   */
   private async transition(
     membershipId: string,
     from: MembershipStatus,
     to: MembershipStatus,
-  ): Promise<void> {
+    beforeUpdate: () => Promise<number> = async () => 0,
+  ): Promise<{ status: MembershipStatus; revokedSessions: number }> {
     if (!UUID.safeParse(membershipId).success) throw NOT_FOUND();
-    await this.db.transaction(async (tx) => {
+    return this.db.transaction(async (tx) => {
       const [row] = await tx.$queryRaw<{ status: MembershipStatus }[]>`
         SELECT status::text AS status FROM tenant_memberships WHERE id = ${membershipId}::uuid FOR UPDATE`;
       if (!row) throw NOT_FOUND();
       if (row.status !== from) {
         throw new AppError('CONFLICT', `La membresía no está en el estado requerido (${from})`, 409);
       }
+      const revokedSessions = await beforeUpdate();
       await tx.tenantMembership.updateMany({ where: { id: membershipId }, data: { status: to } });
+      return { status: to, revokedSessions };
     });
   }
 

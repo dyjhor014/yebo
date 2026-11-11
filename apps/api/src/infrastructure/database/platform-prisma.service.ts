@@ -6,9 +6,10 @@ import type { PrismaClient } from '../../generated/prisma/client';
 import { createPrismaClient } from './create-prisma-client';
 
 /**
- * Cliente con el rol `yebo_platform` (BYPASSRLS): resolver de dominios, identidad, superadmin
- * y jobs entre tenants. Pool y credenciales separados. Su importación desde módulos de negocio
- * está prohibida por una regla de ESLint (multitenancy §3).
+ * Cliente con el rol `yebo_platform`: resolver de dominios y health check. Desde ADR-034 NO salta RLS y solo
+ * puede leer `tenants` y `tenant_domains` (lista blanca por migración). Pool y credenciales separados. Su
+ * importación fuera de los módulos autorizados está prohibida por una regla de ESLint (multitenancy §3).
+ * Las futuras operaciones administrativas (Fase 4) recibirán permisos explícitos con RLS activo, nunca BYPASSRLS.
  */
 @Injectable()
 export class PlatformPrismaService implements OnModuleDestroy {

@@ -6,7 +6,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
-import { testPool } from '../../support/db';
+import { testBypassPool, testPool } from '../../support/db';
 import {
   CapacityExceededError,
   InvalidSaleError,
@@ -124,7 +124,8 @@ describe('PoC 2 · inventario por tramos y concurrencia (PostgreSQL real, rol ye
       'TRUNCATE inv_pool_allocations, inv_pool_segment_usage, inv_pools, inv_resource_allocations, inv_trip_resources, inv_trips',
     );
     app = testPool('app', DB, 20);
-    platform = testPool('platform', DB, 4);
+    // Rol exclusivo de pruebas (ADR-034): siembra y comprueba el invariante global, que cruza tenants.
+    platform = testBypassPool(DB, 4);
   });
 
   afterEach(async () => {

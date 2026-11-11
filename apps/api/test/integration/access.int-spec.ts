@@ -23,7 +23,7 @@ import { RolesService } from '../../src/modules/access/roles.service';
 import { routePolicyOf, type RoutePolicy } from '../../src/modules/access/route-policy';
 import { SessionService } from '../../src/modules/identity/session.service';
 import { TenantResolverService } from '../../src/modules/tenancy/tenant-resolver.service';
-import { testPool } from '../support/db';
+import { testBypassPool, testPool } from '../support/db';
 
 const DB = 'yebo_test';
 const A = '0190f0a0-0000-7000-8000-00000000a033';
@@ -42,7 +42,7 @@ interface Route {
 describe('Fase 3.3 · autorización y estado del tenant', () => {
   let app: INestApplication;
   let owner: Pool;
-  let platformPool: Pool;
+  let seed: Pool;
   let sessions: SessionService;
   let cls: ClsService<RequestContextStore>;
   let routes: Route[];
@@ -96,7 +96,7 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
 
   beforeAll(async () => {
     owner = testPool('owner', DB, 2);
-    platformPool = testPool('platform', DB, 2);
+    seed = testBypassPool(DB, 2);
     await owner.query(
       'TRUNCATE authorization_codes, refresh_tokens, tenant_sessions, identity_sessions, membership_roles, role_permissions, roles, tenant_memberships, users, permissions, role_templates, tenant_domains, tenants',
     );
@@ -135,7 +135,7 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
     );
     for (const row of created.rows) users[row.email.split('@')[0] as keyof typeof users] = row.id;
 
-    // tenant_memberships y la configuración de roles tienen RLS forzado: se siembran con yebo_platform.
+    // tenant_memberships y la configuración de roles tienen RLS forzado: se siembran con el rol de pruebas (ADR-034).
     const memberships: [keyof typeof m, string, string][] = [
       ['A', A, 'ana'],
       ['A', A, 'beto'],
@@ -145,7 +145,7 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
       ['B', B, 'beto'],
     ];
     for (const [key, tenant, user] of memberships) {
-      const r = await platformPool.query<{ id: string }>(
+      const r = await seed.query<{ id: string }>(
         `INSERT INTO tenant_memberships (id, tenant_id, user_id, status, updated_at)
          VALUES (gen_random_uuid(), $1, $2, 'ACTIVE', now()) RETURNING id`,
         [tenant, users[user as keyof typeof users]],
@@ -161,14 +161,14 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
     const permissionId = async (code: string) =>
       (await owner.query<{ id: string }>('SELECT id FROM permissions WHERE code = $1', [code])).rows[0]?.id;
     async function createRole(name: string, codes: string[]): Promise<string> {
-      const r = await platformPool.query<{ id: string }>(
+      const r = await seed.query<{ id: string }>(
         `INSERT INTO roles (id, tenant_id, name, is_system, updated_at) VALUES (gen_random_uuid(), $1, $2, false, now())
          RETURNING id`,
         [A, name],
       );
       const id = r.rows[0]?.id ?? '';
       for (const code of codes) {
-        await platformPool.query(
+        await seed.query(
           'INSERT INTO role_permissions (tenant_id, role_id, permission_id) VALUES ($1, $2, $3)',
           [A, id, await permissionId(code)],
         );
@@ -179,10 +179,11 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
     role.minimo = await createRole('Mínimo', ['members.read']);
     role.lector = await createRole('Lector', ['members.read', 'roles.read']);
     const grant = (tenant: string, membership: string | undefined, roleId: string | undefined) =>
-      platformPool.query(
-        'INSERT INTO membership_roles (tenant_id, membership_id, role_id) VALUES ($1, $2, $3)',
-        [tenant, membership, roleId],
-      );
+      seed.query('INSERT INTO membership_roles (tenant_id, membership_id, role_id) VALUES ($1, $2, $3)', [
+        tenant,
+        membership,
+        roleId,
+      ]);
     await grant(A, m.A.ana, role.adminA);
     await grant(A, m.A.dani, role.asignador);
     await grant(B, m.B.carla, role.adminB);
@@ -192,7 +193,7 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
 
   afterAll(async () => {
     await app.close();
-    await Promise.all([owner.end(), platformPool.end()]);
+    await Promise.all([owner.end(), seed.end()]);
   });
 
   // -------------------------------------------------------------------------------------------------------------
@@ -253,7 +254,7 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
 
     it('token con una versión de permisos anterior → 401 PERMISSIONS_CHANGED', async () => {
       const { token } = await signIn(users.ana);
-      await platformPool.query(
+      await seed.query(
         'UPDATE tenant_memberships SET permissions_version = permissions_version + 1 WHERE id = $1',
         [m.A.ana],
       );
@@ -321,7 +322,7 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
         expect([path, res.status]).toEqual([path, 404]);
       }
       // Nada cambió en B.
-      const b = await platformPool.query('SELECT status FROM tenant_memberships WHERE tenant_id = $1', [B]);
+      const b = await seed.query('SELECT status FROM tenant_memberships WHERE tenant_id = $1', [B]);
       expect(b.rows.every((r) => r.status === 'ACTIVE')).toBe(true);
     });
 
@@ -381,14 +382,20 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
       const ana = await signIn(users.ana);
       const leftover = await signIn(users.dani);
       // Suspensión sin cierre de sesiones (p. ej., si el cierre falló tras confirmar el cambio de estado).
-      await platformPool.query("UPDATE tenant_memberships SET status = 'SUSPENDED' WHERE id = $1", [
-        m.A.dani,
-      ]);
+      await seed.query("UPDATE tenant_memberships SET status = 'SUSPENDED' WHERE id = $1", [m.A.dani]);
       expect((await call('GET', '/api/v1/auth/session', { token: leftover.token })).status).toBe(401);
       const res = await call('POST', `/api/v1/members/${m.A.dani}/reactivate`, { token: ana.token });
       expect(res.status).toBe(200);
       expect(res.body.revokedSessions).toBeGreaterThanOrEqual(1);
       expect((await call('GET', '/api/v1/auth/session', { token: leftover.token })).status).toBe(401);
+    });
+
+    it('reactivar a alguien que no está suspendido responde 409 y NO cierra sus sesiones', async () => {
+      const ana = await signIn(users.ana);
+      const dani = await signIn(users.dani);
+      const res = await call('POST', `/api/v1/members/${m.A.dani}/reactivate`, { token: ana.token });
+      expect(res.status).toBe(409);
+      expect((await call('GET', '/api/v1/auth/session', { token: dani.token })).status).toBe(200);
     });
 
     it('cerrar las sesiones de un miembro solo afecta a ESTA empresa', async () => {
@@ -449,7 +456,7 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
       const ana = await signIn(users.ana);
       const state = async () =>
         (
-          await platformPool.query<{ v: number; roles: number }>(
+          await seed.query<{ v: number; roles: number }>(
             `SELECT m.permissions_version AS v,
                     (SELECT count(*)::int FROM membership_roles r WHERE r.membership_id = m.id) AS roles
                FROM tenant_memberships m WHERE m.id = $1`,
@@ -471,7 +478,7 @@ describe('Fase 3.3 · autorización y estado del tenant', () => {
         // El resultado es exactamente UNA de las tres asignaciones, nunca una mezcla.
         expect([1, 2]).toContain(after.roles);
         const final = (
-          await platformPool.query<{ role_id: string }>(
+          await seed.query<{ role_id: string }>(
             'SELECT role_id FROM membership_roles WHERE membership_id = $1 ORDER BY role_id',
             [m.A.carla],
           )

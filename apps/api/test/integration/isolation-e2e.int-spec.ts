@@ -18,7 +18,7 @@ import { AppPrismaService } from '../../src/infrastructure/database/app-prisma.s
 import { RolesService } from '../../src/modules/access/roles.service';
 import { SessionService } from '../../src/modules/identity/session.service';
 import { TenantResolverService } from '../../src/modules/tenancy/tenant-resolver.service';
-import { testPool } from '../support/db';
+import { testBypassPool, testPool } from '../support/db';
 
 const DB = 'yebo_test';
 const CSRF = 'csrf-e2e-0123456789abcdef0123';
@@ -33,7 +33,7 @@ const SHARED = 'compartida';
 describe('Fase 3.4 · aislamiento de extremo a extremo y concurrencia (§7.3, §7.4, §7.6)', () => {
   let app: INestApplication;
   let owner: Pool;
-  let platformPool: Pool;
+  let seed: Pool;
   let sessions: SessionService;
   const memberships: Record<Key, Set<string>> = { A: new Set(), B: new Set() };
   const membershipOf: Record<Key, Record<string, string>> = { A: {}, B: {} };
@@ -53,7 +53,7 @@ describe('Fase 3.4 · aislamiento de extremo a extremo y concurrencia (§7.3, §
 
   beforeAll(async () => {
     owner = testPool('owner', DB, 2);
-    platformPool = testPool('platform', DB, 2);
+    seed = testBypassPool(DB, 2);
     await owner.query(
       'TRUNCATE authorization_codes, refresh_tokens, tenant_sessions, identity_sessions, membership_roles, role_permissions, roles, tenant_memberships, users, permissions, role_templates, tenant_domains, tenants',
     );
@@ -103,7 +103,7 @@ describe('Fase 3.4 · aislamiento de extremo a extremo y concurrencia (§7.3, §
     }
     for (const key of ['A', 'B'] as const) {
       for (const name of [...TENANTS[key].people, SHARED]) {
-        const r = await platformPool.query<{ id: string }>(
+        const r = await seed.query<{ id: string }>(
           `INSERT INTO tenant_memberships (id, tenant_id, user_id, status, updated_at)
            VALUES (gen_random_uuid(), $1, $2, 'ACTIVE', now()) RETURNING id`,
           [TENANTS[key].id, users.get(name)],
@@ -119,7 +119,7 @@ describe('Fase 3.4 · aislamiento de extremo a extremo y concurrencia (§7.3, §
             return app.get(RolesService).instantiateTemplates();
           })
         )[0] ?? '';
-      await platformPool.query(
+      await seed.query(
         'INSERT INTO membership_roles (tenant_id, membership_id, role_id) VALUES ($1, $2, $3)',
         [TENANTS[key].id, membershipOf[key][SHARED], adminRole[key]],
       );
@@ -137,7 +137,7 @@ describe('Fase 3.4 · aislamiento de extremo a extremo y concurrencia (§7.3, §
 
   afterAll(async () => {
     await app.close();
-    await Promise.all([owner.end(), platformPool.end()]);
+    await Promise.all([owner.end(), seed.end()]);
   });
 
   it('600 lecturas concurrentes y entrelazadas de A y B: cada respuesta contiene solo datos de su empresa', async () => {
@@ -177,7 +177,7 @@ describe('Fase 3.4 · aislamiento de extremo a extremo y concurrencia (§7.3, §
     const targets = { A: membershipOf.A.alba ?? '', B: membershipOf.B.berta ?? '' };
     const version = async (id: string) =>
       (
-        await platformPool.query<{ v: number }>(
+        await seed.query<{ v: number }>(
           'SELECT permissions_version AS v FROM tenant_memberships WHERE id = $1',
           [id],
         )
@@ -194,7 +194,7 @@ describe('Fase 3.4 · aislamiento de extremo a extremo y concurrencia (§7.3, §
     expect(await version(targets.A)).toBe(before.A + 20);
     expect(await version(targets.B)).toBe(before.B + 20);
     // Ninguna fila mezcla tenants (además, las FK compuestas lo impiden).
-    const mixed = await platformPool.query(
+    const mixed = await seed.query(
       `SELECT 1 FROM membership_roles mr
          JOIN tenant_memberships m ON m.id = mr.membership_id
          JOIN roles r ON r.id = mr.role_id

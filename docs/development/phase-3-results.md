@@ -90,9 +90,9 @@ Peticiones HTTP reales con la cadena de guards completa (500 en serie):
 - **Bajo concurrencia limita el rendimiento.** Cada operación retiene una conexión del pool durante 4 idas y vueltas. Con 20 tareas concurrentes, agrupar 3 lecturas sube el rendimiento de 138 a 243 peticiones/s (**×1,76**).
 - **Paralelizar no sustituye a agrupar.** Lanzar las 3 lecturas en paralelo (3b) baja la latencia en serie, pero ocupa 3 conexiones por petición y empeora el comportamiento bajo carga.
 
-### Recomendación (pendiente de decisión)
+### Regla adoptada (2026-11-10)
 
-Multitenancy §4.2 ya prevé el remedio: "si penaliza, se agrupan las lecturas de un request en una sola transacción". Los datos muestran que penaliza en peticiones con varias lecturas. Propongo:
+Multitenancy §4.2 ya preveía el remedio: "si penaliza, se agrupan las lecturas de un request en una sola transacción". Los datos muestran que penaliza en peticiones con varias lecturas. El responsable adoptó la regla siguiente:
 
 1. **Mantener la transacción por operación como comportamiento por defecto.** Es la que garantiza que el contexto nunca se hereda (ADR-025), y en operaciones sueltas su coste es aceptable.
 2. **Regla para los servicios de negocio:** cuando un caso de uso hace dos o más operaciones de tenant, usa `TenantDbService.transaction(...)`, que ya existe y fija el tenant una sola vez. Se revisaría en cada PR y se mediría en los módulos de negocio con `pnpm bench`.
@@ -103,12 +103,14 @@ Aplicado a lo que ya existe, `GET /members` hace 2 transacciones de tenant (perm
 
 ## 4. Pendientes para cerrar la Fase 3
 
-| Tema | Estado | Quién decide |
-|---|---|---|
-| Revisión de la 3.1 (PR #4), 3.2 (`83df1c1`), 3.3 (`1c695b1`) y 3.4 | Pendiente | Responsable |
-| **ADR-034** (separación de privilegios: `yebo_platform` sin BYPASSRLS; rol de pruebas `yebo_test_bypass`) | Dirección aprobada; SQL propuesto en phase-3-plan; **no aplicado**. Hoy el aislamiento queda demostrado para `yebo_app` y `yebo_identity`. `yebo_platform` sigue con BYPASSRLS, limitado por ESLint a `tenancy`, `health` e `infrastructure/database` | Responsable |
-| Migrar `yebo_dev` (4 migraciones de la Fase 3) | Pendiente de autorización; reversiones documentadas | Responsable |
-| Regla "≥ 2 operaciones → una transacción" (§3) | Recomendación | Responsable |
-| Commits, push y PR de la 3.2–3.4 | Solo commits locales de la 3.2 y la 3.3 | Responsable |
+| Tema | Estado |
+|---|---|
+| Revisión de la 3.1 (PR #4), 3.2 (`83df1c1`), 3.3 (`1c695b1`), 3.4 (`da999d8`) y ADR-034 | Pendiente del responsable |
+| **ADR-034** | ✅ Aplicado el 2026-11-10 (init, `harden-roles.sh` y migración); 18 pruebas de privilegios ([phase-3-plan](phase-3-plan.md#adr-034--implementación-2026-11-10)) |
+| Regla «≥ 2 operaciones → una transacción» (§3) | ✅ Adoptada; `MembersService.reactivate` corregido |
+| Migrar `yebo_dev` | ✅ Hecho tras una copia de seguridad; las 7 migraciones aplicadas |
+| Push y PR de la 3.2 a la 3.4 y de ADR-034 | Pendiente de autorización |
+
+Totales tras ADR-034: unitarias 104 (api 102, contracts 2); integración **13 suites, 232 pruebas** (+ `privileges` 18, + 1 de `access`).
 
 Pendientes ya asignados a otras fases (detalle en phase-3-plan): `platform_users`, MFA y `support_access_grants`, que van a la Fase 4. También la auditoría persistente de denegaciones; la invalidación de la caché del tenant desde la máquina de estados (Fase 4); los tokens `Bearer` para dispositivos (Fase 14); y la gestión de roles e invitaciones.

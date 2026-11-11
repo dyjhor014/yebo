@@ -16,7 +16,7 @@ import { Clock } from '../../src/modules/identity/clock';
 import { IdentityPrismaService } from '../../src/modules/identity/identity-prisma.service';
 import { SessionService, type IssuedTokens } from '../../src/modules/identity/session.service';
 import { decryptSuccessor } from '../../src/modules/identity/successor-crypto';
-import { testPool } from '../support/db';
+import { testBypassPool, testPool } from '../support/db';
 
 const DB = 'yebo_test';
 const A = '0190f0a0-0000-7000-8000-00000000a002';
@@ -47,7 +47,7 @@ describe('Fase 3.2a · sesiones y refresh tokens (PostgreSQL y Redis reales, rol
   let cls: ClsService<RequestContextStore>;
   let owner: Pool;
   let appPool: Pool;
-  let platformPool: Pool;
+  let seed: Pool;
   let identityPool: Pool;
   const clock = new FakeClock();
   let user: string;
@@ -59,7 +59,7 @@ describe('Fase 3.2a · sesiones y refresh tokens (PostgreSQL y Redis reales, rol
   beforeAll(async () => {
     owner = testPool('owner', DB, 2);
     appPool = testPool('app', DB, 2);
-    platformPool = testPool('platform', DB, 2);
+    seed = testBypassPool(DB, 2);
     identityPool = testPool('identity', DB, 2);
     await owner.query(
       'TRUNCATE authorization_codes, refresh_tokens, tenant_sessions, identity_sessions, membership_roles, role_permissions, roles, tenant_memberships, users, permissions, role_templates, tenant_domains, tenants',
@@ -97,8 +97,8 @@ describe('Fase 3.2a · sesiones y refresh tokens (PostgreSQL y Redis reales, rol
          (gen_random_uuid(), 'beto@example.com', 'x', 'Beto', now()) RETURNING id`,
     );
     [user, otherUser] = users.rows.map((r) => r.id) as [string, string];
-    // tenant_memberships tiene RLS FORZADO (incluso para el propietario): se siembra con yebo_platform (BYPASSRLS).
-    const memberships = await platformPool.query<{ id: string }>(
+    // tenant_memberships tiene RLS FORZADO (incluso para el propietario): se siembra con el rol de pruebas (ADR-034).
+    const memberships = await seed.query<{ id: string }>(
       `INSERT INTO tenant_memberships (id, tenant_id, user_id, status, updated_at) VALUES
          (gen_random_uuid(), $1, $3, 'ACTIVE', now()),
          (gen_random_uuid(), $2, $3, 'ACTIVE', now()),
@@ -114,7 +114,7 @@ describe('Fase 3.2a · sesiones y refresh tokens (PostgreSQL y Redis reales, rol
 
   afterAll(async () => {
     await app.close();
-    await Promise.all([owner.end(), appPool.end(), platformPool.end(), identityPool.end()]);
+    await Promise.all([owner.end(), appPool.end(), seed.end(), identityPool.end()]);
   });
 
   beforeEach(() => {
@@ -146,17 +146,22 @@ describe('Fase 3.2a · sesiones y refresh tokens (PostgreSQL y Redis reales, rol
   }
 
   async function setMembership(id: string, status: string): Promise<void> {
-    await platformPool.query(`UPDATE tenant_memberships SET status = $2 WHERE id = $1`, [id, status]);
+    await seed.query(`UPDATE tenant_memberships SET status = $2 WHERE id = $1`, [id, status]);
   }
 
   describe('privilegios (PostgreSQL)', () => {
     const sessionTables = ['identity_sessions', 'tenant_sessions', 'refresh_tokens', 'authorization_codes'];
 
     it('yebo_app y yebo_platform no tienen ningún acceso a las tablas de sesión', async () => {
-      for (const pool of [appPool, platformPool]) {
-        for (const t of sessionTables) {
-          await expect(pool.query(`SELECT 1 FROM ${t} LIMIT 1`)).rejects.toMatchObject({ code: '42501' });
+      const platform = testPool('platform', DB, 1);
+      try {
+        for (const pool of [appPool, platform]) {
+          for (const t of sessionTables) {
+            await expect(pool.query(`SELECT 1 FROM ${t} LIMIT 1`)).rejects.toMatchObject({ code: '42501' });
+          }
         }
+      } finally {
+        await platform.end();
       }
     });
 
@@ -466,15 +471,14 @@ describe('Fase 3.2a · sesiones y refresh tokens (PostgreSQL y Redis reales, rol
       await owner.query(`UPDATE users SET status = 'DISABLED' WHERE id = $1`, [user]);
       await expect(sessions.checkSession(issued.sessionId)).resolves.toEqual({ active: false });
       await owner.query(`UPDATE users SET status = 'ACTIVE' WHERE id = $1`, [user]);
-      await platformPool.query(
+      await seed.query(
         `UPDATE tenant_memberships SET permissions_version = permissions_version + 1 WHERE id = $1`,
         [membershipA],
       );
       const check = await sessions.checkSession(issued.sessionId);
-      const { rows } = await platformPool.query(
-        `SELECT permissions_version FROM tenant_memberships WHERE id = $1`,
-        [membershipA],
-      );
+      const { rows } = await seed.query(`SELECT permissions_version FROM tenant_memberships WHERE id = $1`, [
+        membershipA,
+      ]);
       expect(check).toMatchObject({ active: true, permissionsVersion: rows[0].permissions_version });
     });
 

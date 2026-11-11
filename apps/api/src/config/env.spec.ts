@@ -43,6 +43,13 @@ describe('parseEnv', () => {
     expect(parseEnv(valid).PG_IDENTITY_USER).toBe('yebo_identity');
   });
 
+  it.each(['PG_APP_USER', 'PG_PLATFORM_USER', 'PG_IDENTITY_USER', 'PG_OWNER_USER'])(
+    'rechaza un rol que salta RLS en %s (ADR-034)',
+    (key) => {
+      expect(() => parseEnv({ ...valid, [key]: 'yebo_test_BYPASS' })).toThrow(InvalidConfigurationError);
+    },
+  );
+
   it('prohíbe logs con formato pretty en producción', () => {
     expect(() => parseEnv({ ...valid, NODE_ENV: 'production', LOG_PRETTY: 'true' })).toThrow(/LOG_PRETTY/);
   });
