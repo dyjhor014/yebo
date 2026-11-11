@@ -40,6 +40,12 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set<string>([
   'VehicleType',
   'Vehicle',
   'VehicleDocument',
+  'VehicleLayout',
+  'LayoutVersion',
+  'LayoutZone',
+  'LayoutElement',
+  'CapacityRule',
+  'VehicleLayoutAssignment',
 ]);
 
 /**
@@ -84,6 +90,12 @@ export const TENANT_SCOPED_TABLES: readonly string[] = [
   'vehicle_types',
   'vehicles',
   'vehicle_documents',
+  'vehicle_layouts',
+  'layout_versions',
+  'layout_zones',
+  'layout_elements',
+  'capacity_rules',
+  'vehicle_layout_assignments',
 ];
 
 /**

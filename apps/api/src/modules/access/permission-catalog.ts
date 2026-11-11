@@ -58,6 +58,12 @@ export const PERMISSION_CATALOG = {
     sensitive: false,
     description: 'Gestionar los vehículos y sus documentos',
   },
+  // Fase 6.3: layouts de los vehículos (diseñar, publicar y asignar).
+  'layouts.manage': {
+    module: 'LAYOUTS',
+    sensitive: false,
+    description: 'Diseñar, publicar y asignar los layouts de los vehículos',
+  },
 } as const satisfies Record<string, { module: string; sensitive: boolean; description: string }>;
 
 export type PermissionCode = keyof typeof PERMISSION_CATALOG;

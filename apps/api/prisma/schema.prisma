@@ -89,6 +89,7 @@ model Tenant {
   vehicleTypes       VehicleType[]
   vehicles           Vehicle[]
   vehicleDocuments   VehicleDocument[]
+  vehicleLayouts     VehicleLayout[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -1453,6 +1454,7 @@ model VehicleType {
   tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   catalog  VehicleTypeCatalog? @relation(fields: [catalogCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
   vehicles Vehicle[]
+  layouts  VehicleLayout[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, name])
@@ -1494,9 +1496,10 @@ model Vehicle {
   createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  type      VehicleType       @relation(fields: [tenantId, vehicleTypeId, modality], references: [tenantId, id, modality], onDelete: Restrict, onUpdate: Restrict)
-  documents VehicleDocument[]
+  tenant      Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  type        VehicleType               @relation(fields: [tenantId, vehicleTypeId, modality], references: [tenantId, id, modality], onDelete: Restrict, onUpdate: Restrict)
+  documents   VehicleDocument[]
+  assignments VehicleLayoutAssignment[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -1542,4 +1545,217 @@ model VehicleDocument {
   @@unique([tenantId, fileAssetId])
   @@index([tenantId, vehicleId])
   @@map("vehicle_documents")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 6.3 · Layouts: versiones, zonas, elementos, capacidad y asignación a vehículos (data-dictionary §4;
+// capacity-and-inventory §2–4; F6-Q1)
+// ---------------------------------------------------------------------------------------------------------------
+
+/// Layout de un vehículo (plano de asientos, camarotes, zonas y bodegas). Opcionalmente, de un tipo de vehículo (con
+/// la misma modalidad por FK compuesta). Se archiva, no se borra.
+model VehicleLayout {
+  id            String          @id @default(uuid(7)) @db.Uuid
+  tenantId      String          @map("tenant_id") @db.Uuid
+  name          String
+  modality      ServiceModality
+  vehicleTypeId String?         @map("vehicle_type_id") @db.Uuid
+  archivedAt    DateTime?       @map("archived_at") @db.Timestamptz(6)
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  vehicleType VehicleType?    @relation(fields: [tenantId, vehicleTypeId, modality], references: [tenantId, id, modality], onDelete: Restrict, onUpdate: Restrict)
+  versions    LayoutVersion[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, name])
+  @@map("vehicle_layouts")
+}
+
+enum LayoutVersionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+
+  @@map("layout_version_status")
+}
+
+/// Versión de un layout. El borrador es el documento (`document`, validado con Zod: LayoutDocumentSchema) que guarda
+/// el editor; al publicarse, se materializa en zonas, elementos y reglas, y la versión ya no cambia (trigger). Un
+/// borrador como mucho por layout (`draft_slot`); puede haber varias publicadas (los viajes referencian la suya).
+model LayoutVersion {
+  id              String                 @id @default(uuid(7)) @db.Uuid
+  tenantId        String                 @map("tenant_id") @db.Uuid
+  layoutId        String                 @map("layout_id") @db.Uuid
+  version         Int
+  status          LayoutVersionStatus
+  /// TRUE si es el borrador; NULL si no (UNIQUE: uno por layout).
+  draftSlot       Boolean?               @map("draft_slot")
+  schemaVersion   Int                    @map("schema_version")
+  document        Json
+  decks           Int
+  /// Tamaño de cada cubierta: [{ index, name, width, height }].
+  canvas          Json
+  /// Aforo total de personas de la unidad (pool PERSONS de alcance VEHICLE), o NULL.
+  totalPersons    Int?                   @map("total_persons")
+  createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  publishedAt     DateTime?              @map("published_at") @db.Timestamptz(6)
+  publishedByKind MembershipChangeActor? @map("published_by_kind")
+  publishedById   String?                @map("published_by_id") @db.Uuid
+
+  layout      VehicleLayout             @relation(fields: [tenantId, layoutId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  zones       LayoutZone[]
+  elements    LayoutElement[]
+  assignments VehicleLayoutAssignment[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, layoutId, version])
+  @@unique([tenantId, layoutId, draftSlot])
+  @@map("layout_versions")
+}
+
+enum ZoneKind {
+  SEATING
+  VIP
+  CABINS
+  FREE_ZONE
+  HAMMOCK
+  LUGGAGE
+  HOLD
+  CARGO_DECK
+  VEHICLE_DECK
+
+  @@map("zone_kind")
+}
+
+enum AllocationMode {
+  ASSIGNED
+  POOLED
+
+  @@map("allocation_mode")
+}
+
+/// Zona de una versión publicada (inmutable: solo se insertan al publicar).
+model LayoutZone {
+  id              String           @id @default(uuid(7)) @db.Uuid
+  tenantId        String           @map("tenant_id") @db.Uuid
+  layoutVersionId String           @map("layout_version_id") @db.Uuid
+  code            String
+  name            String
+  kind            ZoneKind
+  service         TransportService
+  allocationMode  AllocationMode   @map("allocation_mode")
+  deck            Int
+  /// Rectángulo en la grilla: { x, y, w, h }.
+  geometry        Json
+  priceClassCode  String?          @map("price_class_code")
+  /// Medidas máximas de una cubierta de carga o de vehículos (ZoneConstraintsSchema).
+  constraints     Json?
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  version  LayoutVersion   @relation(fields: [tenantId, layoutVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  elements LayoutElement[]
+  rules    CapacityRule[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, layoutVersionId, code])
+  @@map("layout_zones")
+}
+
+enum LayoutElementKind {
+  SEAT
+  BED
+  CABIN
+  VEHICLE_SLOT
+  AISLE
+  STAIRS
+  DOOR
+  WC
+  LABEL
+  OTHER
+
+  @@map("layout_element_kind")
+}
+
+/// Elemento de una versión publicada (inmutable). Un camarote con camas es el padre de sus camas y no es asignable
+/// por sí mismo (capacity-and-inventory ej. D).
+model LayoutElement {
+  id              String            @id @default(uuid(7)) @db.Uuid
+  tenantId        String            @map("tenant_id") @db.Uuid
+  layoutVersionId String            @map("layout_version_id") @db.Uuid
+  zoneId          String?           @map("zone_id") @db.Uuid
+  parentElementId String?           @map("parent_element_id") @db.Uuid
+  kind            LayoutElementKind
+  code            String
+  isAssignable    Boolean           @map("is_assignable")
+  sellableAsUnit  Boolean           @map("sellable_as_unit")
+  x               Int
+  y               Int
+  w               Int
+  h               Int
+  rotation        Int
+  deck            Int
+  capacity        Int
+  /// Clase de precio resuelta (la del elemento, la de su zona o la del tipo de zona).
+  priceClassCode  String?           @map("price_class_code")
+  attributes      Json              @default("{}")
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  version  LayoutVersion   @relation(fields: [tenantId, layoutVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  zone     LayoutZone?     @relation(fields: [tenantId, zoneId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  parent   LayoutElement?  @relation("ElementParent", fields: [tenantId, parentElementId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  children LayoutElement[] @relation("ElementParent")
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, layoutVersionId, code])
+  @@map("layout_elements")
+}
+
+enum CapacityDimension {
+  PERSONS
+  UNITS
+  WEIGHT_KG
+  VOLUME_M3
+  LINEAR_M
+
+  @@map("capacity_dimension")
+}
+
+/// Capacidad de una zona en una dimensión (inmutable). El aforo total de la unidad va en layout_versions.
+model CapacityRule {
+  id        String            @id @default(uuid(7)) @db.Uuid
+  tenantId  String            @map("tenant_id") @db.Uuid
+  zoneId    String            @map("zone_id") @db.Uuid
+  dimension CapacityDimension
+  capacity  Decimal           @db.Decimal(14, 3)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  zone LayoutZone @relation(fields: [tenantId, zoneId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, zoneId, dimension])
+  @@map("capacity_rules")
+}
+
+/// Versión publicada asignada a un vehículo en un rango de fechas [desde, hasta). Sin solapamiento por vehículo
+/// (restricción de exclusión). Se termina poniendo `valid_to`; no se borra.
+model VehicleLayoutAssignment {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  vehicleId       String    @map("vehicle_id") @db.Uuid
+  layoutVersionId String    @map("layout_version_id") @db.Uuid
+  validFrom       DateTime  @map("valid_from") @db.Date
+  validTo         DateTime? @map("valid_to") @db.Date
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  vehicle Vehicle       @relation(fields: [tenantId, vehicleId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  version LayoutVersion @relation(fields: [tenantId, layoutVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, vehicleId])
+  @@index([tenantId, layoutVersionId])
+  @@map("vehicle_layout_assignments")
 }

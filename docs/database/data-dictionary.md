@@ -170,19 +170,19 @@ Ver [identity-and-sessions.md](../architecture/identity-and-sessions.md).
 
 ### vehicle_layouts / layout_versions
 - **vehicle_layouts:** `name`, `modality`, `vehicle_type_id?`, `archived_at?`.
-- **layout_versions:** `layout_id`, `version int`, `status enum DRAFT|PUBLISHED|ARCHIVED`, `decks int`, `canvas jsonb` (ancho, alto, grilla), `background_asset_id?` (PNG/JPG/SVG solo como referencia visual), `published_at?`. **Inmutable al publicarse** (trigger). UNIQUE (layout_id, version).
+- **layout_versions:** `layout_id`, `version int`, `status enum DRAFT|PUBLISHED|ARCHIVED`, `decks int`, `canvas jsonb` (ancho, alto, grilla), `background_asset_id?` (PNG/JPG/SVG solo como referencia visual), `published_at?`. **Inmutable al publicarse** (trigger). UNIQUE (layout_id, version). Fase 6.3: `document jsonb` (el borrador que guarda el editor, `LayoutDocumentSchema`), `draft_slot` (un borrador por layout), `total_persons?` (aforo total de la unidad: pool `PERSONS` de alcance `VEHICLE`), `published_by_kind`/`published_by_id`; `background_asset_id` se pospone. Al publicar, el documento se materializa en zonas, elementos y reglas.
 
 ### layout_zones
-`layout_version_id`, `code`, `name`, `kind → zone_kinds (catálogo: SEATING, VIP, FREE_ZONE, HAMMOCK, LUGGAGE, HOLD, CARGO_DECK, VEHICLE_DECK)`, `service enum`, `allocation_mode enum ASSIGNED|POOLED`, `deck int`, `geometry jsonb`, `price_class_code?`, `constraints jsonb` (largo/ancho/alto máximos, kg por unidad, kg/m², rampa).
+`layout_version_id`, `code`, `name`, `kind → zone_kinds (catálogo: SEATING, VIP, CABINS, FREE_ZONE, HAMMOCK, LUGGAGE, HOLD, CARGO_DECK, VEHICLE_DECK; CABINS añadido en la 6.3 para los camarotes)`, `service enum`, `allocation_mode enum ASSIGNED|POOLED`, `deck int`, `geometry jsonb`, `price_class_code?`, `constraints jsonb` (largo/ancho/alto máximos, kg por unidad, kg/m², rampa).
 
 ### layout_elements
 `layout_version_id`, `zone_id?`, `parent_element_id?` (camarote → camas), `kind enum SEAT|BED|CABIN|VEHICLE_SLOT|AISLE|STAIRS|DOOR|WC|LABEL|OTHER`, `code` (p. ej. `12A`, `C3-B1`), `is_assignable bool` (un camarote con camas hijas no es asignable: se vende asignando todas sus camas, ver capacity-and-inventory §3 ej. D), `sellable_as_unit bool` (permite vender el camarote completo), `x`, `y`, `w`, `h`, `rotation numeric`, `deck int`, `capacity int` (cama compartida = 2), `price_class_code?`, `attributes jsonb`. UNIQUE (layout_version_id, code).
 
 ### capacity_rules
-`zone_id`, `dimension enum PERSONS|UNITS|WEIGHT_KG|VOLUME_M3|LINEAR_M`, `capacity numeric(14,3)`.
+`zone_id`, `dimension enum PERSONS|UNITS|WEIGHT_KG|VOLUME_M3|LINEAR_M`, `capacity numeric(14,3)`. Fase 6.3: zonas, elementos y reglas solo se insertan al publicar su versión (trigger) y nunca cambian; las dimensiones que admite cada tipo de zona están en `ZONE_RULES` (`@yebo/contracts`).
 
 ### vehicle_layout_assignments
-`vehicle_id`, `layout_version_id` (PUBLISHED), `valid_from`, `valid_to?`. Exclusión de solapamiento por vehículo.
+`vehicle_id`, `layout_version_id` (PUBLISHED), `valid_from`, `valid_to?`. Exclusión de solapamiento por vehículo. Fase 6.3: rango `[valid_from, valid_to)` de fechas (`EXCLUDE USING gist` con `daterange`); solo de una versión publicada (trigger); se termina con `valid_to`, no se borra.
 
 ### vehicle_owners / settlement_schemes / vehicle_ownership_agreements (módulo `OWNER_SETTLEMENTS`, D6 — por validar)
 - **vehicle_owners:** `party_kind enum PERSON|COMPANY`, `name`, `doc_type`, `doc_number enc` + `bidx`, `contact jsonb enc`, `bank_info jsonb enc?`.

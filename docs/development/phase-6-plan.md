@@ -258,3 +258,105 @@
 
 - ✅ Migración aplicada a `yebo_dev` el 2026-11-11, con copia previa (`~/yebo-backups/yebo_dev-antes-6.2-20261111115336.dump`). Los archivos del sitio ya existentes cumplen los CHECK nuevos de `file_assets`.
 - Limpieza de archivos subidos que nunca se usaron en un documento (como los del sitio): tarea programada, fuera de la 6.2.
+
+## Etapa 6.3 · Layouts: modelo y reglas (implementada el 2026-11-11; pendiente de revisión)
+
+### Decisiones de implementación
+
+| Tema | Decisión |
+|---|---|
+| Documento del borrador | El borrador de una versión es un documento JSON (`LayoutDocumentSchema`, en `@yebo/contracts`) que el editor de la 6.4 guarda entero, como el sitio de la 5.1. Contiene: cubiertas (hasta 4, con una grilla de hasta 60 × 200 celdas), zonas (hasta 60) con su rectángulo, elementos (hasta 1500) con posición, tamaño, rotación y capacidad, y el aforo total. **Guardar** solo exige la forma (Zod estricto), así que se guarda a medias. **Publicar** exige todas las reglas |
+| Reglas (`validateLayout`) | Las mismas en el servidor y, en la 6.4, en el editor: códigos únicos; cubiertas numeradas 0, 1…; zonas dentro de su cubierta y sin solaparse. Cada tipo de zona (`ZONE_RULES`) fija su modo (ASSIGNED o POOLED), los servicios, los elementos que admite y sus dimensiones; las POOLED exigen capacidad. Los elementos de inventario (asiento, cama, camarote, espacio de vehículo) van en una zona ASSIGNED que los admite, dentro de ella. Lo que ocupa espacio no se solapa (una cama, solo con su camarote). Una cama va dentro de su camarote y es para 1 o 2 personas. Un camarote con camas es para la suma de sus camas y es el único que se vende completo. Una zona ASSIGNED tiene algo que vender. Además, al publicar, cada zona debe ser de un servicio que la empresa opera en la modalidad del layout |
+| Tipos de zona | Los del catálogo (SEATING, VIP, FREE_ZONE, HAMMOCK, LUGGAGE, HOLD, CARGO_DECK y VEHICLE_DECK) más **CABINS** para los camarotes. La cubierta de vehículos combina espacios asignables con límites de peso y metros lineales (capacity-and-inventory, ej. G) |
+| Inventario derivado (`deriveInventory`) | Lo que materializará un viaje en la Fase 7. Recursos: asientos, camas y espacios; los camarotes con camas son padres no vendibles por sí mismos (se venden sus camas, o todas a la vez si `sellableAsUnit`), y un camarote sin camas se vende entero. Pools: cada regla de capacidad de una zona, y el aforo total como pool `PERSONS` de la unidad (ej. H). Clase de precio resuelta: la del elemento, la de su zona o la del tipo (CAMA, CAMAROTE, HAMACA…). El resumen cuenta asientos, camas, camarotes, espacios y personas |
+| Publicar | En una transacción, con la fila del layout bloqueada: se comprueban las reglas (400 que resume los tres primeros problemas; la lista completa está en el detalle de la versión), se insertan zonas, reglas y elementos (primero los camarotes, para que sus camas los referencien) y la versión pasa a publicada con su autor. Puede haber **varias versiones publicadas**: los viajes referenciarán la suya; editar después crea la versión siguiente |
+| Plantillas y generadores (F6-Q1) | En contratos, para que el editor los reutilice: `seatRows` (filas con pasillo, códigos 1A, 1B…), `cabin` (camarote con N camas: C1, C1-B1…), `busTemplate` (40 asientos 2+2 y bodega de equipaje) y `boatTemplate` (4 camarotes de 2 camas, zona libre de 60, cubierta de carga, bodega en una segunda cubierta y aforo de 70). Las dos plantillas cumplen todas las reglas (prueba unitaria) |
+| Asignación a vehículos | Una versión **publicada** de un layout no archivado, a un vehículo no retirado de la misma modalidad (y del mismo tipo si el layout lo fija), en un rango de fechas `[desde, hasta)`. La base impide el solapamiento por vehículo (`EXCLUDE` con `daterange`; 409 «ya tiene un layout asignado en esas fechas»). Se termina o se acorta con `valid_to`, sin borrar. Una versión o un layout no se archivan mientras estén asignados hoy o después |
+| Fondo de referencia | `background_asset_id` (una imagen de fondo del plano) se pospone: no hace falta para el criterio y añadiría archivos |
+
+### API de la empresa (permiso `layouts.manage`)
+
+| Ruta | Categoría |
+|---|---|
+| `GET /api/v1/layouts` (con sus versiones, el resumen de cada una y los vehículos asignados), `POST` (borrador inicial vacío o con un documento), `PUT /{id}`, `POST /{id}/archive`, `POST /{id}/restore` | READ / CONFIGURE |
+| `GET /api/v1/layouts/{id}/versions/{n}` (documento, problemas e inventario derivado), `PUT /{id}/draft`, `POST /{id}/publish`, `POST /{id}/versions/{n}/archive` | READ / CONFIGURE |
+| `GET /api/v1/vehicles/{id}/layout-assignments`, `POST`, `POST /{asignación}/end` | READ / CONFIGURE |
+
+### Base de datos (migración `20261113030000_fase6_3_layouts`, reversión en su cabecera)
+
+- **Tablas** de tenant con RLS forzado:
+  - `vehicle_layouts`, con FK compuesta al tipo con su modalidad;
+  - `layout_versions`;
+  - `layout_zones`, `layout_elements` (camarote padre por FK compuesta) y `capacity_rules`;
+  - `vehicle_layout_assignments`.
+- **Triggers:**
+  - `layout_versions_guard`: nace como borrador; el borrador se edita; una versión publicada solo se archiva; una archivada no cambia; la identidad no cambia; no se borra;
+  - `layout_children_guard`: zonas, elementos y reglas solo se insertan mientras su versión es borrador, es decir, al publicarla, y nunca se modifican ni se borran;
+  - `vehicle_layout_assignments_guard`: solo de una versión publicada; solo cambia el fin; no se borra.
+- **CHECK:**
+  - `draft_slot` coherente con el estado;
+  - publicada ⇔ con fecha y autor;
+  - tamaño del documento ≤ 1 MB;
+  - formato de los códigos, cubierta, posición, rotación y capacidad;
+  - lo asignable es de inventario y está en una zona;
+  - solo las camas tienen padre, y solo un camarote no asignable se vende completo;
+  - capacidad positiva;
+  - fin posterior al inicio.
+- **Exclusión:** `(tenant, vehículo, daterange(desde, hasta))` sin solaparse (`btree_gist`, que ya existía desde la Fase 2).
+- **Privilegios:**
+  - `yebo_app`: SELECT e INSERT; UPDATE por columnas en layouts (no la modalidad), versiones y el fin de las asignaciones; **ningún UPDATE ni DELETE** en zonas, elementos y reglas;
+  - `yebo_backoffice`: SELECT.
+- **Permiso `layouts.manage`:** módulo `LAYOUTS`, en la plantilla Administrador y en los roles Administrador existentes.
+
+### Pruebas
+
+- **Contratos (9 nuevas, 26 en total):**
+  - las dos plantillas cumplen el esquema y las reglas;
+  - filas 2+2, con códigos 1A a 10D y pasillo;
+  - camarote de 3 camas;
+  - documento vacío; códigos repetidos, elementos solapados o fuera de su zona o cubierta;
+  - zonas solapadas, con un servicio o una dimensión que su tipo no admite, sin capacidad o sin nada que vender;
+  - camarotes: capacidad igual a la suma de sus camas, camas dentro y de 1 o 2, vender completo solo con camas;
+  - inventario derivado de la lancha (camas, camarotes padre, 6 pools con el aforo) y del bus (40 asientos), y un camarote sin camas que se vende entero.
+- **`layouts.int-spec` (8):**
+  - crear vacío o desde una plantilla, con sus problemas y su inventario; nombre repetido → 409; modalidad no operada, tipo de otra modalidad o campo desconocido → 400;
+  - un borrador a medias se guarda, y publicarlo → 400 con el motivo exacto;
+  - publicar materializa 4 zonas, 13 elementos, 5 reglas y el aforo; se comprueban el padre, la asignabilidad y la clase de precio de un camarote, una cama y un rótulo; sin borrador → 409;
+  - la empresa que no opera carga ni encomiendas no publica esas zonas (dos motivos);
+  - versión 2 sin tocar la 1, y las dos publicadas;
+  - asignar con solapamiento → 409; terminar; fin no posterior al inicio → 400; encadenar; otra modalidad, un borrador u otro tipo → 400 con su motivo;
+  - no se archiva una versión ni un layout en uso; sí una versión sin uso, que ya no se puede asignar;
+  - reglas de la base:
+    - una versión publicada no cambia ni vuelve a borrador (P0001);
+    - no se añade contenido a una publicada (P0001);
+    - sin UPDATE ni DELETE de elementos, reglas y versiones, ni de la modalidad (42501);
+    - dos borradores → 23505;
+    - solapamiento → 23P01;
+    - sin contexto, 0 filas;
+  - aislamiento, sin permiso → 403, y empresa suspendida (consulta, pero no guarda).
+- **Inventario actualizado:**
+  - matriz de privilegios: +12 de tabla y +17 de columna, exactamente las concedidas;
+  - siembra de permisos de `access.int-spec`;
+  - registro de modelos de tenant;
+  - reinicio de datos de las pruebas.
+- **Mutaciones (11), todas detectadas:**
+  - publicar sin reglas;
+  - sin comprobar los servicios;
+  - camarote padre asignable;
+  - asignar de otra modalidad;
+  - asignar de otro tipo;
+  - archivar una versión en uso;
+  - archivar un layout en uso;
+  - «en uso» que ignora el fin;
+  - solapamiento sin 409;
+  - versión archivada asignable;
+  - fin no posterior al inicio.
+- **Totales:**
+  - integración: 28 suites y 410 pruebas ✅;
+  - E2E: 25 + 3 opcionales ✅;
+  - tipos, lint, formato y unitarias ✅.
+
+### Pendiente
+
+- Migración a `yebo_dev`: con autorización y copia previa.
+- La 6.4 (editor y pantallas del panel) usará `validateLayout`, `deriveInventory`, los generadores y las plantillas.
