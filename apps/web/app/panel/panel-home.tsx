@@ -3,16 +3,17 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { usePanel } from '@/components/panel/panel-session';
+import { SECTIONS } from '@/components/panel/panel-shell';
 
-/** Inicio del panel: con «Mi sitio» lleva al editor; sin secciones aún, lo explica (el resto llega en otras fases). */
+/** Inicio del panel: lleva a la primera sección permitida; sin ninguna, lo explica. */
 export function PanelHome() {
   const { company, can } = usePanel();
   const router = useRouter();
-  const site = can('site.manage');
+  const first = SECTIONS.find((s) => can(s.permission));
   useEffect(() => {
-    if (site) router.replace('/panel/sitio');
-  }, [site, router]);
-  if (site) return <p className="px-6 py-10 text-ink-muted">Abriendo «Mi sitio»…</p>;
+    if (first) router.replace(first.href);
+  }, [first, router]);
+  if (first) return <p className="px-6 py-10 text-ink-muted">Abriendo «{first.label}»…</p>;
   return (
     <div className="flex max-w-2xl flex-col gap-3 px-4 py-8 sm:px-8 lg:px-12">
       <h1 className="font-display text-[1.625rem] font-extrabold tracking-[-0.02em]">

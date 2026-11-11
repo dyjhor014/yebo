@@ -7,9 +7,43 @@ import { SessionView } from '@/components/auth/session-view';
 import { PanelSession, usePanel } from './panel-session';
 
 /** Secciones del carril, según el permiso de cada una (sin enlaces a lo que no se puede usar). */
-const SECTIONS = [{ href: '/panel/sitio', label: 'Mi sitio', permission: 'site.manage' }] as const;
+export const SECTIONS = [
+  { href: '/panel/sitio', label: 'Mi sitio', permission: 'site.manage', icon: 'site' },
+  { href: '/panel/ubicaciones', label: 'Ubicaciones', permission: 'locations.manage', icon: 'pin' },
+  { href: '/panel/flota', label: 'Flota', permission: 'fleet.manage', icon: 'fleet' },
+  { href: '/panel/planos', label: 'Planos', permission: 'layouts.manage', icon: 'plan' },
+] as const;
 
-function SiteIcon() {
+const ICON_PATHS: Record<(typeof SECTIONS)[number]['icon'], ReactNode> = {
+  site: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 9h18M8 4v5" />
+    </>
+  ),
+  pin: (
+    <>
+      <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" />
+      <circle cx="12" cy="10" r="2.5" />
+    </>
+  ),
+  fleet: (
+    <>
+      <path d="M3 15l2-6h14l2 6" />
+      <path d="M3 15h18v3H3z" />
+      <circle cx="7.5" cy="18.5" r="1.5" />
+      <circle cx="16.5" cy="18.5" r="1.5" />
+    </>
+  ),
+  plan: (
+    <>
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <path d="M8 7h3v3H8zM13 7h3v3h-3zM8 13h3v3H8zM13 13h3v3h-3z" />
+    </>
+  ),
+};
+
+function SectionIcon({ name }: { name: (typeof SECTIONS)[number]['icon'] }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -21,8 +55,7 @@ function SiteIcon() {
       aria-hidden="true"
       className="size-5"
     >
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <path d="M3 9h18M8 4v5" />
+      {ICON_PATHS[name]}
     </svg>
   );
 }
@@ -114,7 +147,7 @@ function Frame({ children }: { children: ReactNode }) {
                   }`}
                 >
                   <span className={active ? 'text-rail-accent' : undefined}>
-                    <SiteIcon />
+                    <SectionIcon name={s.icon} />
                   </span>
                   {s.label}
                 </Link>
