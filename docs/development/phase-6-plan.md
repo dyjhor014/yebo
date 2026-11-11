@@ -1,6 +1,6 @@
 # Fase 6 · Ubicaciones, agencias, flota y capacidades (plan)
 
-- **Estado:** ✅ Decisiones F6-Q1 a F6-Q7 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapa 6.1 en curso.
+- **Estado:** ✅ Decisiones F6-Q1 a F6-Q7 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapas 6.1 y 6.2 aprobadas; sigue la 6.3.
 - **Rama:** `fase-6/plan`, desde el cierre de la Fase 5 (`8b580c0`).
 - **Criterio de aceptación** ([roadmap](roadmap.md)): «Embarcación con camarotes, zona libre, bodega y cubierta; bus con asientos y bodega».
 
@@ -75,7 +75,7 @@
 - Avisos de vencimiento por correo (Fase 12).
 - Mapa interactivo de ubicaciones.
 
-## Etapa 6.1 · Ubicaciones, sucursales y canales (implementada el 2026-11-10; pendiente de revisión)
+## Etapa 6.1 · Ubicaciones, sucursales y canales (implementada el 2026-11-10; aprobada, `025c8b1`)
 
 ### Decisiones de implementación
 
@@ -155,7 +155,7 @@
 
 - ✅ Migración aplicada a `yebo_dev` el 2026-11-10, con copia previa (`~/yebo-backups/yebo_dev-antes-6.1-20261110203203.dump`).
 
-## Etapa 6.2 · Flota (implementada el 2026-11-11; pendiente de revisión)
+## Etapa 6.2 · Flota (implementada el 2026-11-11; aprobada, `3158036`)
 
 ### Decisiones de implementación
 
@@ -256,5 +256,5 @@
 
 ### Pendiente
 
-- Migración a `yebo_dev`: con autorización y copia previa.
+- ✅ Migración aplicada a `yebo_dev` el 2026-11-11, con copia previa (`~/yebo-backups/yebo_dev-antes-6.2-20261111115336.dump`). Los archivos del sitio ya existentes cumplen los CHECK nuevos de `file_assets`.
 - Limpieza de archivos subidos que nunca se usaron en un documento (como los del sitio): tarea programada, fuera de la 6.2.
