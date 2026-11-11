@@ -7,7 +7,7 @@
 import type { INestApplication } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
-import { boatTemplate, busTemplate, emptyLayout, type LayoutDocument } from '@yebo/contracts';
+import { boatTemplate, busTemplate, emptyLayout, seatRows, type LayoutDocument } from '@yebo/contracts';
 import type { Pool } from 'pg';
 import request from 'supertest';
 import { AppModule } from '../../src/app.module';
@@ -174,7 +174,7 @@ describe('Fase 6.3 · layouts', () => {
     expect(empty.body.issues).toEqual([{ path: 'zones', message: 'Añade al menos una zona con capacidad' }]);
 
     const boat = await as(a, 'post', '/api/v1/layouts', {
-      name: 'Lancha 70',
+      name: 'Lancha 110',
       modality: 'RIVER',
       vehicleTypeId: null,
       document: boatTemplate(),
@@ -184,8 +184,8 @@ describe('Fase 6.3 · layouts', () => {
     expect(boat.body.inventory.summary).toMatchObject({
       beds: 8,
       cabins: 4,
-      pooledPersons: 60,
-      totalPersons: 70,
+      pooledPersons: 70,
+      totalPersons: 110,
     });
     boatId = boat.body.layoutId;
 
@@ -193,7 +193,7 @@ describe('Fase 6.3 · layouts', () => {
     expect(
       (
         await as(a, 'post', '/api/v1/layouts', {
-          name: 'Lancha 70',
+          name: 'Lancha 110',
           modality: 'RIVER',
           vehicleTypeId: null,
           document: null,
@@ -257,7 +257,7 @@ describe('Fase 6.3 · layouts', () => {
     expect(published.body).toMatchObject({ version: 1, status: 'PUBLISHED', issues: [] });
     expect((await as(a, 'post', `/api/v1/layouts/${boatId}/publish`)).status).toBe(409); // ya no hay borrador
 
-    // Materializada: 4 zonas, 13 elementos (rótulo, 4 camarotes, 8 camas), 5 reglas y el aforo en la versión.
+    // Materializada: 6 zonas, 49 elementos (rótulo, 4 camarotes, 8 camas y 36 asientos), 6 reglas y el aforo.
     const rows = await seed.query<{ zones: number; elements: number; rules: number; total: number }>(
       `SELECT (SELECT count(*)::int FROM layout_zones z WHERE z.layout_version_id = v.id) AS zones,
               (SELECT count(*)::int FROM layout_elements e WHERE e.layout_version_id = v.id) AS elements,
@@ -267,7 +267,7 @@ describe('Fase 6.3 · layouts', () => {
          FROM layout_versions v WHERE v.layout_id = $1 AND v.version = 1`,
       [boatId],
     );
-    expect(rows.rows).toEqual([{ zones: 4, elements: 13, rules: 5, total: 70 }]);
+    expect(rows.rows).toEqual([{ zones: 6, elements: 49, rules: 6, total: 110 }]);
     const elements = await seed.query<{
       code: string;
       assignable: boolean;
@@ -307,7 +307,7 @@ describe('Fase 6.3 · layouts', () => {
     const doc = { ...boatTemplate(), totalPersons: 65 };
     const draft = await as(a, 'put', `/api/v1/layouts/${boatId}/draft`, { document: doc });
     expect(draft.body).toMatchObject({ version: 2, status: 'DRAFT' });
-    expect((await as(a, 'get', `/api/v1/layouts/${boatId}/versions/1`)).body.document.totalPersons).toBe(70);
+    expect((await as(a, 'get', `/api/v1/layouts/${boatId}/versions/1`)).body.document.totalPersons).toBe(110);
     expect((await as(a, 'post', `/api/v1/layouts/${boatId}/publish`)).body).toMatchObject({
       version: 2,
       status: 'PUBLISHED',
@@ -322,6 +322,73 @@ describe('Fase 6.3 · layouts', () => {
     expect((await as(a, 'get', `/api/v1/layouts/${boatId}/versions/9`)).status).toBe(404);
   });
 
+  it('Fase 6.4a: hasta 6 pisos con medidas reales; zona de pasajeros mixta en el último piso', async () => {
+    const base = boatTemplate();
+    const decks = [0, 1, 2, 3, 4, 5].map((index) => ({
+      index,
+      name: `Piso ${index + 1}`,
+      lengthM: 9,
+      widthM: 5,
+    }));
+    const doc: LayoutDocument = {
+      ...base,
+      decks,
+      zones: [
+        ...base.zones.filter((z) => z.kind !== 'CARGO_DECK' && z.kind !== 'HOLD'),
+        { ...base.zones.find((z) => z.code === 'ASIENTOS')!, code: 'ALTO', name: 'Piso alto', deck: 5 },
+      ],
+      elements: [
+        ...base.elements.filter((e) => e.deck <= 2 && e.y < 18),
+        ...seatRows({
+          cellCm: 50,
+          zoneCode: 'ALTO',
+          deck: 5,
+          x: 1,
+          y: 3,
+          rows: 2,
+          layout: [2, 3],
+          firstRow: 20,
+        }),
+      ],
+    };
+    // Los camarotes del piso 1 y la zona libre caben en 9 m de largo: solo se recortan zonas por cantidad.
+    doc.zones = doc.zones.map((z) => (z.code === 'LIBRE' ? { ...z, rect: { ...z.rect, h: 6 } } : z));
+    const created = await as(a, 'post', '/api/v1/layouts', {
+      name: 'Lancha de 6 pisos',
+      modality: 'RIVER',
+      vehicleTypeId: null,
+      document: doc,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.issues).toEqual([]);
+    expect((await as(a, 'post', `/api/v1/layouts/${created.body.layoutId}/publish`)).body).toMatchObject({
+      status: 'PUBLISHED',
+    });
+    const { rows } = await seed.query(
+      `SELECT v.decks, max(e.deck)::int AS top FROM layout_versions v JOIN layout_elements e ON e.layout_version_id = v.id
+        WHERE v.layout_id = $1::uuid GROUP BY v.decks`,
+      [created.body.layoutId],
+    );
+    expect(rows).toEqual([{ decks: 6, top: 5 }]);
+
+    // Siete pisos o una medida que no es múltiplo de 25 cm: 400 del esquema.
+    for (const bad of [
+      { ...doc, decks: [...decks, { index: 6, name: 'Piso 7', lengthM: 9, widthM: 5 }] },
+      { ...doc, decks: decks.map((d) => (d.index === 0 ? { ...d, widthM: 5.1 } : d)) },
+    ]) {
+      expect(
+        (
+          await as(a, 'post', '/api/v1/layouts', {
+            name: 'Mal',
+            modality: 'RIVER',
+            vehicleTypeId: null,
+            document: bad,
+          })
+        ).status,
+      ).toBe(400);
+    }
+  });
+
   it('asignar: versión publicada, misma modalidad (y tipo), sin solaparse; terminar y encadenar', async () => {
     const path = `/api/v1/vehicles/${lancha.id}/layout-assignments`;
     const first = await as(a, 'post', path, {
@@ -332,7 +399,7 @@ describe('Fase 6.3 · layouts', () => {
     });
     expect(first.status).toBe(201);
     expect(first.body).toMatchObject({
-      layoutName: 'Lancha 70',
+      layoutName: 'Lancha 110',
       version: 1,
       validFrom: day(0),
       validTo: null,

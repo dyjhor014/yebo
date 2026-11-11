@@ -360,3 +360,59 @@
 
 - ✅ Migración aplicada a `yebo_dev` el 2026-11-11, con copia previa (`~/yebo-backups/yebo_dev-antes-6.3-20261111122227.dump`).
 - La 6.4 (editor y pantallas del panel) usará `validateLayout`, `deriveInventory`, los generadores y las plantillas.
+
+## Etapa 6.4 · Pantallas del panel y editor de planos
+
+### Maqueta (aprobada el 2026-11-11)
+
+[Flota y layouts · maqueta 6.4](https://claude.ai/artifact/GnxN1hT53uQQyYCrmWHvmg) (privada), con cuatro pantallas: editor del plano, Planos, Flota y Ubicaciones. Se aprobó la versión 5, tras la crítica de Impeccable y cuatro rondas de cambios pedidas por el responsable.
+
+**Crítica de Impeccable (`critique`):**
+- **Ejecución degradada:** dos evaluaciones aisladas sobre el código de las pantallas, porque la maqueta no se pudo renderizar en local.
+- **Resultado:** 26/40.
+- **Detector:** 9 avisos, todos falsos positivos (fuente de la marca y relleno en contenedores).
+- **Contraste:** todos los textos cumplen AA; fallaba el indicador de la pestaña activa (turquesa, 2,13:1).
+- **El responsable eligió corregir los P1 y P2:**
+  - teclado del plano: un solo punto de Tab; flechas para navegar; Enter toma, flechas mueven, Enter deja y Esc devuelve; selección y foco distintos;
+  - deshacer y autoguardado;
+  - zonas y aforo editables;
+  - versión 2 coherente entre pantallas y fechas sin ambigüedad;
+  - diálogo «Nuevo plano» por modalidad.
+- **Decisiones del responsable:**
+  - editor = plano con zonas editables, no una pestaña aparte de capacidades;
+  - un documento vencido **solo avisa**: YEBO nunca bloquea un vehículo por documentos.
+
+**Rondas de cambios del responsable (2026-11-11):**
+1. **Medidas reales.** Cada piso tiene largo y ancho en metros. La grilla sale de ellas con la escala que la empresa elige al crear el plano (25 o 50 cm por celda), y la escala no cambia después.
+2. **Pisos.** Lanchas de 2, 3 y hasta 4 pisos de pasajeros: se añaden y se quitan pisos, hasta 6 con la bodega incluida.
+3. **Asientos y camas.**
+   - En cualquier piso, filas de asientos de 2 o 3 por lado, combinables (2+2, 3+3, 2+3, 3+2) y mezcladas en el mismo piso.
+   - Camarotes de 1 a 4 camas y camas sueltas, siempre que el piso tenga la zona de ese tipo.
+   - «Crear zona» de cualquier tipo en el piso elegido.
+4. **Zonas mixtas y edición de zonas.**
+   - Las zonas de pasajeros con elementos (asientos, VIP y camarotes) admiten asientos, camarotes y camas mezclados. Cada elemento lleva su propia clase de precio.
+   - Asiento individual además de las filas.
+   - Las zonas se mueven y cambian de tamaño en metros, siempre dentro del piso.
+5. **Editor a la altura de la ventana.** En escritorio, solo se desplazan las columnas laterales y el plano queda siempre a la vista. En móvil, la pantalla se apila.
+
+**«Planos» en la interfaz.** El nombre técnico (`layouts`) se mantiene en la API y en la base.
+
+### Cambios al modelo de la 6.3 (aprobados con la maqueta)
+
+| Cambio | Detalle |
+|---|---|
+| Hasta 6 pisos | `LAYOUT_LIMITS.decks` pasa de 4 a 6, bodega incluida. Una migración nueva cambia los CHECK de la 6.3: versiones de 1 a 6 cubiertas; zonas y elementos en las cubiertas 0 a 5 |
+| Medidas reales y escala | Documento `schemaVersion` 2: `cellCm` (25 o 50) y, en cada piso, `lengthM` y `widthM`. La grilla se calcula (`deckGrid`). Límites: 30 m de ancho y 100 m de largo; con 25 cm, la grilla llega a 120 × 400 celdas. En `yebo_dev` no hay ningún layout guardado, así que no hay datos que convertir |
+| Zonas mixtas | En `ZONE_RULES`, SEATING, VIP y CABINS admiten asientos, camarotes y camas. La clase de precio por defecto depende del elemento: asiento → la de la zona (GENERAL o VIP); cama → CAMA; camarote → CAMAROTE |
+| Generadores a escala | `seatRows` con 2 o 3 asientos por lado y un pasillo de 1 m; el asiento mide 0,5 m y la fila 1 m. `cabin` de 1 a 4 camas de 1 × 2 m. Camas sueltas. Las celdas se calculan con la escala del plano. Las plantillas pasan a ser la «Lancha de 3 pisos», la «Lancha rápida» y el «Bus 2+2» |
+
+### División
+
+| Parte | Contenido |
+|---|---|
+| **6.4a · Modelo ajustado** | Lo de la tabla anterior en contratos, migración y API, con sus pruebas (unitarias, integración y mutaciones) |
+| **6.4b · Pantallas de Ubicaciones, Flota y Planos** | En el panel de la empresa (`apps/web`), según la maqueta |
+| **6.4c · Editor del plano** | Según la maqueta, con `validateLayout`, `deriveInventory`, generadores y plantillas de contratos |
+| **6.4d · E2E y revisión** | Recorrido con Playwright y axe, y `critique` de Impeccable sobre las pantallas renderizadas |
+
+Cada parte se aprueba por separado, como en la 4.7.

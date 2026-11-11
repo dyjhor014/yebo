@@ -1,6 +1,16 @@
-import { boatTemplate, busTemplate, cabin, seatRows, zone } from './layout-templates';
+import {
+  bed,
+  boatTemplate,
+  busTemplate,
+  cabin,
+  fastBoatTemplate,
+  seat,
+  seatRows,
+  zone,
+} from './layout-templates';
 import {
   LayoutDocumentSchema,
+  deckGrid,
   deriveInventory,
   emptyLayout,
   validateLayout,
@@ -10,34 +20,65 @@ import {
 
 const messages = (doc: LayoutDocument) => validateLayout(doc).map((i) => i.message);
 
-describe('plantillas y generadores (Fase 6.3)', () => {
-  it('las dos plantillas cumplen el esquema y las reglas', () => {
-    for (const t of [busTemplate(), boatTemplate()]) {
+describe('plantillas y generadores a escala (Fase 6.4)', () => {
+  it('las tres plantillas cumplen el esquema y las reglas', () => {
+    for (const t of [busTemplate(), fastBoatTemplate(), boatTemplate()]) {
       expect(LayoutDocumentSchema.parse(t)).toEqual(t);
       expect(validateLayout(t)).toEqual([]);
     }
   });
 
-  it('filas 2+2: códigos 1A…10D con una columna de pasillo', () => {
-    const seats = seatRows({ zoneCode: 'Z', x: 0, y: 0, rows: 10, layout: [2, 2] });
-    expect(seats).toHaveLength(40);
-    expect(seats.slice(0, 4).map((s) => [s.code, s.x])).toEqual([
-      ['1A', 0],
-      ['1B', 1],
-      ['1C', 3],
-      ['1D', 4],
-    ]);
-    expect(seats.at(-1)?.code).toBe('10D');
+  it('la grilla sale de las medidas reales y la escala', () => {
+    expect(deckGrid({ cellCm: 50 }, { index: 0, name: 'P', lengthM: 16, widthM: 5 })).toEqual({
+      cols: 10,
+      rows: 32,
+    });
+    expect(deckGrid({ cellCm: 25 }, { index: 0, name: 'P', lengthM: 16, widthM: 5 })).toEqual({
+      cols: 20,
+      rows: 64,
+    });
   });
 
-  it('camarote de 3 camas: padre para 3 y camas C1-B1…C1-B3 dentro de él', () => {
-    const [parent, ...beds] = cabin({ code: 'C1', zoneCode: 'Z', x: 0, y: 0, beds: 3 });
-    expect(parent).toMatchObject({ kind: 'CABIN', capacity: 3, w: 3, sellableAsUnit: true });
-    expect(beds.map((b) => [b.code, b.parentCode])).toEqual([
-      ['C1-B1', 'C1'],
-      ['C1-B2', 'C1'],
-      ['C1-B3', 'C1'],
+  it('filas 3+2 a 25 cm: asientos de 0,5 m, pasillo de 1 m, una fila por metro; la numeración continúa', () => {
+    const seats = seatRows({ cellCm: 25, zoneCode: 'Z', x: 0, y: 0, rows: 2, layout: [3, 2], firstRow: 7 });
+    expect(seats).toHaveLength(10);
+    expect(seats.slice(0, 5).map((s) => [s.code, s.x, s.w])).toEqual([
+      ['7A', 0, 2],
+      ['7B', 2, 2],
+      ['7C', 4, 2],
+      ['7D', 10, 2], // 3 asientos (6 celdas) + pasillo de 1 m (4 celdas)
+      ['7E', 12, 2],
     ]);
+    expect(seats[5]).toMatchObject({ code: '8A', y: 4 });
+  });
+
+  it('camarote de 1 a 4 camas de 1 × 2 m y cama suelta', () => {
+    const [parent, ...beds] = cabin({ cellCm: 50, code: 'C1', zoneCode: 'Z', x: 0, y: 0, beds: 3 });
+    expect(parent).toMatchObject({ kind: 'CABIN', capacity: 3, w: 6, h: 4, sellableAsUnit: true });
+    expect(beds.map((b) => [b.code, b.parentCode, b.x, b.w, b.h])).toEqual([
+      ['C1-B1', 'C1', 0, 2, 4],
+      ['C1-B2', 'C1', 2, 2, 4],
+      ['C1-B3', 'C1', 4, 2, 4],
+    ]);
+    // A 25 cm la misma cama ocupa el doble de celdas.
+    expect(
+      cabin({ cellCm: 25, code: 'C2', zoneCode: 'Z', x: 0, y: 0, beds: 2 }).map((e) => [
+        e.code,
+        e.x,
+        e.w,
+        e.h,
+      ]),
+    ).toEqual([
+      ['C2', 0, 8, 8],
+      ['C2-B1', 0, 4, 8],
+      ['C2-B2', 4, 4, 8],
+    ]);
+    expect(bed({ cellCm: 25, code: 'K1', zoneCode: 'Z', x: 0, y: 0 })).toMatchObject({
+      kind: 'BED',
+      parentCode: null,
+      w: 4,
+      h: 8,
+    });
   });
 });
 
@@ -48,9 +89,20 @@ describe('validateLayout', () => {
     expect(messages(emptyLayout('LAND'))).toEqual(['Añade al menos una zona con capacidad']);
   });
 
-  it('códigos repetidos, elementos solapados o fuera de su zona o cubierta', () => {
+  it('medidas: múltiplos de 25 cm, hasta 30 × 100 m y 6 pisos', () => {
+    const deck = { index: 0, name: 'P', lengthM: 16, widthM: 5 };
+    const ok = (decks: unknown[]) =>
+      LayoutDocumentSchema.safeParse({ ...emptyLayout('RIVER'), decks }).success;
+    expect(ok([{ ...deck, lengthM: 16.25 }])).toBe(true);
+    expect(ok([{ ...deck, lengthM: 16.1 }])).toBe(false);
+    expect(ok([{ ...deck, widthM: 31 }])).toBe(false);
+    expect(ok(Array.from({ length: 6 }, (_, i) => ({ ...deck, index: i })))).toBe(true);
+    expect(ok(Array.from({ length: 7 }, (_, i) => ({ ...deck, index: i })))).toBe(false);
+  });
+
+  it('códigos repetidos, elementos solapados o fuera de su zona o piso', () => {
     const [first, second] = bus.elements.filter((e) => e.kind === 'SEAT') as [LayoutElement, LayoutElement];
-    expect(messages({ ...bus, elements: [...bus.elements, { ...first, x: 0, y: 12 }] })).toEqual(
+    expect(messages({ ...bus, elements: [...bus.elements, { ...first, x: 0, y: 23 }] })).toEqual(
       expect.arrayContaining(['Código de elemento repetido: 1A', '1A se sale de su zona SALON']),
     );
     expect(messages({ ...bus, elements: [...bus.elements, { ...second, code: '99Z' }] })).toEqual([
@@ -59,9 +111,42 @@ describe('validateLayout', () => {
     expect(messages({ ...bus, elements: [...bus.elements, { ...first, code: 'X1', x: 40 }] })).toEqual(
       expect.arrayContaining(['X1 se sale de la cubierta']),
     );
+    // Si el piso se acorta, lo que queda fuera aparece.
+    expect(messages({ ...bus, decks: [{ ...bus.decks[0]!, lengthM: 10 }] })).toEqual(
+      expect.arrayContaining(['La zona SALON se sale de la cubierta']),
+    );
+  });
+
+  it('zonas mixtas: asientos, camarotes y camas en la misma zona de pasajeros', () => {
+    const boat = boatTemplate();
+    // El salón del piso 2 se alarga hasta la popa (9 m = 18 filas) para hacer hueco al camarote y la cama.
+    const mixed: LayoutDocument = {
+      ...boat,
+      zones: boat.zones.map((z) => (z.code === 'ASIENTOS' ? { ...z, rect: { ...z.rect, h: 16 } } : z)),
+      elements: [
+        ...boat.elements,
+        seat({ cellCm: 50, code: 'S1', zoneCode: 'CAMAROTES', x: 4, y: 2 }),
+        ...cabin({ cellCm: 50, code: 'C9', zoneCode: 'ASIENTOS', deck: 1, x: 0, y: 14, beds: 1 }),
+        bed({ cellCm: 50, code: 'K1', zoneCode: 'ASIENTOS', deck: 1, x: 4, y: 14 }),
+      ],
+    };
+    expect(validateLayout(mixed)).toEqual([]);
+    const inv = deriveInventory(mixed);
+    const price = (code: string) => inv.resources.find((r) => r.code === code)?.priceClassCode;
+    expect([price('S1'), price('C9'), price('C9-B1'), price('K1'), price('1A')]).toEqual([
+      'GENERAL',
+      'CAMAROTE',
+      'CAMA',
+      'CAMA',
+      'GENERAL',
+    ]);
+    // Una zona por cantidad sigue sin admitir elementos.
     expect(
-      messages({ ...bus, elements: [...bus.elements, { ...first, code: 'X2', zoneCode: null, x: 2, y: 0 }] }),
-    ).toEqual(['X2 debe estar en una zona']);
+      messages({
+        ...boat,
+        elements: [...boat.elements, seat({ cellCm: 50, code: 'S2', zoneCode: 'LIBRE', x: 0, y: 12 })],
+      }),
+    ).toEqual(['Un elemento de este tipo no va en la zona LIBRE']);
   });
 
   it('zonas: solapadas, servicio o dimensión que su tipo no admite, sin capacidad, sin nada que vender', () => {
@@ -70,7 +155,7 @@ describe('validateLayout', () => {
       name: 'Otra',
       kind: 'HOLD',
       service: 'PASSENGER',
-      rect: { x: 0, y: 12, w: 5, h: 2 },
+      rect: { x: 0, y: 22, w: 5, h: 2 },
     });
     expect(messages({ ...bus, zones: [...bus.zones, extra] })).toEqual(
       expect.arrayContaining([
@@ -98,28 +183,25 @@ describe('validateLayout', () => {
     expect(messages(set('C1-B1', { capacity: 3 }))).toEqual(
       expect.arrayContaining(['Una cama es para 1 o 2 personas']),
     );
-    expect(messages(set('C1-B2', { x: 5 }))).toEqual(
+    expect(messages(set('C1-B2', { x: 8 }))).toEqual(
       expect.arrayContaining(['La cama C1-B2 se sale de su camarote C1']),
     );
     const alone = { ...boat, elements: boat.elements.filter((e) => e.parentCode !== 'C4') };
     expect(messages(alone)).toEqual(['El camarote C4 no tiene camas: ya se vende completo']);
-    expect(messages(set('C1-B1', { parentCode: 'C2' }))).toEqual(
-      expect.arrayContaining(['La cama C1-B1 se sale de su camarote C2']),
-    );
   });
 });
 
 describe('deriveInventory', () => {
-  it('lancha: camas vendibles, camarotes padre vendibles completos, pools por zona y aforo total', () => {
+  it('lancha de 3 pisos: asientos, camas, camarotes padre vendibles completos, pools por zona y aforo', () => {
     const inv = deriveInventory(boatTemplate());
     expect(inv.summary).toEqual({
-      seats: 0,
+      seats: 36,
       beds: 8,
       cabins: 4,
       vehicleSlots: 0,
-      assignedPersons: 8,
-      pooledPersons: 60,
-      totalPersons: 70,
+      assignedPersons: 44,
+      pooledPersons: 70,
+      totalPersons: 110,
     });
     expect(inv.resources.find((r) => r.code === 'C1')).toMatchObject({
       isSellable: false,
@@ -132,16 +214,17 @@ describe('deriveInventory', () => {
       priceClassCode: 'CAMA',
     });
     expect(inv.pools).toEqual([
-      { scope: 'ZONE', zoneCode: 'LIBRE', dimension: 'PERSONS', capacity: 60 },
-      { scope: 'ZONE', zoneCode: 'CUBIERTA', dimension: 'WEIGHT_KG', capacity: 20000 },
-      { scope: 'ZONE', zoneCode: 'CUBIERTA', dimension: 'LINEAR_M', capacity: 30 },
+      { scope: 'ZONE', zoneCode: 'LIBRE', dimension: 'PERSONS', capacity: 40 },
+      { scope: 'ZONE', zoneCode: 'CUBIERTA', dimension: 'WEIGHT_KG', capacity: 12000 },
+      { scope: 'ZONE', zoneCode: 'CUBIERTA', dimension: 'LINEAR_M', capacity: 20 },
+      { scope: 'ZONE', zoneCode: 'TERRAZA', dimension: 'PERSONS', capacity: 30 },
       { scope: 'ZONE', zoneCode: 'BODEGA', dimension: 'WEIGHT_KG', capacity: 8000 },
       { scope: 'ZONE', zoneCode: 'BODEGA', dimension: 'VOLUME_M3', capacity: 40 },
-      { scope: 'VEHICLE', zoneCode: null, dimension: 'PERSONS', capacity: 70 },
+      { scope: 'VEHICLE', zoneCode: null, dimension: 'PERSONS', capacity: 110 },
     ]);
   });
 
-  it('bus: 40 asientos GENERAL y bodega de equipaje; un camarote sin camas se vende entero', () => {
+  it('bus: 40 asientos GENERAL; un camarote sin camas se vende entero', () => {
     const inv = deriveInventory(busTemplate());
     expect(inv.summary).toMatchObject({ seats: 40, assignedPersons: 40, pooledPersons: 0, totalPersons: 40 });
     expect(new Set(inv.resources.map((r) => r.priceClassCode))).toEqual(new Set(['GENERAL']));

@@ -12,7 +12,11 @@ import { TransportServiceSchema } from './tenants';
  * camarote sin camas, espacio de vehículo) y pools de capacidad (zona libre, hamacas, bodega, cubierta, aforo total).
  */
 
-export const LAYOUT_SCHEMA_VERSION = 1;
+/**
+ * v2 (Fase 6.4, aprobada con la maqueta): escala del plano (`cellCm`) y medidas reales de cada piso en metros; la
+ * grilla se calcula (`deckGrid`). Hasta 6 pisos. En `yebo_dev` no había layouts v1 que convertir.
+ */
+export const LAYOUT_SCHEMA_VERSION = 2;
 
 /** Tipos de zona (catálogo de data-dictionary §4, más CABINS para los camarotes). */
 export const ZONE_KINDS = [
@@ -75,10 +79,12 @@ export const ZONE_RULES: Record<
     priceClass: string;
   }
 > = {
+  // Las zonas de pasajeros con elementos admiten asientos, camarotes y camas mezclados (Fase 6.4). La clase de precio
+  // por defecto depende del elemento (deriveInventory): el asiento, la de la zona; la cama, CAMA; el camarote, CAMAROTE.
   SEATING: {
     mode: 'ASSIGNED',
     services: ['PASSENGER'],
-    elements: ['SEAT'],
+    elements: ['SEAT', 'CABIN', 'BED'],
     dimensions: [],
     needsCapacity: false,
     priceClass: 'GENERAL',
@@ -86,7 +92,7 @@ export const ZONE_RULES: Record<
   VIP: {
     mode: 'ASSIGNED',
     services: ['PASSENGER'],
-    elements: ['SEAT'],
+    elements: ['SEAT', 'CABIN', 'BED'],
     dimensions: [],
     needsCapacity: false,
     priceClass: 'VIP',
@@ -94,7 +100,7 @@ export const ZONE_RULES: Record<
   CABINS: {
     mode: 'ASSIGNED',
     services: ['PASSENGER'],
-    elements: ['CABIN', 'BED'],
+    elements: ['SEAT', 'CABIN', 'BED'],
     dimensions: [],
     needsCapacity: false,
     priceClass: 'CAMAROTE',
@@ -158,10 +164,32 @@ const PriceClass = z
   .string()
   .regex(/^[A-Z][A-Z0-9_]{1,23}$/, 'Clase de precio en mayúsculas (p. ej., GENERAL, VIP, CAMA)')
   .nullable();
-const Cell = z.number().int().min(0).max(199);
-const Span = z.number().int().min(1).max(200);
-
-export const LAYOUT_LIMITS = { decks: 4, deckWidth: 60, deckHeight: 200, zones: 60, elements: 1500 } as const;
+/**
+ * Límites (Fase 6.4): hasta 6 pisos, bodega incluida; cada piso de hasta 30 m de ancho y 100 m de largo. Con celdas de
+ * 25 cm, la grilla llega a 120 × 400 celdas.
+ */
+export const LAYOUT_LIMITS = {
+  decks: 6,
+  maxWidthM: 30,
+  maxLengthM: 100,
+  zones: 60,
+  elements: 1500,
+} as const;
+export const CELL_SIZES_CM = [25, 50] as const;
+const MAX_CELLS = (LAYOUT_LIMITS.maxLengthM * 100) / CELL_SIZES_CM[0];
+const Cell = z
+  .number()
+  .int()
+  .min(0)
+  .max(MAX_CELLS - 1);
+const Span = z.number().int().min(1).max(MAX_CELLS);
+/** Medida en metros, múltiplo de 25 cm (la celda más pequeña). */
+const Meters = (max: number) =>
+  z
+    .number()
+    .min(1)
+    .max(max)
+    .refine((m) => Number.isInteger(m * 4), { message: 'Usa múltiplos de 25 cm (p. ej., 4,25 m)' });
 
 export const LayoutDeckSchema = z
   .object({
@@ -171,11 +199,12 @@ export const LayoutDeckSchema = z
       .min(0)
       .max(LAYOUT_LIMITS.decks - 1),
     name: z.string().trim().min(1).max(40),
-    /** Tamaño de la grilla de esta cubierta, en celdas. */
-    width: z.number().int().min(2).max(LAYOUT_LIMITS.deckWidth),
-    height: z.number().int().min(2).max(LAYOUT_LIMITS.deckHeight),
+    /** Medidas reales del piso (eslora y manga útiles), en metros. */
+    lengthM: Meters(LAYOUT_LIMITS.maxLengthM),
+    widthM: Meters(LAYOUT_LIMITS.maxWidthM),
   })
   .strict();
+export type LayoutDeck = z.infer<typeof LayoutDeckSchema>;
 
 export const RectSchema = z.object({ x: Cell, y: Cell, w: Span, h: Span }).strict();
 export type Rect = z.infer<typeof RectSchema>;
@@ -247,6 +276,8 @@ export type LayoutElement = z.infer<typeof LayoutElementSchema>;
 export const LayoutDocumentSchema = z
   .object({
     schemaVersion: z.literal(LAYOUT_SCHEMA_VERSION),
+    /** Escala de la grilla: cada celda mide 25 o 50 cm. Se elige al crear el plano y no cambia. */
+    cellCm: z.union([z.literal(25), z.literal(50)]),
     decks: z.array(LayoutDeckSchema).min(1).max(LAYOUT_LIMITS.decks),
     zones: z.array(LayoutZoneSchema).max(LAYOUT_LIMITS.zones),
     elements: z.array(LayoutElementSchema).max(LAYOUT_LIMITS.elements),
@@ -256,11 +287,27 @@ export const LayoutDocumentSchema = z
   .strict();
 export type LayoutDocument = z.infer<typeof LayoutDocumentSchema>;
 
-/** Un documento vacío: una cubierta y nada más. */
-export function emptyLayout(modality: 'LAND' | 'RIVER'): LayoutDocument {
+/** Celdas que mide una longitud en metros con la escala del plano. */
+export const cells = (meters: number, cellCm: 25 | 50) => Math.round((meters * 100) / cellCm);
+
+/** Grilla de un piso: columnas (ancho) y filas (largo, de proa a popa) con la escala del plano. */
+export function deckGrid(
+  doc: Pick<LayoutDocument, 'cellCm'>,
+  deck: LayoutDeck,
+): { cols: number; rows: number } {
+  return { cols: cells(deck.widthM, doc.cellCm), rows: cells(deck.lengthM, doc.cellCm) };
+}
+
+/** Un documento vacío: un piso con medidas típicas y nada más. */
+export function emptyLayout(modality: 'LAND' | 'RIVER', cellCm: 25 | 50 = 50): LayoutDocument {
   return {
     schemaVersion: LAYOUT_SCHEMA_VERSION,
-    decks: [{ index: 0, name: modality === 'LAND' ? 'Piso 1' : 'Cubierta principal', width: 12, height: 20 }],
+    cellCm,
+    decks: [
+      modality === 'LAND'
+        ? { index: 0, name: 'Piso 1', lengthM: 12, widthM: 2.5 }
+        : { index: 0, name: 'Piso 1', lengthM: 16, widthM: 5 },
+    ],
     zones: [],
     elements: [],
     totalPersons: null,
@@ -277,6 +324,7 @@ const inside = (r: Rect, o: Rect) =>
   r.x >= o.x && r.y >= o.y && r.x + r.w <= o.x + o.w && r.y + r.h <= o.y + o.h;
 const overlaps = (a: Rect, b: Rect) =>
   a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+const wh = (g: { cols: number; rows: number }) => ({ w: g.cols, h: g.rows });
 const rectOf = (e: { x: number; y: number; w: number; h: number }): Rect => ({
   x: e.x,
   y: e.y,
@@ -314,7 +362,7 @@ export function validateLayout(doc: LayoutDocument): LayoutIssue[] {
     const deck = decks.get(z.deck);
     const rules = ZONE_RULES[z.kind];
     if (!deck) add(`${p}.deck`, `La zona ${z.code} está en una cubierta que no existe`);
-    else if (!inside(z.rect, { x: 0, y: 0, w: deck.width, h: deck.height })) {
+    else if (!inside(z.rect, { x: 0, y: 0, ...wh(deckGrid(doc, deck)) })) {
       add(`${p}.rect`, `La zona ${z.code} se sale de la cubierta`);
     }
     if (!rules.services.includes(z.service))
@@ -362,7 +410,7 @@ export function validateLayout(doc: LayoutDocument): LayoutIssue[] {
     const p = `elements.${i}`;
     const deck = decks.get(e.deck);
     if (!deck) add(`${p}.deck`, `${e.code} está en una cubierta que no existe`);
-    else if (!inside(rectOf(e), { x: 0, y: 0, w: deck.width, h: deck.height })) {
+    else if (!inside(rectOf(e), { x: 0, y: 0, ...wh(deckGrid(doc, deck)) })) {
       add(`${p}`, `${e.code} se sale de la cubierta`);
     }
     const inventory = INVENTORY_ELEMENT_KINDS.includes(e.kind);
@@ -492,6 +540,18 @@ export type DerivedInventory = z.infer<typeof DerivedInventorySchema>;
  * - Pools: cada regla de capacidad de una zona (ZONE) y, si hay aforo total, el pool PERSONS de la unidad (VEHICLE),
  *   que consumirá toda venta de pasajero (ej. H).
  */
+/**
+ * Clase de precio por defecto de un elemento (Fase 6.4, zonas mixtas): la cama, CAMA; el camarote, CAMAROTE; el
+ * asiento, la de su zona (o GENERAL, o VIP en una zona VIP); el espacio de vehículo, la de su zona o VEHICULO.
+ */
+function defaultPriceClass(kind: ElementKind, zone: LayoutZone | undefined): string {
+  if (kind === 'BED') return 'CAMA';
+  if (kind === 'CABIN') return 'CAMAROTE';
+  if (zone?.priceClassCode) return zone.priceClassCode;
+  if (kind === 'SEAT') return zone?.kind === 'VIP' ? 'VIP' : 'GENERAL';
+  return zone ? ZONE_RULES[zone.kind].priceClass : 'GENERAL';
+}
+
 export function deriveInventory(doc: LayoutDocument): DerivedInventory {
   const zones = new Map(doc.zones.map((z) => [z.code, z]));
   const parents = new Set(doc.elements.filter((e) => e.parentCode).map((e) => e.parentCode));
@@ -506,10 +566,7 @@ export function deriveInventory(doc: LayoutDocument): DerivedInventory {
         zoneCode: e.zoneCode ?? '',
         parentCode: e.parentCode,
         capacity: e.capacity,
-        priceClassCode:
-          e.priceClassCode ??
-          zone?.priceClassCode ??
-          (e.kind === 'BED' ? 'CAMA' : zone ? ZONE_RULES[zone.kind].priceClass : 'GENERAL'),
+        priceClassCode: e.priceClassCode ?? defaultPriceClass(e.kind, zone),
         isSellable: !isParent,
         sellableAsUnit: isParent && e.sellableAsUnit,
       };
