@@ -152,6 +152,8 @@ sequenceDiagram
    *(Precisión de la Fase 3.2a, 2026-11-09: el diseño aprobado decía "en Redis, con PostgreSQL de respaldo". La auditoría demostró que una caché positiva aceptaba sesiones revocadas durante hasta 60 s. Por decisión del responsable, PostgreSQL es la fuente de verdad en cada petición. Ver [phase-3-plan](../development/phase-3-plan.md).)*
 4. `ver` == `permissions_version` actual de la membresía. Si difiere, responde `401 PERMISSIONS_CHANGED`. El frontend refresca en silencio y obtiene un token con los permisos nuevos. **No** cierra la sesión.
 
+*(Fase 3.3, 2026-11-10: esta validación la aplica el guard global `AuthenticationGuard` a **toda** ruta no pública, con CSRF en las mutaciones. Ver [phase-3-plan](../development/phase-3-plan.md).)*
+
 Gracias al paso 3, la revocación surte efecto en **toda verificación que empiece después de su COMMIT**, no "en cuanto expire el access token". Una petición que ya pasó su verificación termina con el estado que tenía (carrera documentada en phase-3-plan).
 
 ## 8. Revocación

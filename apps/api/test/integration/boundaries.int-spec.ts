@@ -4,6 +4,7 @@
  * - Inyección de dependencias: IdentityPrismaService no es inyectable fuera del módulo identity.
  * - Arranque: sin clave de firma o sin credenciales de yebo_identity, la API no arranca.
  * - scripts/dev/init-env.sh: añade las variables nuevas a archivos existentes, sin duplicarlas.
+ * - Fase 3.3: @Public() solo en los módulos autorizados; la cadena de guards globales solo en access.module.ts.
  */
 import { spawnSync } from 'node:child_process';
 import { createPrivateKey } from 'node:crypto';
@@ -92,6 +93,66 @@ describe('Fase 3.2a · fronteras y configuración', () => {
 
     it('IdentityPrismaService solo se permite dentro del módulo identity', () => {
       expect(results.get('apps/api/src/modules/identity/x.ts#identity')).not.toContain(IDENTITY_RULE);
+    });
+  });
+
+  describe('ESLint · denegar por defecto (frontera 3, Fase 3.3)', () => {
+    const PUBLIC_ROUTE = `import { Controller, Get } from '@nestjs/common';\nimport { Public } from '../access/route-policy';\n@Controller('x')\nexport class X {\n  @Public('tenant')\n  @Get()\n  x(): void {}\n}\n`;
+    const REGISTER_GUARD = `import { APP_GUARD } from '@nestjs/core';\nexport const p = { provide: APP_GUARD, useValue: { canActivate: () => true } };\n`;
+    const USE_GLOBAL = `export function f(app: { useGlobalGuards: (...g: unknown[]) => void }): void {\n  app.useGlobalGuards();\n}\n`;
+    const RULE = 'no-restricted-syntax';
+    let results: Map<string, string[]>;
+
+    beforeAll(() => {
+      const cases = [
+        ['apps/api/src/modules/shipments/x.controller.ts', 'public', PUBLIC_ROUTE],
+        ['apps/api/src/modules/access/http/x.controller.ts', 'public', PUBLIC_ROUTE],
+        ['apps/api/src/modules/identity/x.service.ts', 'public', PUBLIC_ROUTE],
+        ['apps/api/src/modules/identity/http/x.controller.ts', 'public', PUBLIC_ROUTE],
+        ['apps/api/src/modules/tenancy/x.controller.ts', 'public', PUBLIC_ROUTE],
+        ['apps/api/src/modules/health/x.controller.ts', 'public', PUBLIC_ROUTE],
+        ['apps/api/src/modules/shipments/x.module.ts', 'guard', REGISTER_GUARD],
+        ['apps/api/src/modules/identity/http/x.ts', 'guard', REGISTER_GUARD],
+        ['apps/api/src/infrastructure/core.module.ts', 'guard', REGISTER_GUARD],
+        ['apps/api/src/modules/access/access.module.ts', 'guard', REGISTER_GUARD],
+        ['apps/api/src/main.ts', 'global', USE_GLOBAL],
+        ['apps/api/src/modules/access/access.module.ts', 'global', USE_GLOBAL],
+      ] as const;
+      const raw = lint(cases.map(([filePath, , code]) => ({ filePath, code })));
+      results = new Map(raw.map((r, i) => [`${cases[i]?.[0]}#${cases[i]?.[1]}`, r.rules]));
+    }, 120_000);
+
+    it.each([
+      'apps/api/src/modules/shipments/x.controller.ts',
+      'apps/api/src/modules/access/http/x.controller.ts',
+      'apps/api/src/modules/identity/x.service.ts',
+    ])('@Public() está prohibido en %s', (file) => {
+      expect(results.get(`${file}#public`)).toContain(RULE);
+    });
+
+    it.each([
+      'apps/api/src/modules/identity/http/x.controller.ts',
+      'apps/api/src/modules/tenancy/x.controller.ts',
+      'apps/api/src/modules/health/x.controller.ts',
+    ])('@Public() se permite en %s (y la ruta debe figurar en PUBLIC_ROUTES)', (file) => {
+      expect(results.get(`${file}#public`)).not.toContain(RULE);
+    });
+
+    it.each([
+      'apps/api/src/modules/shipments/x.module.ts',
+      'apps/api/src/modules/identity/http/x.ts',
+      'apps/api/src/infrastructure/core.module.ts',
+    ])('registrar un APP_GUARD está prohibido en %s', (file) => {
+      expect(results.get(`${file}#guard`)).toContain(RULE);
+    });
+
+    it('APP_GUARD solo se registra en access.module.ts', () => {
+      expect(results.get('apps/api/src/modules/access/access.module.ts#guard')).not.toContain(RULE);
+    });
+
+    it('useGlobalGuards está prohibido en todo apps/api/src, también en access.module.ts', () => {
+      expect(results.get('apps/api/src/main.ts#global')).toContain(RULE);
+      expect(results.get('apps/api/src/modules/access/access.module.ts#global')).toContain(RULE);
     });
   });
 

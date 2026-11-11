@@ -1,16 +1,16 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { ApiNotFoundResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { PublicSiteResponseSchema, type PublicSiteResponse } from '@yebo/contracts';
 import { ClsService } from 'nestjs-cls';
 import { createZodDto } from 'nestjs-zod';
 import type { RequestContextStore } from '../../infrastructure/context/request-context';
-import { TenantHostGuard } from './tenant-host.guard';
+import { Public } from '../access/route-policy';
 
 class PublicSiteResponseDto extends createZodDto(PublicSiteResponseSchema) {}
 
 @ApiTags('public')
 @Controller({ path: 'public', version: '1' })
-@UseGuards(TenantHostGuard)
+@Public('tenant')
 export class PublicSiteController {
   constructor(private readonly cls: ClsService<RequestContextStore>) {}
 

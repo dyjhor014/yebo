@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { PermissionsModule } from '../access/permissions.module';
 import { TenancyModule } from '../tenancy/tenancy.module';
 import { AccessTokenService } from './access-token.service';
 import { AuthorizationCodeService } from './authorization-code.service';
@@ -12,6 +13,7 @@ import { IdentityPrismaService } from './identity-prisma.service';
 import { PasswordHasher } from './password-hasher';
 import { RateLimiterService } from './rate-limiter.service';
 import { SessionService } from './session.service';
+import { UserDirectoryService } from './user-directory.service';
 
 /**
  * Módulo de plataforma (capa L0): identidad, contraseñas, sesiones, tokens y hub de cuentas
@@ -22,7 +24,7 @@ import { SessionService } from './session.service';
  * - 3.2b: hub (`/api/v1/hub/*`, solo en AUTH_HUB_HOST) y sesión de empresa (`/api/v1/auth/*`, host del tenant).
  */
 @Module({
-  imports: [TenancyModule],
+  imports: [TenancyModule, PermissionsModule],
   controllers: [HubController, AuthController],
   providers: [
     { provide: Clock, useClass: SystemClock },
@@ -35,7 +37,8 @@ import { SessionService } from './session.service';
     RateLimiterService,
     CookieSigner,
     HubHostGuard,
+    UserDirectoryService,
   ],
-  exports: [Clock, PasswordHasher, AccessTokenService, SessionService],
+  exports: [Clock, PasswordHasher, AccessTokenService, SessionService, UserDirectoryService],
 })
 export class IdentityModule {}

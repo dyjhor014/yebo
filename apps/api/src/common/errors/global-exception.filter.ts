@@ -32,6 +32,7 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   UNAUTHENTICATED: 'Se requiere autenticación',
   PERMISSIONS_CHANGED: 'Tus permisos cambiaron; renueva la sesión',
   FORBIDDEN: 'No tiene permiso para realizar esta operación',
+  TENANT_RESTRICTED: 'El estado de la empresa no permite esta operación',
   NOT_FOUND: 'Recurso no encontrado',
   CONFLICT: 'La operación entra en conflicto con el estado actual',
   PAYLOAD_TOO_LARGE: 'El contenido enviado excede el tamaño permitido',

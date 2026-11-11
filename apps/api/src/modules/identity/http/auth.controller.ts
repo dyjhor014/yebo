@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Inject, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Post, Query, Req, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
   AuthTokenRequestSchema,
@@ -15,8 +15,10 @@ import { AppError } from '../../../common/errors/app-error';
 import { ENV } from '../../../config/env.module';
 import type { Env } from '../../../config/env';
 import type { RequestContextStore } from '../../../infrastructure/context/request-context';
+import { PermissionService } from '../../access/permission.service';
+import { AuthenticatedOnly, Public, TenantOperation } from '../../access/route-policy';
+import { isLoginAllowed, tenantPhase } from '../../access/tenant-operation';
 import { normalizeHost } from '../../tenancy/host';
-import { TenantHostGuard } from '../../tenancy/tenant-host.guard';
 import { AccessTokenService } from '../access-token.service';
 import { AuthorizationCodeService } from '../authorization-code.service';
 import { Clock } from '../clock';
@@ -44,12 +46,13 @@ const AuthRequestSchema = z.strictObject({
 });
 
 /**
- * Sesión de empresa en su propio dominio (TenantHostGuard: el tenant sale del host, ADR-004).
+ * Sesión de empresa en su propio dominio (el guard global TenantHostGuard fija el tenant por host, ADR-004).
  * Las cookies nunca se comparten entre dominios; el inicio de sesión pasa siempre por el hub (ADR-022).
+ * El flujo de entrada es `@Public('tenant')`: se autentica con otras credenciales (cookie firmada del flujo,
+ * código de autorización, refresh token). Solo `GET session` exige la sesión de empresa (guard global).
  */
 @ApiTags('auth')
 @Controller({ path: 'auth', version: '1' })
-@UseGuards(TenantHostGuard)
 export class AuthController {
   constructor(
     private readonly codes: AuthorizationCodeService,
@@ -59,6 +62,7 @@ export class AuthController {
     private readonly signer: CookieSigner,
     private readonly clock: Clock,
     private readonly cls: ClsService<RequestContextStore>,
+    private readonly permissions: PermissionService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -67,8 +71,10 @@ export class AuthController {
    * cookie firmada de este host y redirige al hub con el reto S256. Nunca se envía un redirect_uri.
    */
   @Get('start')
+  @Public('tenant')
   start(@Query('return') returnTo: unknown, @Req() req: Request, @Res() res: Response): void {
     noStore(res);
+    this.assertLoginAllowed();
     const host = this.host(req);
     const state = newOpaqueToken();
     const verifier = newCodeVerifier();
@@ -99,6 +105,7 @@ export class AuthController {
    * usa su `code_verifier`; el código queda consumido aunque el canje falle.
    */
   @Post('token')
+  @Public('tenant')
   @HttpCode(200)
   async token(
     @Body() body: unknown,
@@ -118,6 +125,8 @@ export class AuthController {
     if (!parsed.success || !pending || !safeEqual(pending.s, parsed.data.state)) {
       throw new AppError('UNAUTHENTICATED', 'La solicitud de inicio de sesión no es válida o caducó', 401);
     }
+    // Antes del canje: si la empresa ya no admite inicios de sesión, el código no se consume ni se abre sesión.
+    this.assertLoginAllowed();
     const issued = await this.codes.redeem({
       code: parsed.data.code,
       codeVerifier: pending.v,
@@ -129,6 +138,7 @@ export class AuthController {
 
   /** Token CSRF del dominio de la empresa (por si la cookie caducó antes que la sesión). */
   @Get('csrf')
+  @Public('tenant')
   csrf(@Res({ passthrough: true }) res: Response): CsrfResponse {
     noStore(res);
     return { csrfToken: issueCsrf(res, this.env.AUTH_SESSION_IDLE_MINUTES * 60) };
@@ -136,6 +146,7 @@ export class AuthController {
 
   /** Renovación (identity-and-sessions §6): rotación con ventana de gracia y detección de reutilización. */
   @Post('refresh')
+  @Public('tenant')
   @HttpCode(200)
   async refresh(
     @Req() req: Request,
@@ -160,6 +171,7 @@ export class AuthController {
    * ("Cerrar sesión" cierra todas las empresas del navegador, identity-and-sessions §8).
    */
   @Post('logout')
+  @Public('tenant')
   @HttpCode(200)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<AuthLogoutResponse> {
     noStore(res);
@@ -171,30 +183,32 @@ export class AuthController {
   }
 
   /**
-   * Sesión de empresa verificada en este request (identity-and-sessions §7): firma, `tid` = tenant del host,
-   * estado de la sesión en PostgreSQL y versión de permisos. La 3.3 aplicará esta verificación a todas las rutas.
+   * Sesión de empresa del request y permisos efectivos. La verificación (firma, `tid` = host, sesión en
+   * PostgreSQL y versión de permisos) la hace el guard global AuthenticationGuard (Fase 3.3).
    */
   @Get('session')
-  async session(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<AuthSessionResponse> {
+  @AuthenticatedOnly()
+  @TenantOperation('READ')
+  async session(@Res({ passthrough: true }) res: Response): Promise<AuthSessionResponse> {
     noStore(res);
-    const claims = this.tryClaims(req);
-    if (!claims) throw new AppError('UNAUTHENTICATED', 'Sesión no válida', 401);
-    const check = await this.sessions.checkSession(claims.sid);
-    if (!check.active || check.userId !== claims.sub || check.membershipId !== claims.mid) {
-      throw new AppError('UNAUTHENTICATED', 'Sesión no válida', 401);
-    }
-    if (check.permissionsVersion !== claims.ver) {
-      throw new AppError('PERMISSIONS_CHANGED', 'Tus permisos cambiaron; renueva la sesión', 401);
-    }
+    const principal = this.cls.get('principal');
+    const tenantId = this.cls.get('tenantId');
+    if (!principal || !tenantId) throw new Error('AuthenticationGuard no fijó la sesión');
     return {
-      userId: check.userId,
-      tenantId: check.tenantId,
-      membershipId: check.membershipId,
-      accessTokenExpiresAt: new Date(claims.exp * 1000).toISOString(),
+      userId: principal.userId,
+      tenantId,
+      membershipId: principal.membershipId,
+      accessTokenExpiresAt: new Date(principal.accessTokenExpiresAt * 1000).toISOString(),
+      permissions: [...(await this.permissions.current())].sort(),
     };
+  }
+
+  /** Fila «Login» de la matriz de estados (multitenancy §5.2): tras el periodo de cierre no se entra. */
+  private assertLoginAllowed(): void {
+    const tenant = this.cls.get('tenant');
+    if (!tenant || !isLoginAllowed(tenantPhase(tenant, this.clock.now()))) {
+      throw new AppError('TENANT_RESTRICTED', 'Esta empresa ya no está disponible en YEBO', 403);
+    }
   }
 
   /** Access token válido Y del tenant de este host (ADR-004); si no, `null`. */

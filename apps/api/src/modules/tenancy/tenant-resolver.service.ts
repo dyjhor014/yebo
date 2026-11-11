@@ -9,6 +9,8 @@ export interface ResolvedTenant {
   slug: string;
   tradeName: string;
   status: 'TRIAL' | 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED' | 'CANCELLED' | 'EXPIRED';
+  /** ISO 8601. Marca el inicio del periodo de cierre de `CANCELLED` (multitenancy §5.2). */
+  cancelledAt: string | null;
 }
 
 /** TTL corto (multitenancy §2): un cambio de dominio o de estado se refleja en segundos. */
@@ -44,10 +46,13 @@ export class TenantResolverService {
       where: { host },
       select: {
         verificationStatus: true,
-        tenant: { select: { id: true, slug: true, tradeName: true, status: true } },
+        tenant: { select: { id: true, slug: true, tradeName: true, status: true, cancelledAt: true } },
       },
     });
-    const tenant = domain?.verificationStatus === 'VERIFIED' ? domain.tenant : null;
+    const tenant: ResolvedTenant | null =
+      domain?.verificationStatus === 'VERIFIED'
+        ? { ...domain.tenant, cancelledAt: domain.tenant.cancelledAt?.toISOString() ?? null }
+        : null;
     await this.cacheSet(
       key,
       tenant ? JSON.stringify(tenant) : NOT_FOUND,
@@ -99,5 +104,6 @@ export class TenantResolverService {
 }
 
 function cacheKey(host: string): string {
-  return `tenant:host:${host}`;
+  // v2 (Fase 3.3): el valor incluye `cancelledAt`; las entradas con la forma anterior no se leen.
+  return `tenant:host:v2:${host}`;
 }

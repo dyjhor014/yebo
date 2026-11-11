@@ -359,7 +359,7 @@ Cambios concretos:
 
 ## Requisito de la etapa 3.3: verificación de sesión en TODAS las rutas protegidas
 
-> **Estado (2026-11-09):** diseño **aceptado** por el responsable (guard global con denegación por defecto, lista de rutas públicas, ESLint y pruebas automáticas de cobertura de rutas). **La 3.3 no está iniciada ni autorizada.**
+> **Estado:** diseño **aceptado** el 2026-11-09 (guard global con denegación por defecto, lista de rutas públicas, ESLint y pruebas automáticas de cobertura de rutas). **Implementado el 2026-11-10** en la rama `fase-3/3.3-autorizacion`, pendiente de revisión: ver [la sección de la etapa 3.3](#etapa-33--autorización-y-estado-del-tenant-implementada-el-2026-11-10-pendiente-de-revisión).
 
 **Regla:** todo endpoint que no sea explícitamente público verifica, **en cada petición**:
 1. el access token (firma EdDSA, `iss`, `aud`, vida ≤ 900 s);
@@ -712,3 +712,107 @@ No es el sistema de diseño de la Fase 4.
   Cierre: cerrando, cerrada y error con reintento. Panel: comprobando, sesión activa y sesión terminada.
 - **Revisión visual.** Capturas con Chrome sin interfaz a 320, 390, 1024 y 1440 px. Se corrigieron dos
   defectos: la línea de trayecto se partía en «sin acceso» y los nombres largos de empresa se cortaban.
+
+## Etapa 3.3 · Autorización y estado del tenant (implementada el 2026-11-10; pendiente de revisión)
+
+Rama `fase-3/3.3-autorizacion`, creada desde el commit local de la 3.2 (`83df1c1`, sin push), por decisión del
+responsable del 2026-11-10. Implementa el requisito de la 3.3 de [la sección anterior](#requisito-de-la-etapa-33-verificación-de-sesión-en-todas-las-rutas-protegidas).
+
+### Alcance decidido por el responsable (2026-11-10)
+
+| Tema | Decisión |
+|---|---|
+| `support_access_grants` | **Se pospone a la Fase 4**, con `platform_users`, el login del staff y su MFA. Sin `platform_users`, nadie podría usar el acceso de soporte. Hoy el guard solo acepta tokens de miembros de la empresa, así que ningún acceso de soporte es posible |
+| Catálogo de permisos y plantillas | **Solo lo que existe:** permisos de gestión de accesos y la plantilla Administrador. Cada fase añade sus permisos y completa las plantillas (Cajero, Almacenero, Embarque, Contador...) con su propia migración |
+| Endpoints | **Gestión mínima de accesos**, sin pantallas: listar miembros y roles, suspender y reactivar membresías, cerrar sus sesiones y asignar roles |
+
+### Cadena de guards globales (denegar por defecto)
+
+Se registran como `APP_GUARD` en `modules/access/access.module.ts`, en este orden. Toda ruta sin `@Public(...)` pasa
+por los cuatro:
+
+| Orden | Guard | Qué verifica | Rechazo |
+|---|---|---|---|
+| 1 | `TenantHostGuard` (tenancy) | Tenant por host verificado (ADR-004) | `404` |
+| 2 | `AuthenticationGuard` (identity) | Access token (firma, `iss`, `aud`, ≤ 900 s); `tid` = host; sesión en PostgreSQL con `sub`, `mid` y tenant coincidentes; `ver` vigente; CSRF en mutaciones | `401` / `401 PERMISSIONS_CHANGED` / `403` (CSRF) |
+| 3 | `PermissionGuard` (access) | `@RequirePermission(...)` contra los permisos efectivos de la membresía | `403 FORBIDDEN` |
+| 4 | `TenantStatusGuard` (access) | `@TenantOperation(...)` contra la matriz de multitenancy §5.2 | `403 TENANT_RESTRICTED` |
+
+- **Política de ruta obligatoria.** Una ruta es `@Public('tenant' | 'hub' | 'none')`, o declara `@RequirePermission(...)` o `@AuthenticatedOnly()`, más `@TenantOperation(...)`. Si falta algo o hay contradicciones (por ejemplo, un `@Public` de clase sobre un método con permiso), el guard responde `500` y el barrido de rutas falla.
+- **Lista blanca:** `modules/access/public-routes.ts`. **Precisión del diseño aceptado:** además de health y `GET /public/site`, incluye las rutas del hub y del flujo de entrada de la 3.2b. Ninguna usa el access token de empresa: se autentican con la cookie del hub, la cookie firmada del flujo, el código de autorización o el refresh token, más CSRF.
+- **ESLint (frontera 3):** `@Public()` solo en `health`, `tenancy` e `identity/http`; `APP_GUARD` solo en `access.module.ts`; `useGlobalGuards` prohibido en todo `apps/api/src`.
+- **Permisos efectivos:** unión de los permisos de los roles no archivados de la membresía. Se leen con `yebo_app` y RLS (`PermissionService`), una vez por request y sin caché entre requests.
+- **Matriz de estados:** valor por defecto en código (`tenant-operation.ts`) hasta que existan los planes y `plan_versions.suspension_policy` (Fase 4). `CANCELLED` se divide en el periodo de cierre (30 días desde `cancelled_at`) y lo posterior. Si falta `cancelled_at`, se trata como cerrado (falla cerrado). La fila «Login» se aplica en `GET /auth/start` y en `POST /auth/token`, antes de canjear el código.
+
+### Gestión de accesos (`/api/v1/members`, `/api/v1/roles`)
+
+| Ruta | Permiso | Categoría |
+|---|---|---|
+| `GET /members` | `members.read` | `READ` |
+| `POST /members/:id/suspend` | `members.suspend` | `USERS_REDUCE` |
+| `POST /members/:id/reactivate` | `members.reactivate` | `USERS_ADD` (aumenta el consumo facturable) |
+| `POST /members/:id/sessions/revoke` | `members.sessions.revoke` | `USERS_REDUCE` |
+| `PUT /members/:id/roles` | `roles.assign` | `CONFIGURE` |
+| `GET /roles` | `roles.read` | `READ` |
+| `GET /auth/session` | `@AuthenticatedOnly()` | `READ` (ahora devuelve también los permisos efectivos) |
+
+Reglas de seguridad:
+- **Aislamiento:** un id de otra empresa responde `404`, nunca `403` (§7.1), por RLS y por el filtro de aplicación.
+- **Sobre uno mismo:** nadie puede suspenderse, reactivarse ni cambiar sus propios roles (`403`).
+- **Anti-escalada:** quien asigna debe tener todos los permisos de los roles que asigna y de los que retira. No puede conceder lo que no tiene ni degradar a alguien con más permisos.
+- **Asignar roles:** bloquea la membresía (`FOR UPDATE`), reemplaza sus roles e incrementa `permissions_version` en la misma transacción. Los tokens anteriores reciben `401 PERMISSIONS_CHANGED`.
+- **Suspender:** pasa la membresía a `SUSPENDED` y después cierra sus sesiones en esta empresa. El cambio de estado corta el acceso por sí solo, porque cada request exige membresía `ACTIVE`.
+- **Reactivar:** primero cierra cualquier sesión que hubiera quedado y después pasa a `ACTIVE`, así que no revive sesiones antiguas. Las transiciones no válidas responden `409`.
+- **Datos de las personas:** correo y nombre se leen con `yebo_identity` (`UserDirectoryService`), solo para membresías del propio tenant. `yebo_app` sigue sin acceso a `users`.
+
+### Migración `20261110120000_fase3_3_access` y su reversión
+
+1. Siembra los 6 permisos `ACCESS` y la plantilla `ADMIN` («Administrador»), con `ON CONFLICT DO NOTHING`. La fuente es `permission-catalog.ts` y una prueba compara la base con el código.
+2. `GRANT UPDATE (status, permissions_version, updated_at) ON tenant_memberships TO yebo_app`: un privilegio **por columna** y con RLS forzado (política `tenant_isolation`). Va en la línea de ADR-034 (permisos explícitos con RLS activo) y evita usar `yebo_platform`. `yebo_app` sigue sin poder insertar ni borrar membresías, ni cambiar `billable`, `user_id` ni `tenant_id` (probado).
+
+Reversión manual, como `yebo_owner`, documentada en la cabecera de la migración: `REVOKE` del privilegio y, solo si ningún rol usa ya el catálogo, borrado de los permisos, de la plantilla y de la fila en `_prisma_migrations`. **No se aplicó a `yebo_dev` ni a ninguna base del proyecto**: las pruebas usaron contenedores desechables.
+
+### Pruebas
+
+| Suite | Contenido | Resultado |
+|---|---|---|
+| Unitarias `tenant-operation.spec.ts` | La matriz del código contra la de §5.2 **transcrita del documento**, celda a celda (11 categorías + login × 7 fases). Periodo de cierre y fallo cerrado | ✅ |
+| Unitarias `route-policy.spec.ts` | Políticas completas, incompletas y contradictorias → `500` | ✅ |
+| Integración `access.int-spec.ts` (30) | Detalle en las filas siguientes | ✅ |
+| · Barrido de rutas | El inventario de Nest = las rutas de Express; las públicas son exactamente `PUBLIC_ROUTES`; sin token, toda ruta protegida da `401` | ✅ |
+| · Cada ruta protegida | Sesión revocada, token de otra empresa (§7.2), versión anterior (`PERMISSIONS_CHANGED`), host desconocido (`404`); CSRF | ✅ |
+| · Permisos y aislamiento | Permisos (`403`/`200`); §7.1 (ids de B → `404`); §7.3 (persona en A y B) | ✅ |
+| · Gestión de accesos | Suspensión, reactivación, sesiones sobrantes, acciones sobre uno mismo, anti-escalada y versionado. Concurrencia: 10 rondas de 3 asignaciones simultáneas | ✅ |
+| · Estados del tenant | `PAST_DUE`, `SUSPENDED`, `EXPIRED`, cierre y tras el cierre contra endpoints reales, incluido el login | ✅ |
+| · Catálogo y privilegios | La migración siembra el catálogo del código; privilegio por columna de `yebo_app` y RLS | ✅ |
+| Integración `boundaries.int-spec.ts` | Frontera 3 de ESLint: `@Public`, `APP_GUARD` y `useGlobalGuards` | ✅ |
+
+**Pruebas de mutación** (cada protección desactivada a propósito; la suite debe fallar):
+- **Detectadas:**
+  - sin `AuthenticationGuard` global (22 fallos);
+  - `PermissionGuard` que siempre permite;
+  - `TenantStatusGuard` que siempre permite;
+  - sin comparar `ver`;
+  - sin CSRF;
+  - sin anti-escalada;
+  - sin incrementar la versión;
+  - sin `FOR UPDATE`;
+  - suspender sin cerrar sesiones;
+  - reactivar sin cerrar las sesiones sobrantes.
+- **Mutante equivalente:** quitar `!check.active`, porque una sesión inactiva no devuelve usuario ni tenant, así que las comparaciones siguientes también la rechazan.
+- **Corregidas al revisar las mutaciones:** las tres últimas detectadas sobrevivían a la primera versión de la suite y se reforzaron las pruebas.
+
+### Pendiente y riesgos residuales
+
+| Tema | Situación |
+|---|---|
+| Estado del tenant en caché | El resolver cachea el tenant 60 s (Redis). Un cambio de estado tarda hasta 60 s en aplicarse, salvo que se invalide la entrada. La máquina de estados de la Fase 4 debe llamar a `TenantResolverService.invalidate` (existe desde la 3.1) |
+| Auditoría de denegaciones | Multitenancy §5.4 pide auditar cada denegación por estado. Hoy queda en el log estructurado (`tenant_operation_denied`), hasta que exista la tabla de auditoría |
+| Límites del trial y aviso de `PAST_DUE` | Con los planes (Fase 4) |
+| `support_access_grants` y `platform_users` | Fase 4 (decisión del 2026-11-10) |
+| Filas «Portal público» de la matriz | Se aplicarán con el seguimiento y las reservas públicas (fases de negocio) |
+| `GET /hub/authorize` y la fila «Login» | El hub todavía emite el código para una empresa cerrada, pero el canje en la empresa lo rechaza. Basta para impedir el acceso; filtrar antes es una mejora menor |
+| Permisos y versión en dos consultas | La versión se verifica con `yebo_identity` y los permisos se leen con `yebo_app`. Si los roles cambian entre las dos, la petición usa los permisos más nuevos: la carrera es benigna |
+| Suspensión en dos pasos | Cambio de estado (`yebo_app`) y cierre de sesiones (`yebo_identity`) son transacciones distintas. Si el cierre falla, el acceso ya está cortado y la reactivación cierra las sesiones sobrantes (probado) |
+| Tokens `Bearer` para dispositivos | Fase 14 (identity-and-sessions §9). Hoy solo se acepta la cookie |
+| Gestión de roles (crear y editar) e invitaciones | Fases posteriores. Editar los permisos de un rol obligará a incrementar la versión de todas sus membresías |

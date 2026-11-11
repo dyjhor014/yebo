@@ -11,6 +11,8 @@ export const ErrorCode = z.enum([
   /** El token se emitió con otra versión de permisos: el cliente lo renueva en silencio (identity-and-sessions §7). */
   'PERMISSIONS_CHANGED',
   'FORBIDDEN',
+  /** El estado del tenant (suspendido, vencido, cancelado) no permite esta operación (ADR-023, multitenancy §5). */
+  'TENANT_RESTRICTED',
   'NOT_FOUND',
   'CONFLICT',
   'PAYLOAD_TOO_LARGE',
