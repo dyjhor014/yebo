@@ -33,6 +33,10 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set<string>([
   'SupportAccessLog',
   'SiteVersion',
   'FileAsset',
+  'Location',
+  'Branch',
+  'SalesChannel',
+  'MembershipBranchScope',
 ]);
 
 /**
@@ -70,6 +74,10 @@ export const TENANT_SCOPED_TABLES: readonly string[] = [
   'support_access_logs',
   'site_versions',
   'file_assets',
+  'locations',
+  'branches',
+  'sales_channels',
+  'membership_branch_scopes',
 ];
 
 /**

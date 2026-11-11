@@ -127,6 +127,11 @@ export class TenantsService {
             service: s.service,
           })),
         });
+        // Canal de venta en línea (Fase 6.1, ADR-020: siempre activo). Los mostradores nacen con cada sucursal.
+        await tx.salesChannel.create({
+          data: { tenantId: tenant.id, code: 'ONLINE', name: 'Venta en línea', kind: 'ONLINE' },
+          select: { id: true },
+        });
         const roles = await this.instantiateRoles(tx, tenant.id);
         // Período en la zona horaria de la empresa; PostgreSQL ajusta fin de mes (31 ene + 1 mes = 28/29 feb).
         const [period] = await tx.$queryRaw<{ start: Date; end: Date }[]>`

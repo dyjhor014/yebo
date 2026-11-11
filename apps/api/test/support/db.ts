@@ -11,6 +11,7 @@ export const RESET_TENANT_DATA =
   'role_permissions, roles, tenant_memberships, tenant_module_overrides, subscriptions, tenant_settings, ' +
   'tenant_services, tenant_status_history, tenant_operation_overrides, membership_invitations, membership_status_history, ' +
   'support_access_logs, support_sessions, support_handoffs, support_access_grants, site_versions, file_assets, ' +
+  'membership_branch_scopes, sales_channels, branches, locations, ' +
   'subscription_payments, platform_invoice_lines, platform_invoices, usage_period_calculations, billing_periods, ' +
   'usage_daily_snapshots, users, ' +
   'permissions, ' +

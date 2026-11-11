@@ -10,3 +10,4 @@ export * from './errors';
 export * from './health';
 export * from './public-site';
 export * from './site';
+export * from './locations';

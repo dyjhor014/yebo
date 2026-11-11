@@ -46,6 +46,12 @@ export const PERMISSION_CATALOG = {
     sensitive: true,
     description: 'Editar y publicar el sitio público de la empresa',
   },
+  // Fase 6.1: ubicaciones, sucursales y canales de venta. El ámbito de sucursal de cada persona va con roles.assign.
+  'locations.manage': {
+    module: 'LOCATIONS',
+    sensitive: false,
+    description: 'Gestionar ubicaciones, sucursales y canales de venta',
+  },
 } as const satisfies Record<string, { module: string; sensitive: boolean; description: string }>;
 
 export type PermissionCode = keyof typeof PERMISSION_CATALOG;

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CoreModule } from './infrastructure/core.module';
 import { AccessModule } from './modules/access/access.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { LocationsModule } from './modules/locations/locations.module';
 import { SiteModule } from './modules/site/site.module';
 import { SupportModule } from './modules/support/support.module';
 import { HealthModule } from './modules/health/health.module';
@@ -21,6 +22,7 @@ import { TenancyModule } from './modules/tenancy/tenancy.module';
     BillingModule,
     SupportModule,
     SiteModule,
+    LocationsModule,
   ],
 })
 export class AppModule {}

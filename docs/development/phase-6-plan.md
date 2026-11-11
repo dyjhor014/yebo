@@ -74,3 +74,83 @@
 - Almacenes y secuencias de documentos (F6-Q7).
 - Avisos de vencimiento por correo (Fase 12).
 - Mapa interactivo de ubicaciones.
+
+## Etapa 6.1 · Ubicaciones, sucursales y canales (implementada el 2026-11-10; pendiente de revisión)
+
+### Decisiones de implementación
+
+| Tema | Decisión |
+|---|---|
+| Módulo | `locations` (capa L1): `LocationsService` y controladores de ubicaciones, sucursales, canales y el ámbito de sucursal de cada persona. Contrato en `@yebo/contracts` (`locations.ts`) |
+| Ubicaciones (F6-Q6) | De cada empresa. Nombre único dentro de la empresa. Tipo del catálogo global `location_kinds`; `ubigeo` del INEI opcional (6 dígitos); región y coordenadas opcionales (latitud y longitud, juntas). `tax_zone_code` existe en la tabla para la Fase 11, pero la API no lo expone todavía |
+| Archivar, no borrar | Ubicaciones y sucursales se archivan y se restauran; `yebo_app` no tiene DELETE. Una ubicación no se archiva mientras tenga sucursales activas (409 con cuántas). Una sucursal nueva, movida o restaurada exige una ubicación activa. La ubicación se bloquea (`FOR UPDATE` al archivar, `FOR SHARE` al usarla), así que archivar y crear una sucursal a la vez no deja una sucursal activa en una ubicación archivada |
+| Sucursales | Código en mayúsculas (`^[A-Z0-9][A-Z0-9-]{0,11}$`), único y **que no cambia**: `yebo_app` no tiene UPDATE sobre la columna. Hasta 4 teléfonos. Punto de recojo y punto de recepción de encomiendas |
+| Canales (ADR-020) | En el alta, cada empresa recibe el canal `ONLINE`; la migración lo crea para las que ya existen. Cada sucursal nace con su mostrador (`MOSTRADOR-<código>`) en la misma transacción. Al archivar la sucursal, su mostrador se desactiva, y vuelve a activarse al restaurarla. Un mostrador de una sucursal archivada no se reactiva (409). Los canales se renombran y se activan o desactivan; la clase, el código y la sucursal no cambian (privilegio por columna). Las agencias externas, en la 6.5 |
+| Ámbito de sucursal (F6-Q4) | `PUT /members/{id}/branches` con `roles.assign` (CONFIGURE). Solo sucursales activas de la empresa; vacío = todas. Sube la versión de permisos de la membresía, como un cambio de roles. La lista de miembros incluye `branchIds`. Se aplica a partir de la venta (Fase 8) |
+| Pantallas | Esta etapa es solo la API. Las pantallas de ubicaciones, sucursales y flota irán en el panel de la empresa con el editor de la 6.4, con maqueta previa |
+
+### API de la empresa
+
+| Ruta | Permiso y categoría |
+|---|---|
+| `GET /api/v1/locations` (con los tipos), `POST`, `PUT /{id}`, `POST /{id}/archive`, `POST /{id}/restore` | `locations.manage`, READ / CONFIGURE |
+| `GET /api/v1/branches`, `POST`, `PUT /{id}` (sin código), `POST /{id}/archive`, `POST /{id}/restore` | `locations.manage`, READ / CONFIGURE |
+| `GET /api/v1/sales-channels`, `PUT /{id}` (nombre y activo) | `locations.manage`, READ / CONFIGURE |
+| `PUT /api/v1/members/{id}/branches` | `roles.assign`, CONFIGURE |
+
+### Base de datos (migración `20261113010000_fase6_1_locations_branches`, reversión en su cabecera)
+
+- **Tablas:**
+  - `location_kinds` 🌐, sembrada;
+  - `locations`, `branches`, `sales_channels` y `membership_branch_scopes`, de tenant y con RLS forzado.
+- **CHECK:**
+  - nombre recortado de 2 a 80 caracteres;
+  - formato del ubigeo y del código;
+  - coordenadas juntas y en rango;
+  - teléfonos como lista de 4 como mucho;
+  - mostrador ⇔ con sucursal;
+  - `ONLINE` ⇔ código `ONLINE`.
+- **UNIQUE:**
+  - (empresa, nombre) de la ubicación;
+  - (empresa, código) de la sucursal y del canal;
+  - (empresa, sucursal, clase) del canal: un mostrador por sucursal.
+- **Privilegios:**
+  - `yebo_app`: SELECT e INSERT, y UPDATE por columnas, sin DELETE, salvo en el ámbito de sucursal, que es una relación;
+  - `yebo_backoffice`: SELECT, más INSERT en `sales_channels` para el alta.
+- **Permiso `locations.manage`:** módulo `LOCATIONS`, en la plantilla Administrador y en los roles Administrador existentes (sube su `permissions_version`).
+
+### Pruebas
+
+- **`locations.int-spec` (8):**
+  - el alta crea el canal `ONLINE`, y el catálogo de tipos es global;
+  - ubicaciones: validaciones (ubigeo, coordenadas, tipo, campos extra), nombre único por empresa y edición;
+  - sucursales:
+    - nacen con su mostrador, y el código se normaliza, es único y no se edita;
+    - archivar: la ubicación no se archiva con sucursales activas, y el mostrador sigue a su sucursal;
+    - sin sucursales nuevas ni restauradas en una ubicación archivada;
+  - aislamiento: 404 y 400 entre empresas, y RLS sin contexto y con el de otra empresa;
+  - reglas de la base: no se puede cambiar el código ni la clase o la sucursal de un canal, ni borrar (42501); un segundo `ONLINE` o un segundo mostrador por sucursal → 23505; un mostrador sin sucursal → 23514;
+  - ámbito de sucursal: asignar, listar, subir la versión de permisos; sucursales archivadas, de otra empresa o repetidas → 400;
+  - sin permiso → 403 y sin sesión → 401;
+  - empresa suspendida: consulta, pero no configura.
+- **Inventario actualizado:**
+  - matriz de privilegios: +10 de tabla y +19 de columna, exactamente las concedidas;
+  - catálogo de permisos (`access.int-spec` reconoce la siembra de esta migración);
+  - registro de modelos de tenant;
+  - reinicio de datos de las pruebas.
+- **Mutaciones (7), todas detectadas:**
+  - sucursal sin mostrador;
+  - archivar una ubicación con sucursales;
+  - un mostrador que no sigue a su sucursal;
+  - ámbito con sucursales archivadas;
+  - reactivar el mostrador de una sucursal archivada;
+  - no subir la versión de permisos;
+  - una sucursal en una ubicación archivada.
+- **Totales:**
+  - integración: 26 suites y 393 pruebas ✅;
+  - E2E: 25 + 3 opcionales ✅ (el alta de empresas cambió);
+  - tipos, lint, formato y unitarias ✅.
+
+### Pendiente
+
+- Migración a `yebo_dev`: con autorización y copia previa.

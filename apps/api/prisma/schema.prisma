@@ -83,6 +83,9 @@ model Tenant {
   supportGrants      SupportAccessGrant[]
   siteVersions       SiteVersion[]
   fileAssets         FileAsset[]
+  locations          Location[]
+  branches           Branch[]
+  salesChannels      SalesChannel[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -180,6 +183,7 @@ model TenantMembership {
   invitationsAccepted MembershipInvitation[]    @relation("InvitationAcceptedAs")
   statusHistory       MembershipStatusHistory[]
   supportApprovals    SupportAccessGrant[]
+  branchScopes        MembershipBranchScope[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, userId])
@@ -1296,4 +1300,118 @@ model FileAsset {
   @@unique([tenantId, id])
   @@index([tenantId, kind])
   @@map("file_assets")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 6.1 · Ubicaciones, sucursales y canales de venta (data-dictionary §2–3; F6-Q4, F6-Q6 y F6-Q7)
+// ---------------------------------------------------------------------------------------------------------------
+
+/// 🌐 Catálogo global de tipos de ubicación (ciudad, puerto, embarcadero, terminal). Sembrado por migración.
+model LocationKind {
+  code      String @id
+  name      String
+  sortOrder Int    @map("sort_order")
+
+  locations Location[]
+
+  @@map("location_kinds")
+}
+
+/// Ubicación de la empresa (F6-Q6: de cada empresa, con el ubigeo del INEI opcional). Se archiva, no se borra.
+model Location {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  name        String
+  kindCode    String    @map("kind_code")
+  ubigeo      String?   @db.Char(6)
+  region      String?
+  lat         Decimal?  @db.Decimal(9, 6)
+  lng         Decimal?  @db.Decimal(9, 6)
+  /// Zona tributaria para reglas regionales (Fase 11); sin uso todavía.
+  taxZoneCode String?   @map("tax_zone_code")
+  archivedAt  DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  kind     LocationKind @relation(fields: [kindCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  branches Branch[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, name])
+  @@map("locations")
+}
+
+/// Sucursal (agencia propia, terminal, oficina) en una ubicación. El código no cambia. Se archiva, no se borra.
+model Branch {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  tenantId         String    @map("tenant_id") @db.Uuid
+  locationId       String    @map("location_id") @db.Uuid
+  code             String
+  name             String
+  address          String
+  phones           Json      @default("[]")
+  isPickupPoint    Boolean   @default(false) @map("is_pickup_point")
+  isReceptionPoint Boolean   @default(false) @map("is_reception_point")
+  archivedAt       DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  location Location                @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  channels SalesChannel[]
+  scopes   MembershipBranchScope[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, locationId])
+  @@map("branches")
+}
+
+enum SalesChannelKind {
+  COUNTER
+  ONLINE
+  EXTERNAL_AGENCY
+  CALL_CENTER
+  API
+
+  @@map("sales_channel_kind")
+}
+
+/// Canal de venta (ADR-020: siempre activo). Un mostrador por sucursal (COUNTER, con su sucursal) y un canal
+/// ONLINE por empresa (código fijo `ONLINE`), creados por defecto. Las agencias externas, en la 6.5.
+model SalesChannel {
+  id        String           @id @default(uuid(7)) @db.Uuid
+  tenantId  String           @map("tenant_id") @db.Uuid
+  code      String
+  name      String
+  kind      SalesChannelKind
+  branchId  String?          @map("branch_id") @db.Uuid
+  isActive  Boolean          @default(true) @map("is_active")
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  branch Branch? @relation(fields: [tenantId, branchId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  /// Un mostrador por sucursal (las demás clases no llevan sucursal: NULL no choca).
+  @@unique([tenantId, branchId, kind])
+  @@map("sales_channels")
+}
+
+/// Sucursales a las que accede una membresía (F6-Q4). Sin filas = todas. Se aplica a partir de la venta (Fase 8).
+model MembershipBranchScope {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  membershipId String   @map("membership_id") @db.Uuid
+  branchId     String   @map("branch_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  membership TenantMembership @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Cascade, onUpdate: Restrict)
+  branch     Branch           @relation(fields: [tenantId, branchId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([tenantId, membershipId, branchId])
+  @@index([tenantId, branchId])
+  @@map("membership_branch_scopes")
 }

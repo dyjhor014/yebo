@@ -103,7 +103,7 @@ Los `enum` son cerrados; los `→ catálogo` son tablas extensibles.
 - **membership_roles:** (`membership_id`, `role_id`) PK.
 
 ### membership_branch_scopes
-(`membership_id`, `branch_id`) PK. Si no hay filas, la membresía accede a todas las sucursales.
+(`membership_id`, `branch_id`) PK. Si no hay filas, la membresía accede a todas las sucursales. Fase 6.1 (F6-Q4): se gestiona con `roles.assign` y sube la versión de permisos de la membresía; se aplica a partir de la venta (Fase 8).
 
 ### membership_invitations
 `email citext` (normalizado), `role_ids uuid[]` (1–20), `token_hash bytea` (SHA-256 del secreto, UNIQUE), `expires_at` (72 h; máximo 7 días por CHECK), `invited_by_membership_id?` **o** `invited_by_platform_user_id?` (exactamente uno), `accepted_at?`, `accepted_membership_id?`, `revoked_at?`, `created_at`. RLS de tenant: el token del enlace lleva el id del tenant (`<tenant>.<secreto>`) para fijar el contexto antes de buscar el hash. Fase 4.3b.
@@ -132,17 +132,17 @@ Ver [identity-and-sessions.md](../architecture/identity-and-sessions.md).
 ## 3. Organización y canales
 
 ### locations
-`name`, `kind → location_kinds (catálogo: ciudad, puerto, embarcadero, terminal)`, `ubigeo?`, `region?`, `lat?`, `lng?`, `tax_zone_code?` (para reglas tributarias regionales), `archived_at?`.
+`name`, `kind → location_kinds (catálogo: ciudad, puerto, embarcadero, terminal)`, `ubigeo?`, `region?`, `lat?`, `lng?`, `tax_zone_code?` (para reglas tributarias regionales), `archived_at?`. UNIQUE (tenant_id, name). Fase 6.1: `location_kinds` 🌐 es global (`code` PK: `CITY`, `PORT`, `LANDING`, `TERMINAL`); `ubigeo` de 6 dígitos (INEI); latitud y longitud van juntas.
 
 ### branches
-`location_id`, `code`, `name`, `address`, `phones jsonb`, `is_pickup_point bool`, `is_reception_point bool`, `archived_at?`. UNIQUE (tenant_id, code).
+`location_id`, `code`, `name`, `address`, `phones jsonb`, `is_pickup_point bool`, `is_reception_point bool`, `archived_at?`. UNIQUE (tenant_id, code). Fase 6.1: el `code` (`^[A-Z0-9][A-Z0-9-]{0,11}$`) no cambia (privilegio por columna); cada sucursal nace con su mostrador.
 
 ### warehouses / warehouse_bins
 - **warehouses:** `branch_id?`, `code`, `name`, `kind enum AGENCY|SORTING_CENTER|DEPOT`, `archived_at?`.
 - **warehouse_bins:** `warehouse_id`, `code`, `description`.
 
 ### sales_channels
-`code`, `name`, `kind enum COUNTER|ONLINE|EXTERNAL_AGENCY|CALL_CENTER|API`, `branch_id?`, `is_active`.
+`code`, `name`, `kind enum COUNTER|ONLINE|EXTERNAL_AGENCY|CALL_CENTER|API`, `branch_id?`, `is_active`. Fase 6.1: `COUNTER` ⇔ con sucursal, UNIQUE (tenant_id, branch_id, kind) (un mostrador por sucursal); `ONLINE` ⇔ `code = 'ONLINE'` (uno por empresa, creado en el alta). La clase, el código y la sucursal no cambian.
 
 ### agencies (módulo `AGENCIES`, D7 — por validar)
 `sales_channel_id`, `legal_name`, `tax_id`, `contact jsonb`, `status enum ACTIVE|SUSPENDED|TERMINATED`, `settlement_frequency?`.
