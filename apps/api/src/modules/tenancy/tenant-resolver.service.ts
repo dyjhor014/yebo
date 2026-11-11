@@ -11,6 +11,8 @@ export interface ResolvedTenant {
   status: 'TRIAL' | 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED' | 'CANCELLED' | 'EXPIRED';
   /** ISO 8601. Marca el inicio del periodo de cierre de `CANCELLED` (multitenancy §5.2). */
   cancelledAt: string | null;
+  /** Zona horaria IANA de la empresa (Fase 6.2: «hoy» de la empresa para los vencimientos). */
+  timezone: string;
 }
 
 /** TTL corto (multitenancy §2): un cambio de dominio o de estado se refleja en segundos. */
@@ -46,7 +48,9 @@ export class TenantResolverService {
       where: { host },
       select: {
         verificationStatus: true,
-        tenant: { select: { id: true, slug: true, tradeName: true, status: true, cancelledAt: true } },
+        tenant: {
+          select: { id: true, slug: true, tradeName: true, status: true, cancelledAt: true, timezone: true },
+        },
       },
     });
     const tenant: ResolvedTenant | null =
@@ -87,6 +91,7 @@ export class TenantResolverService {
         tradeName: true,
         status: true,
         cancelledAt: true,
+        timezone: true,
         domains: { where: { isPrimary: true, verificationStatus: 'VERIFIED' }, select: { host: true } },
       },
     });
@@ -98,6 +103,7 @@ export class TenantResolverService {
       tradeName: t.tradeName,
       status: t.status,
       cancelledAt: t.cancelledAt?.toISOString() ?? null,
+      timezone: t.timezone,
       primaryHost,
     };
   }
@@ -132,6 +138,6 @@ export class TenantResolverService {
 }
 
 function cacheKey(host: string): string {
-  // v2 (Fase 3.3): el valor incluye `cancelledAt`; las entradas con la forma anterior no se leen.
-  return `tenant:host:v2:${host}`;
+  // v3 (Fase 6.2): el valor incluye `timezone` (v2, Fase 3.3: `cancelledAt`). Las entradas con otra forma no se leen.
+  return `tenant:host:v3:${host}`;
 }

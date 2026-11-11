@@ -35,7 +35,12 @@ export function configureApp(app: NestExpressApplication, env: Env, options: { s
   app.useBodyParser('json', { limit: BODY_LIMIT });
   app.useBodyParser('urlencoded', { limit: BODY_LIMIT, extended: false });
   // Fase 5.2: imágenes del sitio en el cuerpo, sin multipart (POST /site/assets). El tipo real lo comprueba sharp.
-  app.useBodyParser('raw', { type: ['image/png', 'image/jpeg', 'image/webp'], limit: '5mb' });
+  // Archivos binarios (5.2: imágenes del sitio; 6.2: documentos de vehículos, también PDF). El límite general es el
+  // mayor (10 MB); cada servicio impone el suyo (el sitio, 5 MB) y comprueba el tipo por el contenido.
+  app.useBodyParser('raw', {
+    type: ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'],
+    limit: '10mb',
+  });
   app.useLogger(app.get(Logger));
   app.setGlobalPrefix('api');
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });

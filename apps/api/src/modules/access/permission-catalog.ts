@@ -52,6 +52,12 @@ export const PERMISSION_CATALOG = {
     sensitive: false,
     description: 'Gestionar ubicaciones, sucursales y canales de venta',
   },
+  // Fase 6.2: vehículos, sus tipos y sus documentos (con archivos privados).
+  'fleet.manage': {
+    module: 'FLEET',
+    sensitive: false,
+    description: 'Gestionar los vehículos y sus documentos',
+  },
 } as const satisfies Record<string, { module: string; sensitive: boolean; description: string }>;
 
 export type PermissionCode = keyof typeof PERMISSION_CATALOG;

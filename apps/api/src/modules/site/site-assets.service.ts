@@ -25,13 +25,17 @@ const MAX_PIXELS = 50_000_000;
 
 export const faviconKey = (storageKey: string) => `${storageKey}.favicon.png`;
 
+/** Solo los archivos del sitio: los documentos de vehículos (6.2) comparten la tabla, pero no son del sitio. */
+const SITE_KINDS = { in: ['SITE_LOGO', 'SITE_HERO'] as ('SITE_LOGO' | 'SITE_HERO')[] };
+
 type AssetRow = {
   id: string;
-  kind: 'SITE_LOGO' | 'SITE_HERO';
+  kind: string;
   mime: string;
   sizeBytes: number;
-  width: number;
-  height: number;
+  /** Nulos solo en un PDF (6.2); las imágenes del sitio siempre los tienen (CHECK file_assets_values). */
+  width: number | null;
+  height: number | null;
   createdAt: Date;
 };
 
@@ -53,6 +57,10 @@ export class SiteAssetsService {
         'Envía la imagen como PNG, JPEG o WebP en el cuerpo de la petición',
         400,
       );
+    }
+    // El analizador admite hasta 10 MB (documentos, 6.2); las imágenes del sitio, hasta 5 MB.
+    if (input.length > SITE_ASSET_MAX_INPUT_BYTES) {
+      throw new AppError('PAYLOAD_TOO_LARGE', 'La imagen pesa más de 5 MB', 413);
     }
     const tenantId = this.tenantId();
     const actor = this.actor();
@@ -134,7 +142,11 @@ export class SiteAssetsService {
 
   async list(): Promise<SiteAsset[]> {
     const rows = await this.db.transaction((tx) =>
-      tx.fileAsset.findMany({ where: { status: 'READY' }, select: SELECT, orderBy: { createdAt: 'desc' } }),
+      tx.fileAsset.findMany({
+        where: { status: 'READY', kind: SITE_KINDS },
+        select: SELECT,
+        orderBy: { createdAt: 'desc' },
+      }),
     );
     return rows.map(toAsset);
   }
@@ -150,7 +162,7 @@ export class SiteAssetsService {
       // Mismo candado que las escrituras del sitio: nadie guarda una referencia a este archivo mientras se retira.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`site:${this.tenantId()}`}, 0))`;
       const row = await tx.fileAsset.findFirst({
-        where: { id: assetId, status: 'READY' },
+        where: { id: assetId, status: 'READY', kind: SITE_KINDS },
         select: { kind: true, storageKey: true },
       });
       if (!row) throw new AppError('NOT_FOUND', 'Recurso no encontrado', 404);
@@ -177,7 +189,7 @@ export class SiteAssetsService {
     if (!/^[0-9a-f-]{36}$/.test(assetId)) return null;
     const row = await this.db.transaction((tx) =>
       tx.fileAsset.findFirst({
-        where: { id: assetId, status: 'READY', visibility: 'PUBLIC' },
+        where: { id: assetId, status: 'READY', visibility: 'PUBLIC', kind: SITE_KINDS },
         select: { kind: true, storageKey: true, mime: true, checksumSha256: true },
       }),
     );
@@ -227,8 +239,8 @@ function toAsset(row: AssetRow): SiteAsset {
     kind: row.kind === 'SITE_LOGO' ? 'logo' : 'hero',
     mime: row.mime,
     sizeBytes: row.sizeBytes,
-    width: row.width,
-    height: row.height,
+    width: row.width ?? 0,
+    height: row.height ?? 0,
     createdAt: row.createdAt.toISOString(),
     url: `/api/v1/public/assets/${row.id}`,
   };

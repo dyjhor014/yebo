@@ -37,6 +37,9 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set<string>([
   'Branch',
   'SalesChannel',
   'MembershipBranchScope',
+  'VehicleType',
+  'Vehicle',
+  'VehicleDocument',
 ]);
 
 /**
@@ -78,6 +81,9 @@ export const TENANT_SCOPED_TABLES: readonly string[] = [
   'branches',
   'sales_channels',
   'membership_branch_scopes',
+  'vehicle_types',
+  'vehicles',
+  'vehicle_documents',
 ];
 
 /**

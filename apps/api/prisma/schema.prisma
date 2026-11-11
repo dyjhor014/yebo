@@ -86,6 +86,9 @@ model Tenant {
   locations          Location[]
   branches           Branch[]
   salesChannels      SalesChannel[]
+  vehicleTypes       VehicleType[]
+  vehicles           Vehicle[]
+  vehicleDocuments   VehicleDocument[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -1256,6 +1259,8 @@ model SiteVersion {
 enum FileAssetKind {
   SITE_LOGO
   SITE_HERO
+  /// Fase 6.2: documento de un vehículo (PDF, JPEG o PNG), siempre PRIVATE.
+  VEHICLE_DOCUMENT
 
   @@map("file_asset_kind")
 }
@@ -1287,15 +1292,17 @@ model FileAsset {
   storageKey     String                @unique @map("storage_key")
   mime           String
   sizeBytes      Int                   @map("size_bytes")
-  width          Int
-  height         Int
+  /// Nulo en un PDF (Fase 6.2).
+  width          Int?
+  height         Int?
   checksumSha256 Bytes                 @map("checksum_sha256")
   originalName   String?               @map("original_name")
   uploadedByKind MembershipChangeActor @map("uploaded_by_kind")
   uploadedById   String                @map("uploaded_by_id") @db.Uuid
   createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  vehicleDocuments VehicleDocument[]
 
   @@unique([tenantId, id])
   @@index([tenantId, kind])
@@ -1414,4 +1421,125 @@ model MembershipBranchScope {
   @@id([tenantId, membershipId, branchId])
   @@index([tenantId, branchId])
   @@map("membership_branch_scopes")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 6.2 · Flota (data-dictionary §4; F6-Q3 y F6-Q5)
+// ---------------------------------------------------------------------------------------------------------------
+
+/// 🌐 Sugerencias de tipos de vehículo (bus, lancha, motonave…). Sembrado por migración.
+model VehicleTypeCatalog {
+  code      String          @id
+  name      String
+  modality  ServiceModality
+  sortOrder Int             @map("sort_order")
+
+  types VehicleType[]
+
+  @@map("vehicle_type_catalog")
+}
+
+/// Tipo de vehículo de la empresa (abierto y extensible). La modalidad no cambia: sus vehículos la heredan por FK.
+model VehicleType {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  tenantId    String          @map("tenant_id") @db.Uuid
+  name        String
+  modality    ServiceModality
+  catalogCode String?         @map("catalog_code")
+  archivedAt  DateTime?       @map("archived_at") @db.Timestamptz(6)
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  catalog  VehicleTypeCatalog? @relation(fields: [catalogCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  vehicles Vehicle[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, name])
+  /// Destino de la FK de vehicles: el vehículo y su tipo tienen la misma modalidad.
+  @@unique([tenantId, id, modality])
+  @@map("vehicle_types")
+}
+
+enum VehicleStatus {
+  ACTIVE
+  MAINTENANCE
+  OUT_OF_SERVICE
+  RETIRED
+
+  @@map("vehicle_status")
+}
+
+enum VehicleOwnership {
+  OWN
+  THIRD_PARTY
+
+  @@map("vehicle_ownership")
+}
+
+/// Vehículo (bus, lancha…). El código no cambia; la placa o matrícula es única en la empresa. Se retira, no se borra.
+model Vehicle {
+  id              String           @id @default(uuid(7)) @db.Uuid
+  tenantId        String           @map("tenant_id") @db.Uuid
+  code            String
+  name            String
+  vehicleTypeId   String           @map("vehicle_type_id") @db.Uuid
+  modality        ServiceModality
+  registrationId  String           @map("registration_id")
+  status          VehicleStatus    @default(ACTIVE)
+  ownership       VehicleOwnership @default(OWN)
+  /// { passengers, weightKg, volumeM3 } (validado con Zod; NominalCapacitySchema).
+  nominalCapacity Json             @default("{}") @map("nominal_capacity")
+  features        Json             @default("[]")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  type      VehicleType       @relation(fields: [tenantId, vehicleTypeId, modality], references: [tenantId, id, modality], onDelete: Restrict, onUpdate: Restrict)
+  documents VehicleDocument[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@unique([tenantId, registrationId])
+  @@index([tenantId, vehicleTypeId])
+  @@map("vehicles")
+}
+
+/// 🌐 Tipos de documento de un vehículo (SOAT, revisión técnica, certificados…). `modality` nula = cualquiera.
+model VehicleDocumentType {
+  code      String           @id
+  name      String
+  modality  ServiceModality?
+  sortOrder Int              @map("sort_order")
+
+  documents VehicleDocument[]
+
+  @@map("vehicle_document_types")
+}
+
+/// Documento de un vehículo con su vencimiento y, opcionalmente, su archivo privado. Una renovación es un documento
+/// nuevo; el anterior queda como historia. Se archiva (un error), no se borra.
+model VehicleDocument {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  vehicleId   String    @map("vehicle_id") @db.Uuid
+  typeCode    String    @map("type_code")
+  number      String
+  issuedOn    DateTime? @map("issued_on") @db.Date
+  expiresOn   DateTime? @map("expires_on") @db.Date
+  fileAssetId String?   @map("file_asset_id") @db.Uuid
+  archivedAt  DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant  Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  vehicle Vehicle             @relation(fields: [tenantId, vehicleId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  type    VehicleDocumentType @relation(fields: [typeCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  file    FileAsset?          @relation(fields: [tenantId, fileAssetId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  /// Un archivo pertenece a un solo documento.
+  @@unique([tenantId, fileAssetId])
+  @@index([tenantId, vehicleId])
+  @@map("vehicle_documents")
 }

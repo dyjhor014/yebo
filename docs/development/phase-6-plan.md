@@ -153,4 +153,108 @@
 
 ### Pendiente
 
+- ✅ Migración aplicada a `yebo_dev` el 2026-11-10, con copia previa (`~/yebo-backups/yebo_dev-antes-6.1-20261110203203.dump`).
+
+## Etapa 6.2 · Flota (implementada el 2026-11-11; pendiente de revisión)
+
+### Decisiones de implementación
+
+| Tema | Decisión |
+|---|---|
+| Módulo | `fleet` (capa L1): `FleetService` (tipos y vehículos), `VehicleDocumentsService` (documentos y archivos) y `FleetContext` (empresa, autor, reloj y «hoy» de la empresa). Contrato en `@yebo/contracts` (`fleet.ts`) |
+| Tipos de vehículo | De cada empresa, con una sugerencia opcional del catálogo global `vehicle_type_catalog` (bus, minibús, minivan, auto, camión, lancha, motonave, deslizador, chata y bote). Un tipo solo puede ser de una modalidad que la empresa opera (`tenant_services`), y la sugerencia debe ser de la misma modalidad. Nombre único; la modalidad no cambia. No se archiva mientras tenga vehículos sin retirar (409) |
+| Vehículos | Código en mayúsculas, único y **que no cambia**. Placa o matrícula en mayúsculas y única en la empresa (409 que dice cuál de las dos choca). La modalidad se **hereda del tipo** con una FK compuesta (tenant, tipo, modalidad): cambiar de tipo solo es posible dentro de la misma modalidad, y la base lo impide aunque falle la aplicación. Estado (activo, mantenimiento, fuera de servicio, retirado), propiedad (F6-Q3: propia o de terceros), capacidad nominal (pasajeros, kg y m³) y hasta 20 características. Se retira; no se borra |
+| Documentos (F6-Q5) | Tipos del catálogo global `vehicle_document_types`: SOAT, revisión técnica y tarjeta de propiedad (terrestre); certificado de matrícula y de seguridad (fluvial); póliza de seguro y otro (cualquiera). El tipo debe aplicar a la modalidad del vehículo y no cambia. **Renovar es crear un documento nuevo**: el anterior queda como historia y el resumen del vehículo toma, de cada tipo, el de vencimiento más lejano. Un documento cargado por error se archiva |
+| Estado | `documentStatus` y `documentsSummary` en contratos: vencido; por vencer (de 0 a 30 días, incluido el mismo día); vigente; sin vencimiento. El resumen del vehículo es el peor estado, con el próximo vencimiento. «Hoy» es la fecha de calendario en la zona horaria de la empresa: el tenant resuelto por el host ahora incluye `timezone` (clave de caché `tenant:host:v3`) |
+| Archivos (F6-Q5) | `POST /vehicle-documents/files` con el archivo en el cuerpo (PDF, JPEG o PNG; hasta 10 MB, si no 413). Se comprueba por el **contenido**: un PDF debe empezar por `%PDF-` y terminar en `%%EOF`; las imágenes se recodifican en su formato, sin metadatos (EXIF y GPS), aplicando la orientación y reducidas a 4000 px como mucho. Se guardan como `file_assets` `VEHICLE_DOCUMENT` y `PRIVATE`. Un archivo es de un solo documento (UNIQUE); al reemplazarlo, el anterior pasa a `DELETED` y su objeto se borra |
+| Descarga | `GET /vehicles/{id}/documents/{doc}/file` con `fleet.manage`: siempre como adjunto (`Content-Disposition: attachment`), con `Content-Security-Policy: default-src 'none'; sandbox`, `nosniff` y `Cache-Control: private, no-store`. Un PDF nunca se abre dentro de la aplicación ni se publica por URL; el portal y las rutas del sitio no ven estos archivos |
+| Sitio (5.2) | El analizador binario admite ahora hasta 10 MB y PDF, para los documentos; el sitio impone sus 5 MB (413) e ignora los archivos que no son suyos al listar, retirar y servir. Al comprobarlo se encontró que, sin ese filtro, «retirar un archivo del sitio» habría podido retirar el documento de un vehículo |
+
+### API de la empresa (permiso `fleet.manage`)
+
+| Ruta | Categoría |
+|---|---|
+| `GET /api/v1/vehicle-types` (con el catálogo), `POST`, `PUT /{id}` (sin modalidad), `POST /{id}/archive`, `POST /{id}/restore` | READ / CONFIGURE |
+| `GET /api/v1/vehicles`, `POST`, `PUT /{id}` (sin código) | READ / CONFIGURE |
+| `GET /api/v1/vehicles/{id}/documents` (con los tipos que aplican), `POST`, `PUT /{doc}`, `POST /{doc}/archive`, `POST /{doc}/restore` | READ / CONFIGURE |
+| `GET /api/v1/vehicles/{id}/documents/{doc}/file` | READ |
+| `POST /api/v1/vehicle-documents/files` | CONFIGURE |
+
+### Base de datos (migración `20261113020000_fase6_2_fleet`, reversión en su cabecera)
+
+- **Tablas:**
+  - `vehicle_type_catalog` 🌐 y `vehicle_document_types` 🌐, sembradas;
+  - `vehicle_types`, `vehicles` y `vehicle_documents`, de tenant y con RLS forzado.
+- **CHECK:**
+  - formato del código y de la placa;
+  - longitudes;
+  - capacidad nominal como objeto y hasta 20 características;
+  - el vencimiento de un documento no es anterior a su emisión.
+- **UNIQUE y FK:**
+  - (empresa, nombre) del tipo;
+  - (empresa, código) y (empresa, placa) del vehículo;
+  - (empresa, archivo) del documento;
+  - FK compuesta del vehículo a (empresa, tipo, modalidad).
+- **`file_assets`:**
+  - nuevo tipo `VEHICLE_DOCUMENT`;
+  - ancho y alto nulos solo en un PDF;
+  - hasta 10 MB;
+  - CHECK por tipo: los documentos son `PRIVATE` (PDF, JPEG o PNG) y el sitio, `PUBLIC`, imágenes de hasta 5 MB. El valor nuevo del enum se compara como texto, porque no se puede usar en la misma transacción en que se añade.
+- **Privilegios:**
+  - `yebo_app`: SELECT e INSERT, y UPDATE por columnas, sin DELETE. Sin UPDATE de la modalidad del tipo, del código ni de la modalidad del vehículo, ni del tipo o el vehículo de un documento;
+  - `yebo_backoffice`: SELECT.
+- **Permiso `fleet.manage`:** módulo `FLEET`, en la plantilla Administrador y en los roles Administrador existentes.
+
+### Pruebas
+
+- **Contratos (6 nuevas, 17 en total):** `documentStatus` (límites de 0, 30 y 31 días); `documentsSummary` (sin documentos, renovación como historia, peor estado y próximo vencimiento); normalización del código y de la placa; el vencimiento no es anterior a la emisión.
+- **`fleet.int-spec` (9), contra PostgreSQL, Redis y Garage reales:**
+  - tipos: catálogo, modalidad que la empresa no opera, sugerencia de otra modalidad, nombre repetido y modalidad no editable;
+  - vehículos: normalización, código o placa repetidos (409 con el motivo exacto), la misma placa en otra empresa sí, cambio a un tipo de otra modalidad o de otra empresa → 400, el código no se edita;
+  - archivar un tipo con vehículos sin retirar → 409; un vehículo en un tipo archivado → 400;
+  - archivos:
+    - un PDF válido y una foto JPEG con EXIF, que se guarda sin metadatos;
+    - se rechazan un HTML presentado como PDF, un PDF sin final, un GIF presentado como PNG y datos que no son imagen (400);
+    - más de 10 MB → 413, y un tipo de cuerpo no admitido → 400;
+  - documentos:
+    - tipos según la modalidad;
+    - estado por vencer y vencido, con el resumen del vehículo;
+    - el mismo archivo en dos documentos → 409; cambiar el tipo → 400;
+    - la renovación deja el anterior como historia;
+  - descarga: adjunto con su nombre, CSP `sandbox`, `no-store` y `nosniff`, con los mismos bytes. Otra empresa → 404; sin sesión → 401. El portal y las rutas del sitio no ven el archivo; otra empresa no puede referenciarlo;
+  - reemplazar el archivo retira el anterior (`DELETED` y objeto borrado); archivar un documento cambia el resumen;
+  - reglas de la base:
+    - no se pueden cambiar el código ni la modalidad, ni el tipo de un documento, ni borrar (42501);
+    - un vehículo con un tipo de otra modalidad → 23503 (FK compuesta);
+    - un documento público o un PDF del sitio → 23514;
+    - sin contexto, 0 filas;
+  - aislamiento, sin permiso → 403 (también la descarga); empresa suspendida: consulta y descarga, pero no configura ni sube.
+- **Inventario actualizado:**
+  - matriz de privilegios: +10 de tabla y +18 de columna, exactamente las concedidas;
+  - siembra de permisos de `access.int-spec`;
+  - registro de modelos de tenant;
+  - reinicio de datos de las pruebas.
+- **Mutaciones (11), todas detectadas:**
+  - modalidad no operada;
+  - sugerencia de otra modalidad;
+  - archivar un tipo con vehículos;
+  - tipo archivado;
+  - cambio de modalidad;
+  - tipo de documento de otra modalidad;
+  - cambiar el tipo de un documento;
+  - PDF sin final;
+  - imagen guardada sin recodificar;
+  - archivo reemplazado que no se retira;
+  - descarga en línea en vez de adjunta.
+- **Hallazgos por el camino:**
+  - `uniqueTarget` daba un 500 en lugar de 409 y confundía placa con código: Prisma no siempre informa `meta.target`, y una cadena vacía se tomaba como «no es duplicado». Ahora busca la columna en todo `meta`;
+  - la prueba de reglas tomaba la única conexión de su pool y luego pedía otra: esperaba indefinidamente y Jest no terminaba. Era un error de la prueba, no de la API.
+- **Totales:**
+  - integración: 27 suites y 402 pruebas ✅;
+  - E2E: 25 + 3 opcionales ✅;
+  - tipos, lint, formato y unitarias ✅.
+
+### Pendiente
+
 - Migración a `yebo_dev`: con autorización y copia previa.
+- Limpieza de archivos subidos que nunca se usaron en un documento (como los del sitio): tarea programada, fuera de la 6.2.
