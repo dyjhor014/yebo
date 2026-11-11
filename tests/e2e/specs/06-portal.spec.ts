@@ -173,6 +173,86 @@ test('en móvil (390 px) los dos portales caben y siguen siendo accesibles', asy
   await ctx.close();
 });
 
+/**
+ * Criterio de la Fase 5 en el navegador: «Dos portales visualmente distintos sin duplicar apps». El mismo servidor
+ * de apps/web responde a los dos hosts con los MISMOS archivos de la compilación (scripts y hojas de estilo con su
+ * hash); lo que cambia es el documento publicado, y con él los tokens calculados y lo que se ve (capturas comparadas
+ * píxel a píxel). La parte sin navegador está en la CI: phase5-criterion.int-spec (API) y theme.spec (apps/web).
+ */
+test('criterio de la Fase 5: la misma compilación sirve dos portales visualmente distintos', async ({
+  browser,
+}) => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  const seen: { assets: string[]; tokens: Record<string, string>; shot: Buffer }[] = [];
+  for (const host of [NAVIERA, ORIENTE]) {
+    await page.goto(hostUrl(host));
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    const assets = await page.locator('script[src], link[rel="stylesheet"]').evaluateAll((els) =>
+      els
+        .map((el) => el.getAttribute('src') ?? el.getAttribute('href') ?? '')
+        .filter((u) => u.includes('/_next/static/'))
+        .sort(),
+    );
+    const tokens = await page
+      .locator('[style*="--site-bg"]')
+      .first()
+      .evaluate((el) => {
+        const s = getComputedStyle(el);
+        return Object.fromEntries(
+          ['--site-bg', '--site-text', '--site-primary', '--site-accent', '--site-radius'].map((k) => [
+            k,
+            s.getPropertyValue(k).trim(),
+          ]),
+        );
+      });
+    seen.push({ assets, tokens, shot: await page.screenshot() });
+  }
+  const [a, b] = seen;
+  if (!a || !b) throw new Error('faltan los dos portales');
+
+  // Sin duplicar apps: los mismos archivos de la misma compilación (con su hash de contenido).
+  expect(a.assets.length).toBeGreaterThan(0);
+  expect(b.assets).toEqual(a.assets);
+
+  // Visualmente distintos: los tokens calculados…
+  for (const k of Object.keys(a.tokens)) expect({ k, v: b.tokens[k] }).not.toEqual({ k, v: a.tokens[k] });
+  // …y lo que se ve: más de la mitad de los píxeles de la primera pantalla cambian.
+  const diff = await page.evaluate(
+    async ([x, y]) => {
+      const load = (src: string) =>
+        new Promise<HTMLImageElement>((ok, ko) => {
+          const img = new Image();
+          img.onload = () => ok(img);
+          img.onerror = ko;
+          img.src = `data:image/png;base64,${src}`;
+        });
+      const pixels = async (src: string) => {
+        const img = await load(src);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const c = canvas.getContext('2d');
+        if (!c) throw new Error('sin canvas');
+        c.drawImage(img, 0, 0);
+        return c.getImageData(0, 0, img.width, img.height).data;
+      };
+      const [p, q] = [await pixels(x), await pixels(y)];
+      let changed = 0;
+      for (let i = 0; i < p.length; i += 4) {
+        const d = Math.abs(p[i]! - q[i]!) + Math.abs(p[i + 1]! - q[i + 1]!) + Math.abs(p[i + 2]! - q[i + 2]!);
+        if (d > 30) changed++;
+      }
+      return changed / (p.length / 4);
+    },
+    [a.shot.toString('base64'), b.shot.toString('base64')] as const,
+  );
+  expect(diff).toBeGreaterThan(0.5);
+  test.info().annotations.push({ type: 'píxeles distintos', description: `${Math.round(diff * 100)} %` });
+  await ctx.close();
+});
+
 test('hub → login; host desconocido → 404; /estado se conserva', async ({ page }) => {
   await page.goto(hostUrl(E2E.hubHost));
   await expect(page).toHaveURL(/\/login$/);

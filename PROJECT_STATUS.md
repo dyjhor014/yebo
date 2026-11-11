@@ -1,6 +1,6 @@
 # Estado del proyecto — YEBO
 
-**Última actualización:** 2026-11-10 (Fase 5.4, editor «Mi sitio»)
+**Última actualización:** 2026-11-10 (Fase 5.5, cierre de la Fase 5)
 
 ## Fase actual
 
@@ -31,14 +31,11 @@ La **3.4** (cierre: aislamiento de extremo a extremo y medición del coste de un
 
 Todas las migraciones están aplicadas a `yebo_dev` con copia previa. Hay además un modo HTTPS local para probar desde la red (`pnpm https:up`). **Push y PR en espera** por decisión del responsable. Resultados en [phase-4-results.md](docs/development/phase-4-results.md); plan en [phase-4-plan.md](docs/development/phase-4-plan.md).
 
-**Fase 5 (white label) en curso** (rama `fase-5/plan`, desde `c98ab2e`, solo commits locales). Decisiones F5-Q1 a F5-Q6 aprobadas. Etapas:
-- 5.1, modelo y API del sitio (`0bb5f66`);
-- 5.2, archivos con Garage (`24f9d9f`);
-- 5.3, portal público en `apps/web` (`99e55f2`);
-- 5.4, editor «Mi sitio» del panel de la empresa, revisado con Impeccable (`7a5f02c`);
-- 5.5, cierre: sin empezar.
+**Fase 5 (white label) implementada (5.1–5.5), pendiente de revisión** (rama `fase-5/plan`, desde `c98ab2e`). **Criterio de aceptación cumplido:** «Dos portales visualmente distintos sin duplicar apps».
+- **CI:** tres empresas configuran y publican su sitio por la API y cada host sirve solo el suyo; el mismo código de `apps/web` resuelve tokens distintos.
+- **E2E:** la misma compilación de `apps/web` sirve dos portales con estilos y capturas distintos (más del 50 % de los píxeles).
 
-Las migraciones de la 5.1 y la 5.2 **no están aplicadas a `yebo_dev`**: esperan autorización y copia previa. Detalle en [phase-5-plan.md](docs/development/phase-5-plan.md).
+Incluye el sitio versionado con contraste AA, los archivos en S3 (Garage en desarrollo), el portal por host y el editor «Mi sitio», revisado con Impeccable. Las migraciones de la 5.1 y la 5.2 están aplicadas a `yebo_dev` con copia previa (`~/yebo-backups/`). Resultados en [phase-5-results.md](docs/development/phase-5-results.md); plan en [phase-5-plan.md](docs/development/phase-5-plan.md).
 
 La Fase 2 sigue en revisión mediante el PR #1, sin merge. Orden de integración previsto: #1 → #3 → #2.
 
@@ -94,4 +91,4 @@ Ninguno abierto. El `500` intermitente bajo carga de `isolation-e2e` se corrigi�
 2. Tras el cierre de la Fase 2: activar la protección de `main` exigiendo el check de CI.
 3. Revisión de la etapa 3.1 (PR #4) y de la etapa 3.2a.
 4. Revisión de la Fase 3 completa: 3.2 (`83df1c1`), 3.3 (`1c695b1`), 3.4 (`da999d8`) y ADR-034 (sin commit). Push y PR **solo con autorización expresa**. Las fases 4 y 5, también.
-5. La 5.5 (cierre de la Fase 5), solo con aprobación.
+5. Revisión de la Fase 5. La Fase 6 no empieza sin aprobación expresa.

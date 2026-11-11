@@ -1,6 +1,6 @@
 import { SITE_SURFACES, textOnPrimary, type SiteTheme } from '@yebo/contracts';
 import type { CSSProperties } from 'react';
-import { FONT_STACK } from './fonts';
+import { FONT_STACK } from './font-stacks';
 
 const RADIUS = { square: '0px', soft: '10px', round: '22px' } as const;
 

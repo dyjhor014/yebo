@@ -1,6 +1,6 @@
 # Fase 5 · White label (plan)
 
-- **Estado:** ✅ Decisiones F5-Q1 a F5-Q6 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapa 5.1 en curso.
+- **Estado:** ✅ Decisiones F5-Q1 a F5-Q6 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. **Fase implementada (5.1–5.5) y criterio cumplido**: ver [phase-5-results.md](phase-5-results.md).
 - **Rama:** `fase-5/plan`, desde el cierre de la Fase 4 (`c98ab2e`).
 - **Criterio de aceptación** ([roadmap](roadmap.md)): «Dos portales visualmente distintos sin duplicar apps».
 
@@ -143,7 +143,7 @@ CONFIGURE queda bloqueado en `SUSPENDED`, `EXPIRED` y `CANCELLED` (ADR-023). El 
 
 ### Pendiente
 
-- Migración a `yebo_dev`: con autorización, copia previa y la reversión documentada.
+- ✅ Migraciones de la 5.1 y la 5.2 aplicadas a `yebo_dev` el 2026-11-10, con copia previa (`pg_dump` en `~/yebo-backups/`).
 - 5.2: archivos (MinIO, a inspeccionar antes de usarlo).
 - Registro de auditoría general de las acciones de la empresa: fuera de la 5.1.
 
@@ -194,7 +194,7 @@ CONFIGURE queda bloqueado en `SUSPENDED`, `EXPIRED` y `CANCELLED` (ADR-023). El 
 
 ### Pendiente
 
-- Migraciones de la 5.1 y la 5.2 a `yebo_dev`: con autorización y copia previa.
+- ✅ Migraciones de la 5.1 y la 5.2 aplicadas a `yebo_dev` el 2026-11-10, con copia previa (`pg_dump` en `~/yebo-backups/`).
 - Retirar archivos desde el editor (`DELETED`) y limpiar objetos huérfanos: con el editor de la 5.4.
 
 ## Etapa 5.3 · Portal público en `apps/web` (implementada el 2026-11-10; pendiente de revisión)
@@ -315,7 +315,15 @@ El binario 0.1.18 no trae `critique-storage`, así que la crítica no se archiv�
 
 ### Pendiente
 
-- Migraciones de la 5.1 y la 5.2 a `yebo_dev`: con autorización y copia previa. La 5.4 no añade migraciones.
+- ✅ Migraciones de la 5.1 y la 5.2 aplicadas a `yebo_dev` el 2026-11-10, con copia previa (`pg_dump` en `~/yebo-backups/`). La 5.4 no añade migraciones.
 - «Ver» una versión del historial antes de restaurarla (necesita una ruta nueva en la API).
 - Limpieza de objetos huérfanos (borrado fallido tras retirar, o archivos subidos y nunca guardados): tarea programada, fuera de la 5.4.
-- 5.5: cierre de la fase con la prueba del criterio de aceptación.
+
+## Etapa 5.5 · Cierre (2026-11-10)
+
+El criterio se comprueba en tres niveles; el detalle está en [phase-5-results.md](phase-5-results.md):
+- **API (CI):** `phase5-criterion.int-spec`, con tres empresas que configuran y publican su sitio por la API de la empresa.
+- **`apps/web` (CI):** `theme.spec`, con los tokens que resuelve el mismo código. Las pilas tipográficas pasan a `font-stacks.ts`, sin `next/font`, para poder probarlas con Jest.
+- **Navegador (E2E):** en `06-portal`, la misma compilación sirve dos portales con tokens y capturas distintos.
+
+Las mutaciones introducidas a propósito en las dos pruebas de la CI quedan detectadas. Sin migraciones.
