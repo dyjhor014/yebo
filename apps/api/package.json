@@ -16,7 +16,8 @@
     "test:integration": "jest -c jest.integration.config.js --runInBand",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
-    "calibrate:argon2": "node scripts/calibrate-argon2.mjs"
+    "calibrate:argon2": "node scripts/calibrate-argon2.mjs",
+    "bench": "jest -c jest.bench.config.js --runInBand"
   },
   "dependencies": {
     "@nestjs/bullmq": "11.0.5",

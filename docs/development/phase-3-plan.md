@@ -816,3 +816,17 @@ Reversión manual, como `yebo_owner`, documentada en la cabecera de la migració
 | Suspensión en dos pasos | Cambio de estado (`yebo_app`) y cierre de sesiones (`yebo_identity`) son transacciones distintas. Si el cierre falla, el acceso ya está cortado y la reactivación cierra las sesiones sobrantes (probado) |
 | Tokens `Bearer` para dispositivos | Fase 14 (identity-and-sessions §9). Hoy solo se acepta la cookie |
 | Gestión de roles (crear y editar) e invitaciones | Fases posteriores. Editar los permisos de un rol obligará a incrementar la versión de todas sus membresías |
+
+## Etapa 3.4 · Cierre (implementada el 2026-11-10; pendiente de revisión)
+
+Rama `fase-3/3.4-cierre`, creada desde el commit local de la 3.3 (`1c695b1`). **Resultados completos en [phase-3-results.md](phase-3-results.md).**
+
+- **Aislamiento de extremo a extremo** (`isolation-e2e.int-spec.ts`) sobre endpoints autenticados reales:
+  - 600 lecturas concurrentes y entrelazadas de dos empresas, hechas por la misma persona desde la misma sesión de identidad;
+  - 100 peticiones con el token cruzado;
+  - 40 escrituras concurrentes en ambas empresas;
+  - §7.4 en el pool de la propia API tras la carga.
+- **Mutaciones detectadas:** un `set_config` de sesión y un guard que reutiliza el tenant anterior.
+- **Medición de §4.2** (`pnpm --filter @yebo/api bench`, fuera de CI): una transacción por operación cuesta unas 4 idas y vueltas (×3,2 frente a una lectura simple). Con varias lecturas por petición, agruparlas en una transacción reduce la latencia a la mitad y sube el rendimiento ×1,76. La recomendación queda pendiente de decisión ([resultados §3](phase-3-results.md#3-coste-de-una-transacción-por-operación-multitenancy-42)).
+- **CI:** las siete pruebas de §7 forman parte de `pnpm test:integration`, que CI ya ejecuta en cada PR.
+- **Arreglo menor:** las suites nuevas usan un único servidor HTTP escuchando, como `tenancy`, para evitar la fuga de escuchadores con carga.

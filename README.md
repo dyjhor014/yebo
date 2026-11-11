@@ -6,6 +6,7 @@ Plataforma para empresas de transporte terrestre y fluvial: pasajeros, encomiend
 - Roadmap: [`docs/development/roadmap.md`](docs/development/roadmap.md)
 - Auditoría inicial: [`docs/development/phase-0-audit.md`](docs/development/phase-0-audit.md)
 - Resultados de la Fase 2: [`docs/development/phase-2-results.md`](docs/development/phase-2-results.md)
+- Resultados de la Fase 3: [`docs/development/phase-3-results.md`](docs/development/phase-3-results.md)
 - Decisiones de arquitectura: [`docs/architecture/architecture-decisions.md`](docs/architecture/architecture-decisions.md)
 
 ## Requisitos de desarrollo
