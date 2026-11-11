@@ -37,6 +37,7 @@ const LATER_SEEDS = [
   resolve(__dirname, '../../prisma/migrations/20261110210000_fase4_3b_membership_invitations/migration.sql'),
   resolve(__dirname, '../../prisma/migrations/20261111020000_fase4_5_billing/migration.sql'),
   resolve(__dirname, '../../prisma/migrations/20261111040000_fase4_6_support_access/migration.sql'),
+  resolve(__dirname, '../../prisma/migrations/20261112010000_fase5_1_site_versions/migration.sql'),
 ].map((file) => {
   const sql = readFileSync(file, 'utf8');
   return sql.slice(sql.indexOf('INSERT INTO "permissions"'), sql.indexOf('-- Roles ya creados'));

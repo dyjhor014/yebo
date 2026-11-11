@@ -5,7 +5,7 @@ import tseslint from 'typescript-eslint';
 const PUBLIC_DECORATOR = {
   selector: "Decorator[expression.callee.name='Public']",
   message:
-    'Rutas públicas solo en health, tenancy e identity/http, y registradas en PUBLIC_ROUTES (denegar por defecto, Fase 3.3).',
+    'Rutas públicas solo en health, tenancy, identity/http y el portal (site/http/public-site.controller.ts), y registradas en PUBLIC_ROUTES (denegar por defecto, Fase 3.3).',
 };
 const GLOBAL_GUARDS = {
   selector: "Identifier[name='APP_GUARD']",
@@ -121,6 +121,8 @@ export default tseslint.config(
       'apps/api/src/modules/health/**/*.ts',
       'apps/api/src/modules/tenancy/**/*.ts',
       'apps/api/src/modules/identity/http/**/*.ts',
+      // Fase 5.1: solo el controlador del portal público (GET /public/site, ya en PUBLIC_ROUTES).
+      'apps/api/src/modules/site/http/public-site.controller.ts',
     ],
     rules: {
       'no-restricted-syntax': ['error', GLOBAL_GUARDS, USE_GLOBAL_GUARDS, BACKOFFICE_IMPORT, METERING_IMPORT],

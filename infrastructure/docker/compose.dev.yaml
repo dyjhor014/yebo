@@ -45,6 +45,29 @@ services:
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?}
 
+  # Almacenamiento de archivos compatible con S3 (Fase 5.2): logos e imágenes de los sitios. Solo en 127.0.0.1; la
+  # API sirve los archivos públicos (el almacenamiento no se expone). Producción: el S3 del proveedor (D12).
+  storage:
+    image: dxflrs/garage:v2.5.0
+    restart: unless-stopped
+    command: ['/garage', 'server', '--single-node', '--default-bucket']
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?definir en infrastructure/docker/.env}
+      GARAGE_DEFAULT_ACCESS_KEY: ${S3_ACCESS_KEY_ID:?}
+      GARAGE_DEFAULT_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:?}
+      GARAGE_DEFAULT_BUCKET: ${S3_BUCKET:-yebo-assets}
+    ports:
+      - '127.0.0.1:${S3_PORT:-3900}:3900'
+    volumes:
+      - ./garage/garage.toml:/etc/garage.toml:ro
+      - garagemeta:/var/lib/garage/meta
+      - garagedata:/var/lib/garage/data
+    healthcheck:
+      test: ['CMD', '/garage', 'bucket', 'info', '${S3_BUCKET:-yebo-assets}']
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
   # Modo HTTPS local (perfil `https`, no arranca con `infra:up`): Nginx termina TLS en <IP del servidor>:443 con el
   # certificado de scripts/dev/https-certs.sh y reenvía a las apps del host (127.0.0.1) por host.docker.internal
   # (válido en Docker Desktop y en Docker Engine gracias a host-gateway). Ver docs/development/https-local.md.
@@ -69,3 +92,5 @@ services:
 volumes:
   pgdata:
   redisdata:
+  garagemeta:
+  garagedata:

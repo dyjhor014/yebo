@@ -50,6 +50,17 @@ export const EnvSchema = z
       .regex(/^[a-z0-9_-]+$/)
       .default('yebo'),
 
+    // Almacenamiento de archivos compatible con S3 (Fase 5.2; Garage en desarrollo, el S3 del proveedor en producción).
+    // Opcional: sin endpoint y claves, el almacenamiento queda desactivado y subir archivos responde 503.
+    S3_ENDPOINT: z.url().optional(),
+    S3_REGION: z.string().min(1).default('garage'),
+    S3_BUCKET: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/)
+      .default('yebo-assets'),
+    S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+    S3_SECRET_ACCESS_KEY: secret.optional(),
+
     // Autenticación (security.md §1; identity-and-sessions §6–7)
     /** Clave privada Ed25519 (PKCS#8 PEM codificado en base64) para firmar los access tokens (EdDSA). */
     /** Opcional en el esquema: solo la exige el módulo de identidad (el worker no firma tokens). */

@@ -34,6 +34,8 @@ export function configureApp(app: NestExpressApplication, env: Env, options: { s
   app.set('trust proxy', parseTrustProxy(env.TRUST_PROXY));
   app.useBodyParser('json', { limit: BODY_LIMIT });
   app.useBodyParser('urlencoded', { limit: BODY_LIMIT, extended: false });
+  // Fase 5.2: imágenes del sitio en el cuerpo, sin multipart (POST /site/assets). El tipo real lo comprueba sharp.
+  app.useBodyParser('raw', { type: ['image/png', 'image/jpeg', 'image/webp'], limit: '5mb' });
   app.useLogger(app.get(Logger));
   app.setGlobalPrefix('api');
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });

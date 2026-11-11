@@ -7,7 +7,9 @@
   "exports": {
     "./access-shell": "./src/access-shell.tsx",
     "./button": "./src/button.tsx",
+    "./dialog": "./src/dialog.tsx",
     "./field": "./src/field.tsx",
+    "./form": "./src/form.tsx",
     "./icon": "./src/icon.tsx",
     "./logo": "./src/logo.tsx",
     "./notice": "./src/notice.tsx",

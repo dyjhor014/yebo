@@ -18,7 +18,7 @@ const config: NextConfig = {
   // Componentes de la 3.2b compartidos con apps/platform (Fase 4.7): se publican como fuente TypeScript.
   transpilePackages: ['@yebo/ui'],
   async headers() {
-    return ['/login', '/sin-acceso', '/salir', '/auth/callback', '/panel'].map((source) => ({
+    return ['/login', '/sin-acceso', '/salir', '/auth/callback', '/panel', '/panel/:path*'].map((source) => ({
       source,
       headers: AUTH_HEADERS,
     }));

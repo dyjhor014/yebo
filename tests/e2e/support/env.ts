@@ -18,6 +18,8 @@ export const E2E = {
   /** Puerto público del panel (proxy de los E2E); next start escucha en el siguiente. */
   platformPort: 3201,
   nextPort: 3202,
+  /** apps/web (hub y portales de las empresas), detrás del mismo proxy. */
+  webPort: 3203,
   baseDomain: 'yebo.localhost',
   adminHost: 'admin.yebo.localhost',
   hubHost: 'cuentas.yebo.localhost',
@@ -27,6 +29,8 @@ export const E2E = {
 } as const;
 
 export const ADMIN_URL = `http://${E2E.adminHost}:${E2E.platformPort}`;
+/** URL de un host (hub o empresa) a través del proxy de los E2E. */
+export const hostUrl = (host: string, path = '/') => `http://${host}:${E2E.platformPort}${path}`;
 
 /** Variables de la API de los E2E: las del entorno ganan a apps/api/.env (load-env-file). */
 export const API_ENV = {

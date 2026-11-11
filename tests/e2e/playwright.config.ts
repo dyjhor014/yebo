@@ -55,6 +55,18 @@ export default defineConfig({
       use: { ...devices['Pixel 7'], viewport: { width: 390, height: 844 }, storageState: '.auth/staff.json' },
     },
     {
+      name: 'portal',
+      testMatch: /06-.*\.spec\.ts/,
+      dependencies: ['recorrido'],
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
+    {
+      name: 'editor',
+      testMatch: /07-.*\.spec\.ts/,
+      dependencies: ['recorrido'],
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
+    {
       name: 'capturas',
       testMatch: /0[45]-.*\.spec\.ts/,
       dependencies: ['recorrido'],
@@ -71,6 +83,8 @@ export default defineConfig({
       cwd: resolve(ROOT, 'apps/api'),
       env: { ...(process.env as Record<string, string>), ...API_ENV },
       url: `http://127.0.0.1:${E2E.apiPort}/api/v1/health/ready`,
+      // Con LOG_LEVEL=warn solo salen avisos y errores: visibles al depurar un fallo del recorrido.
+      stdout: 'pipe',
       reuseExistingServer: false,
       timeout: 60_000,
     },
@@ -83,8 +97,20 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      // Mismo origen para panel y API, como Nginx: /api → API; el resto → panel.
-      command: `node support/proxy.mjs ${E2E.platformPort} ${E2E.apiPort} ${E2E.nextPort}`,
+      command: `./node_modules/.bin/next start --hostname 127.0.0.1 --port ${E2E.webPort}`,
+      cwd: resolve(ROOT, 'apps/web'),
+      env: {
+        ...(process.env as Record<string, string>),
+        API_INTERNAL_URL: `http://127.0.0.1:${E2E.apiPort}`,
+        NODE_ENV: 'production',
+      },
+      url: `http://127.0.0.1:${E2E.webPort}/estado`,
+      reuseExistingServer: false,
+      timeout: 60_000,
+    },
+    {
+      // Mismo origen por host, como Nginx: /api → API; admin.* → panel; el resto (hub y empresas) → web.
+      command: `node support/proxy.mjs ${E2E.platformPort} ${E2E.apiPort} ${E2E.nextPort} ${E2E.webPort}`,
       url: `http://127.0.0.1:${E2E.platformPort}/login`,
       reuseExistingServer: false,
       timeout: 30_000,

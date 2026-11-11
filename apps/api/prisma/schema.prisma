@@ -81,6 +81,8 @@ model Tenant {
   usageSnapshots     UsageDailySnapshot[]
   invoices           PlatformInvoice[]
   supportGrants      SupportAccessGrant[]
+  siteVersions       SiteVersion[]
+  fileAssets         FileAsset[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -1203,4 +1205,95 @@ model SupportAccessLog {
   @@unique([tenantId, id])
   @@index([tenantId, grantId, occurredAt])
   @@map("support_access_logs")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 5.1 · Sitio público de la empresa (white label; data-dictionary §11)
+// ---------------------------------------------------------------------------------------------------------------
+
+enum SiteVersionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+
+  @@map("site_version_status")
+}
+
+/// Versión del sitio público: documento `config` validado con Zod (SiteConfigSchema). Como mucho un borrador y una
+/// publicada por empresa (`live_slot` único); publicada o archivada, su contenido no cambia.
+model SiteVersion {
+  id              String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String                 @map("tenant_id") @db.Uuid
+  version         Int
+  status          SiteVersionStatus
+  /// = status si es DRAFT o PUBLISHED; NULL si ARCHIVED. Único por empresa (CHECK site_versions_live_slot).
+  liveSlot        SiteVersionStatus?     @map("live_slot")
+  schemaVersion   Int                    @map("schema_version")
+  config          Json
+  createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  publishedAt     DateTime?              @map("published_at") @db.Timestamptz(6)
+  /// Quién publicó: miembro de la empresa o staff con acceso de soporte FULL.
+  publishedByKind MembershipChangeActor? @map("published_by_kind")
+  publishedById   String?                @map("published_by_id") @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, version])
+  @@unique([tenantId, liveSlot])
+  @@map("site_versions")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 5.2 · Archivos de la empresa (data-dictionary §11 `file_assets`)
+// ---------------------------------------------------------------------------------------------------------------
+
+enum FileAssetKind {
+  SITE_LOGO
+  SITE_HERO
+
+  @@map("file_asset_kind")
+}
+
+enum FileAssetVisibility {
+  PUBLIC
+  PRIVATE
+
+  @@map("file_asset_visibility")
+}
+
+enum FileAssetStatus {
+  PENDING
+  READY
+  REJECTED
+  DELETED
+
+  @@map("file_asset_status")
+}
+
+/// Archivo de la empresa en el almacenamiento S3 (objeto privado; la API decide qué se sirve). Las imágenes se
+/// recodifican al subirlas (sin metadatos EXIF). Del logo se genera además un favicon (`<storage_key>.favicon.png`).
+model FileAsset {
+  id             String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String                @map("tenant_id") @db.Uuid
+  kind           FileAssetKind
+  visibility     FileAssetVisibility
+  status         FileAssetStatus
+  storageKey     String                @unique @map("storage_key")
+  mime           String
+  sizeBytes      Int                   @map("size_bytes")
+  width          Int
+  height         Int
+  checksumSha256 Bytes                 @map("checksum_sha256")
+  originalName   String?               @map("original_name")
+  uploadedByKind MembershipChangeActor @map("uploaded_by_kind")
+  uploadedById   String                @map("uploaded_by_id") @db.Uuid
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, kind])
+  @@map("file_assets")
 }

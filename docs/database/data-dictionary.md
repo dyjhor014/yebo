@@ -358,13 +358,13 @@ Copia de líneas fiscales (código, descripción, cantidad, valor unitario, afec
 `type enum PASSENGER|PARCEL|CARGO|VEHICLE`, `trip_id? | transfer_id?` (exactamente uno), `version int`, `status enum DRAFT|ISSUED|SUPERSEDED`, `content snap`, `template_id?`, `pdf_asset_id?`, `issued_by`, `issued_at`. UNIQUE (tenant_id, type, trip_id, version).
 
 ### site_versions
-`version`, `status enum DRAFT|PUBLISHED|ARCHIVED`, `schema_version`, `config jsonb` (tema, fuentes de lista blanca, header, footer, secciones y su orden, contactos, políticas, FAQ, redes; validado con Zod), `published_at?`, `published_by?`. Índice único parcial: 1 `PUBLISHED` y 1 `DRAFT` por tenant.
+`version`, `status enum DRAFT|PUBLISHED|ARCHIVED`, `schema_version`, `config jsonb` (tema, fuentes de lista blanca, header, footer, secciones y su orden, contactos, políticas, FAQ, redes; validado con Zod: `SiteConfigSchema` de `@yebo/contracts`), `published_at?`, `published_by_kind?` + `published_by_id?` (membresía o staff con soporte FULL). Fase 5.1: 1 `PUBLISHED` y 1 `DRAFT` por tenant mediante `live_slot` (= estado, o NULL si `ARCHIVED`) con UNIQUE (tenant_id, live_slot); trigger `site_versions_guard` (borrador editable; publicada → solo archivarse; archivada inmutable; sin borrados). Restaurar publica una copia como versión nueva.
 
 ### document_templates
 `kind enum TICKET|SHIPMENT_LABEL|SHIPMENT_RECEIPT|MANIFEST|CARGO_QUOTE`, `version`, `status`, `config jsonb` (bloques predefinidos y campos visibles; sin HTML libre).
 
 ### file_assets
-`storage_key UNIQUE`, `bucket`, `original_name`, `mime`, `size_bytes`, `checksum_sha256`, `kind`, `visibility enum PRIVATE|PUBLIC`, `uploaded_by?`, `status enum PENDING|READY|REJECTED|DELETED`.
+`storage_key UNIQUE`, `bucket`, `original_name`, `mime`, `size_bytes`, `checksum_sha256`, `kind`, `visibility enum PRIVATE|PUBLIC`, `uploaded_by?`, `status enum PENDING|READY|REJECTED|DELETED`. Fase 5.2: sin `bucket` (uno por entorno, `S3_BUCKET`); `kind enum SITE_LOGO|SITE_HERO`, `width`, `height`, `uploaded_by_kind` + `uploaded_by_id`; CHECK: la clave empieza por `tenants/<tenant_id>/`, MIME PNG/JPEG/WebP, ≤ 5 MB y ≤ 8192 px; las imágenes se guardan recodificadas (sin EXIF); el logo tiene además `<storage_key>.favicon.png`.
 
 ### notification_templates (🌐 si `tenant_id IS NULL`)
 `event_code`, `channel enum EMAIL|IN_APP|WHATSAPP|SMS`, `locale`, `version`, `subject`, `body_html`, `body_text`, `status`. UNIQUE (tenant_id, event_code, channel, locale, version) con `NULLS NOT DISTINCT`.

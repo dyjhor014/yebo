@@ -40,6 +40,12 @@ export const PERMISSION_CATALOG = {
     sensitive: true,
     description: 'Aprobar o revocar accesos de soporte de YEBO',
   },
+  // Fase 5.1: sitio público (white label). Editar no exige el módulo WHITE_LABEL; sin él se publica lo básico (F5-Q4).
+  'site.manage': {
+    module: 'SITE',
+    sensitive: true,
+    description: 'Editar y publicar el sitio público de la empresa',
+  },
 } as const satisfies Record<string, { module: string; sensitive: boolean; description: string }>;
 
 export type PermissionCode = keyof typeof PERMISSION_CATALOG;
