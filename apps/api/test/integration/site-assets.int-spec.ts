@@ -65,7 +65,7 @@ describe('Fase 5.2 · archivos del sitio', () => {
     const identity = (await sessions.createIdentitySession({ userId, authMethods: ['pwd'] })).id;
     return (await sessions.openTenantSession({ identitySessionId: identity, host: c.host })).accessToken;
   };
-  const as = async (c: Company, method: 'get' | 'put' | 'post', path: string, body?: object) => {
+  const as = async (c: Company, method: 'get' | 'put' | 'post' | 'delete', path: string, body?: object) => {
     const t = await token(c);
     const agent = http();
     let req = agent[method](path)
@@ -285,6 +285,36 @@ describe('Fase 5.2 · archivos del sitio', () => {
         })
       ).status,
     ).toBe(400);
+  });
+
+  it('retirar (5.4): un archivo sin uso pasa a DELETED y se borra; en uso → 409; de otra empresa → 404', async () => {
+    const spare = await upload(a, 'logo', await png(300, 300));
+    expect(spare.status).toBe(201);
+    const id = spare.body.id as string;
+    const key = (
+      await seed.query<{ k: string }>('SELECT storage_key AS k FROM file_assets WHERE id = $1', [id])
+    ).rows[0]?.k as string;
+    const storage = app.get(ObjectStorage);
+    expect(await storage.get(key)).not.toBeNull();
+    // Otra empresa no lo ve (RLS) e ids no válidos.
+    expect((await as(b, 'delete', `/api/v1/site/assets/${id}`)).status).toBe(404);
+    expect((await as(a, 'delete', '/api/v1/site/assets/no-es-un-id')).status).toBe(404);
+    // En uso por la versión publicada (y el borrador) → 409, con el motivo.
+    const used = await as(a, 'delete', `/api/v1/site/assets/${logoId}`);
+    expect(used.status).toBe(409);
+    expect(used.body.error.message).toMatch(/en uso/);
+    expect((await as(a, 'delete', `/api/v1/site/assets/${heroId}`)).status).toBe(409); // la portada publicada
+
+    expect((await as(a, 'delete', `/api/v1/site/assets/${id}`)).status).toBe(204);
+    const row = await seed.query('SELECT status::text FROM file_assets WHERE id = $1', [id]);
+    expect(row.rows).toEqual([{ status: 'DELETED' }]);
+    expect(await storage.get(key)).toBeNull();
+    expect(await storage.get(`${key}.favicon.png`)).toBeNull();
+    expect((await http().get(`/api/v1/public/assets/${id}`).set('Host', a.host)).status).toBe(404);
+    expect(
+      (await as(a, 'get', '/api/v1/site/assets')).body.assets.map((x: { id: string }) => x.id),
+    ).not.toContain(id);
+    expect((await as(a, 'delete', `/api/v1/site/assets/${id}`)).status).toBe(404); // ya retirado
   });
 
   it('cada host solo sirve los archivos de su empresa; ids no válidos → 404', async () => {

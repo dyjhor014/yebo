@@ -10,6 +10,7 @@ import {
   type PublicSiteResponse,
   type SiteConfig,
   type SiteEditorResponse,
+  type SitePublisher,
   type SiteVersion,
   type SiteVersionsResponse,
 } from '@yebo/contracts';
@@ -21,6 +22,7 @@ import { TenantDbService } from '../../infrastructure/database/tenant-db.service
 import { RedisService } from '../../infrastructure/redis/redis.service';
 import { EffectiveModulesService } from '../access/effective-modules.service';
 import { Clock } from '../identity/clock';
+import { UserDirectoryService } from '../identity/user-directory.service';
 
 /**
  * Caché del sitio público por empresa. Se invalida al publicar o restaurar; los cambios de plan llegan en ≤ 60 s.
@@ -55,6 +57,7 @@ export class SiteService {
     private readonly modules: EffectiveModulesService,
     private readonly redis: RedisService,
     private readonly clock: Clock,
+    private readonly directory: UserDirectoryService,
   ) {}
 
   async editor(): Promise<SiteEditorResponse> {
@@ -127,20 +130,53 @@ export class SiteService {
     return this.editor();
   }
 
-  /** Historial sin el contenido (no se lee ni se valida el JSON de cada versión). */
+  /**
+   * Historial sin el contenido (no se lee ni se valida el JSON de cada versión), con quién publicó cada una: el
+   * nombre de la persona de la empresa, o «soporte» si fue el staff de YEBO (su nombre no se muestra a la empresa).
+   */
   async versions(): Promise<SiteVersionsResponse> {
-    const rows = await this.db.transaction((tx) =>
-      tx.siteVersion.findMany({
-        select: { version: true, status: true, updatedAt: true, publishedAt: true },
+    const { rows, members } = await this.db.transaction(async (tx) => {
+      const rows = await tx.siteVersion.findMany({
+        select: {
+          version: true,
+          status: true,
+          updatedAt: true,
+          publishedAt: true,
+          publishedByKind: true,
+          publishedById: true,
+        },
         orderBy: { version: 'desc' },
-      }),
-    );
+      });
+      const ids = rows.flatMap((r) =>
+        r.publishedByKind === 'MEMBERSHIP' && r.publishedById ? [r.publishedById] : [],
+      );
+      // Membresías de ESTA empresa (RLS): el directorio solo recibe sus usuarios.
+      const members =
+        ids.length === 0
+          ? []
+          : await tx.tenantMembership.findMany({
+              where: { id: { in: [...new Set(ids)] } },
+              select: { id: true, userId: true },
+            });
+      return { rows, members };
+    });
+    const people = await this.directory.describe(members.map((m) => m.userId));
+    const userOf = new Map(members.map((m) => [m.id, m.userId]));
+    const publisher = (kind: string | null, id: string | null): SitePublisher | null => {
+      if (kind === 'PLATFORM_USER') return { kind: 'SUPPORT' };
+      if (kind !== 'MEMBERSHIP' || !id) return null;
+      return {
+        kind: 'MEMBER',
+        name: people.get(userOf.get(id) ?? '')?.fullName ?? 'Una persona de la empresa',
+      };
+    };
     return {
       versions: rows.map((r) => ({
         version: r.version,
         status: r.status,
         updatedAt: r.updatedAt.toISOString(),
         publishedAt: r.publishedAt?.toISOString() ?? null,
+        publishedBy: publisher(r.publishedByKind, r.publishedById),
       })),
     };
   }

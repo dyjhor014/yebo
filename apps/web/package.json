@@ -2,13 +2,14 @@
   "name": "@yebo/web",
   "version": "0.1.0",
   "private": true,
-  "description": "Frontend de empresas y clientes: portal p\u00fablico, seguimiento, hub de cuentas, panel, POS y PWA (ADR-002)",
+  "description": "Frontend de empresas y clientes: portal público, seguimiento, hub de cuentas, panel, POS y PWA (ADR-002)",
   "scripts": {
     "dev": "next dev --port 3100",
     "build": "next build",
     "start": "next start --port 3100",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint app lib components"
+    "lint": "eslint app lib components",
+    "test": "jest"
   },
   "dependencies": {
     "@yebo/contracts": "workspace:*",
@@ -19,11 +20,15 @@
     "server-only": "0.0.1"
   },
   "devDependencies": {
+    "@swc/core": "1.16.22",
+    "@swc/jest": "0.2.39",
     "@tailwindcss/postcss": "4.3.4",
+    "@types/jest": "30.0.0",
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@yebo/config": "workspace:*",
+    "jest": "30.5.2",
     "tailwindcss": "4.3.4",
     "typescript": "5.9.3"
   }

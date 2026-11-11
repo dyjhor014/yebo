@@ -1,6 +1,6 @@
 # Estado del proyecto — YEBO
 
-**Última actualización:** 2026-11-10 (Fase 4.8, cierre de la Fase 4)
+**Última actualización:** 2026-11-10 (Fase 5.4, editor «Mi sitio»)
 
 ## Fase actual
 
@@ -30,6 +30,15 @@ La **3.4** (cierre: aislamiento de extremo a extremo y medición del coste de un
 - el panel del staff (`apps/platform`), con E2E de Playwright y axe.
 
 Todas las migraciones están aplicadas a `yebo_dev` con copia previa. Hay además un modo HTTPS local para probar desde la red (`pnpm https:up`). **Push y PR en espera** por decisión del responsable. Resultados en [phase-4-results.md](docs/development/phase-4-results.md); plan en [phase-4-plan.md](docs/development/phase-4-plan.md).
+
+**Fase 5 (white label) en curso** (rama `fase-5/plan`, desde `c98ab2e`, solo commits locales). Decisiones F5-Q1 a F5-Q6 aprobadas. Etapas:
+- 5.1, modelo y API del sitio (`0bb5f66`);
+- 5.2, archivos con Garage (`24f9d9f`);
+- 5.3, portal público en `apps/web` (`99e55f2`);
+- **5.4, editor «Mi sitio» del panel de la empresa: implementada y verificada, sin commit, pendiente de revisión**;
+- 5.5, cierre: sin empezar.
+
+Las migraciones de la 5.1 y la 5.2 **no están aplicadas a `yebo_dev`**: esperan autorización y copia previa. Detalle en [phase-5-plan.md](docs/development/phase-5-plan.md).
 
 La Fase 2 sigue en revisión mediante el PR #1, sin merge. Orden de integración previsto: #1 → #3 → #2.
 
@@ -67,7 +76,7 @@ D1 (cliente piloto), D6 (propietarios), D7 (agencias), S2 (contrato de la API de
 ## Entorno
 
 - Node 24 (`nvm use`). El Node 18 del sistema no cumple `engines`.
-- Docker Desktop: `systemctl --user start docker-desktop`. Puertos 5433 (PostgreSQL) y 6380 (Redis).
+- Docker Desktop: `systemctl --user start docker-desktop`. Puertos 5433 (PostgreSQL), 6380 (Redis) y 3900 (Garage, S3 de desarrollo, Fase 5.2).
 - Los volúmenes creados antes de este cambio necesitan la base `yebo_migrations` (ver phase-2-results §4). Ya está creada en el entorno local.
 - Disco: 36 GB libres (93 %).
 - **ADR-034 en un volumen existente** (ya aplicado en el de este equipo):
@@ -84,4 +93,5 @@ Ninguno abierto. El `500` intermitente bajo carga de `isolation-e2e` se corrigi�
 1. Revisión de los PR abiertos por el responsable del proyecto; el merge lo hace él. Orden de integración previsto: #1 (Fase 2) → #3 (Impeccable) → #2 (MKT-01) → #4 (Fase 3.1, apilado sobre la rama de la Fase 2).
 2. Tras el cierre de la Fase 2: activar la protección de `main` exigiendo el check de CI.
 3. Revisión de la etapa 3.1 (PR #4) y de la etapa 3.2a.
-4. Revisión de la Fase 3 completa: 3.2 (`83df1c1`), 3.3 (`1c695b1`), 3.4 (`da999d8`) y ADR-034 (sin commit). Push y PR **solo con autorización expresa**. La Fase 4, también.
+4. Revisión de la Fase 3 completa: 3.2 (`83df1c1`), 3.3 (`1c695b1`), 3.4 (`da999d8`) y ADR-034 (sin commit). Push y PR **solo con autorización expresa**. Las fases 4 y 5, también.
+5. Revisión de la 5.4 (sin commit). Después, la 5.5 (cierre de la Fase 5), solo con aprobación.

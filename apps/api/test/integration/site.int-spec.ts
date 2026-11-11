@@ -279,6 +279,18 @@ describe('Fase 5.1 · sitio público de la empresa', () => {
         [2, 'ARCHIVED'],
         [1, 'ARCHIVED'],
       ]);
+      // Autor de cada versión (5.4): el nombre de la persona; el borrador, ninguno.
+      expect(
+        versions.body.versions.map((v: { version: number; publishedBy: unknown }) => [
+          v.version,
+          v.publishedBy,
+        ]),
+      ).toEqual([
+        [4, { kind: 'MEMBER', name: 'Gerencia General' }],
+        [3, null],
+        [2, { kind: 'MEMBER', name: 'Gerencia General' }],
+        [1, { kind: 'MEMBER', name: 'Gerencia General' }],
+      ]);
     });
 
     it('cinco publicaciones simultáneas: una sola gana (las demás 409) y sigue habiendo una publicada', async () => {
@@ -446,6 +458,11 @@ describe('Fase 5.1 · sitio público de la empresa', () => {
         [b.id],
       );
       expect(row.rows).toEqual([{ kind: 'PLATFORM_USER', published_by_id: staffId }]);
+      // La empresa ve «Soporte YEBO», nunca el nombre ni el id del staff.
+      const versions = await as(b, 'get', '/api/v1/site/versions');
+      const latest = versions.body.versions.find((v: { status: string }) => v.status === 'PUBLISHED');
+      expect(latest.publishedBy).toEqual({ kind: 'SUPPORT' });
+      expect(JSON.stringify(versions.body)).not.toContain(staffId as string);
     });
   });
 

@@ -24,7 +24,8 @@ export function readCsrfCookie(): string | undefined {
 
 export async function apiFetch(path: string, init: RequestInit & { csrf?: string } = {}): Promise<Response> {
   const headers = new Headers(init.headers);
-  if (init.body) headers.set('Content-Type', 'application/json');
+  // JSON por defecto; una subida de imagen trae su propio tipo (image/png, image/jpeg o image/webp).
+  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   if (init.csrf) headers.set('X-CSRF-Token', init.csrf);
   const res = await fetch(path, { ...init, headers, credentials: 'same-origin', cache: 'no-store' });
   if (!res.ok) {

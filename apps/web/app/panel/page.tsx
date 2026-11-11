@@ -1,8 +1,5 @@
-import type { Metadata } from 'next';
-import { SessionPanel } from './session-panel';
-
-export const metadata: Metadata = { title: 'Panel · YEBO', robots: { index: false } };
+import { PanelHome } from './panel-home';
 
 export default function PanelPage() {
-  return <SessionPanel />;
+  return <PanelHome />;
 }

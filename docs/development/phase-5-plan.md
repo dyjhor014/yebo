@@ -228,3 +228,94 @@ CONFIGURE queda bloqueado en `SUSPENDED`, `EXPIRED` y `CANCELLED` (ADR-023). El 
 
 - **Revisión visual con Impeccable** de los portales: en escritorio, a varias secciones les sobra ancho. Va con el editor de la 5.4, que decide cómo se ven las vistas previas.
 
+
+## Etapa 5.4 · Editor «Mi sitio» en el panel de la empresa (implementada el 2026-11-10; pendiente de revisión)
+
+### Decisiones de implementación
+
+| Tema | Decisión |
+|---|---|
+| Proceso | Maqueta aprobada antes del código. Recorrido E2E con Playwright y axe. `critique` de Impeccable sobre las pantallas renderizadas, sin telemetría (ver «Crítica de Impeccable y correcciones») |
+| Panel de la empresa | Primer panel en `apps/web`. `/panel` exige la sesión de la empresa del host, con renovación silenciosa una vez. El carril muestra **solo las secciones permitidas**; por ahora, «Mi sitio» (`site.manage`). Con ese permiso, `/panel` lleva al editor; sin secciones, lo explica. Cabeceras `no-store` también en `/panel/*` |
+| Componentes compartidos | `Dialog` y las piezas de formulario pasan de `apps/platform` a `@yebo/ui` (`./dialog` y `./form`). `apps/platform` los reexporta, sin cambiar su código |
+| Editor | Cinco pestañas: marca y tema, portada, secciones (mostrar, ocultar y ordenar), contacto y sucursales, y más contenido (horarios, FAQ, políticas, redes y pie). Antes de guardar, `draftIssues` aplica el mismo esquema y la misma regla de contraste que la API. Cada problema nombra su campo y su pestaña, y lleva a ella. El tamaño se muestra frente a los 60 KB. Aviso al salir con cambios sin guardar |
+| Sin `WHITE_LABEL` (F5-Q4) | El editor avisa de qué desbloquea el módulo, y la vista previa usa `effectiveSiteConfig`: se ve lo mismo que se publicará |
+| Vista previa | El **mismo componente `Portal`** pinta el borrador dentro de un monitor (1280 × 800) o de un iPhone (390 × 844), reducido. Los cortes de diseño del portal pasan a ser **de contenedor** (`@container`), así que se ve igual que en ese dispositivo. Es `inert`: no se sigue ningún enlace ni recibe el foco. Queda fija al desplazar el formulario (`sticky`) |
+| Publicar | Un diálogo resume los cambios frente a la versión publicada (`changesSince`: tema, portada, secciones mostradas, ocultas o reordenadas). Si hay cambios sin guardar, primero guarda |
+| Historial | `/panel/sitio/historial`: versiones con estado, fechas y **autor**. La API añade `publishedBy`: el nombre de la persona de la empresa o «Soporte YEBO», nunca el nombre ni el id del staff. Restaurar pide confirmación y publica una copia como versión nueva |
+| Retirar archivos (pendiente de la 5.2) | `DELETE /api/v1/site/assets/{id}` (`site.manage`, CONFIGURE). El archivo pasa a `DELETED` y se borran sus objetos, incluido el favicon. Si lo usa el borrador o la versión publicada → 409. Usa el mismo candado por empresa que las escrituras del sitio. El editor retira, tras guardar, los logos y las portadas que se sustituyeron en esa edición y que ya no se usan. Una versión archivada que use un archivo retirado deja de poder restaurarse (la API lo explica) |
+| Pruebas de `apps/web` | Jest con `@swc/jest`, con las mismas versiones que ya usan `apps/api` y `@yebo/contracts`; no entra ninguna dependencia nueva en el monorepo |
+
+### Pruebas
+
+- **Unitarias de `apps/web` (`site-draft.spec`, 12 tras la crítica):**
+  - normalización de los opcionales vacíos;
+  - problemas con su campo y su pestaña, con el contraste que bloquea, el tamaño máximo y las rutas de listas;
+  - resumen de cambios: primera publicación, tema, portada, secciones y solo el orden, y sin cambios;
+  - archivos sin uso.
+- **Integración:**
+  - `site.int-spec`: autor de cada versión; con soporte, «Soporte YEBO» sin el id del staff;
+  - `site-assets.int-spec`: retirar un archivo sin uso (`DELETED`, objetos y favicon borrados, deja de servirse y de listarse); en uso por el borrador o la publicada → 409; de otra empresa o con un id no válido → 404; retirado dos veces → 404.
+- **E2E `07-editor.spec.ts` (6), con axe en el editor, el diálogo y el historial:**
+  - preparación: la administradora se registra desde su invitación;
+  - `/panel` lleva a «Mi sitio» tras iniciar sesión en la empresa;
+  - editar: el contraste bloquea; tema, logo, portada, secciones y contacto, con la vista previa en monitor e iPhone. Al final del formulario, la vista previa y el carril siguen a la vista;
+  - publicar: el diálogo resume los cambios y el portal cambia al momento;
+  - segunda versión y restaurar la primera como versión nueva;
+  - móvil (390 px): el editor y el historial caben y el menú del panel se abre.
+- **Detector de Impeccable** sobre 6 capturas: 77 avisos, de los mismos tres tipos que en la Fase 4 (`cramped-padding`, `overused-font` y `marquee`), ya documentados como falsos positivos. Estaba con la telemetría **activada** y se ha desactivado (`~/.impeccable/config.json`). La revisión de las capturas no encontró defectos. La crítica completa, y lo que cambió por ella, está en la sección siguiente.
+- **Totales:**
+  - integración: 24 suites y 380 pruebas ✅;
+  - E2E: 24 + 3 opcionales ✅;
+  - unitarias: web 10 y contratos 11 ✅;
+  - tipos, lint y formato ✅.
+
+### Crítica de Impeccable y correcciones (2026-11-10, a petición del responsable)
+
+`critique` sobre el editor, con dos evaluaciones aisladas en paralelo:
+- **A, revisión de diseño:** con las capturas y el código. Puntuó **24/40** en las heurísticas de Nielsen.
+- **B, detector:** 77 avisos, todos falsos positivos (ver arriba).
+
+El binario 0.1.18 no trae `critique-storage`, así que la crítica no se archivó en `.impeccable/critique/`. El responsable eligió corregir los P1 y los P2, descartar las filas vacías (sin cambiar la API) y revisar antes del commit.
+
+| # | Problema | Corrección |
+|---|---|---|
+| P1 | Añadir una fila (una pregunta, una sucursal) la dejaba vacía, y eso bloqueaba guardar con un aviso rojo antes de escribir nada. Ningún campo se marcaba | Las filas totalmente vacías no se envían ni cuentan (`normalizeConfig`). Los avisos aparecen al intentar guardar o publicar. Cada campo recibe su error (`aria-invalid`), y la ruta se calcula con el índice **en pantalla**. Cada pestaña muestra cuántos datos hay que corregir en ella. El resumen lleva el foco al campo. Mensajes concretos para teléfonos y correos. «Publicar…» con problemas lleva a ellos en vez de quedar desactivado |
+| P1 | Al desplazarse se perdían el estado, «Guardar» y «Publicar» | Cabecera fija (`lg:sticky`), con el estado como región `aria-live`. La vista previa fija empieza debajo de ella |
+| P2 | La vista previa no seguía lo que se editaba y era pequeña | Se desplaza a la sección del campo enfocado (`data-preview`) o de la pestaña, y respeta «reducir movimiento». Si la sección aún no existe, reintenta hasta que aparece. «Ampliar» la abre en un diálogo, a tamaño real si cabe en el alto de la ventana |
+| P2 | No había vuelta atrás | «Descartar…» vuelve a lo guardado o a lo publicado. «Quitar» una fila se puede deshacer, con lo escrito. Las filas tienen claves estables (antes, `key={i}`). El diálogo de publicar no se cierra mientras publica (tampoco con Esc) |
+| P2 | Las pestañas se veían como las opciones y se partían en dos filas | `tablist` real (flechas, Inicio y Fin) subrayado, con nombres cortos que coinciden con el título de su tarjeta: Marca, Portada, Secciones, Contacto e Información. Caben en una fila a 1440 px (lo comprueba el E2E). Las píldoras quedan para las opciones |
+| Menores | — | Primera publicación: el diálogo dice qué se publica (portada, tema y secciones en su orden), no solo «Primera publicación». Un sitio nunca publicado se puede publicar tal cual. El contraste correcto es una línea discreta, y el lector de pantalla solo anuncia los cambios de estado, no cada movimiento del selector. «Fondo del sitio» en lugar de «Superficie», con pistas de para qué sirve cada color. Fuentes agrupadas por familia. Recuentos con nombre («1 sucursal») y «Añadir» en las secciones vacías. Formato de WhatsApp con el +51. El tamaño del sitio solo se muestra cerca del límite. «Ver el portal» y «Abrir el portal» se abren en otra pestaña |
+
+**Fuera de esta corrección:**
+- **«Ver» una versión del historial antes de restaurarla:** necesita `GET /site/versions/{n}` en la API, que se acordó no cambiar.
+- **Ideas de la crítica que serían rediseño, con maqueta y aprobación aparte:**
+  - autoguardado;
+  - temas ya validados en AA;
+  - horarios a partir de las rutas;
+  - reordenar arrastrando.
+
+**Verificación tras las correcciones:**
+- **E2E del editor:**
+  - los avisos aparecen solo al intentar guardar, con el contador en la pestaña y el foco en el campo, y «Publicar…» lleva a los problemas;
+  - la vista previa se desplaza a «Contacto» al editarlo;
+  - «Deshacer» tras quitar una fila;
+  - una fila vacía no impide guardar;
+  - «Ampliar» se abre por encima del 72 % y se cierra con Esc;
+  - «Descartar…» vuelve a lo guardado;
+  - la cabecera sigue a la vista al desplazarse;
+  - las pestañas caben en una fila;
+  - axe en el diálogo de descartar y en la vista ampliada.
+- **Detector:** 82 avisos. Los 5 nuevos son `cramped-padding`: el subrayado de las pestañas sobre su línea, y una fila de lista con `pb-4`. Falsos positivos, igual que los anteriores.
+- **Totales:**
+  - E2E: 24 + 3 opcionales ✅;
+  - unitarias: web 12 y contratos 11 ✅;
+  - tipos y lint ✅.
+- **Sin repetir:** la integración (24 suites y 380 pruebas ✅ antes de la crítica), porque la API no ha cambiado.
+
+### Pendiente
+
+- Migraciones de la 5.1 y la 5.2 a `yebo_dev`: con autorización y copia previa. La 5.4 no añade migraciones.
+- «Ver» una versión del historial antes de restaurarla (necesita una ruta nueva en la API).
+- Limpieza de objetos huérfanos (borrado fallido tras retirar, o archivos subidos y nunca guardados): tarea programada, fuera de la 5.4.
+- 5.5: cierre de la fase con la prueba del criterio de aceptación.

@@ -245,8 +245,20 @@ export type SiteEditorResponse = z.infer<typeof SiteEditorResponseSchema>;
 export const SaveSiteDraftRequestSchema = z.object({ config: SiteConfigSchema }).strict();
 export type SaveSiteDraftRequest = z.infer<typeof SaveSiteDraftRequestSchema>;
 
+/**
+ * Quién publicó una versión: una persona de la empresa (su nombre) o el staff de YEBO con un acceso de soporte FULL
+ * (sin nombre: la empresa ve «Soporte YEBO»). `null` en el borrador.
+ */
+export const SitePublisherSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('MEMBER'), name: z.string() }),
+  z.object({ kind: z.literal('SUPPORT') }),
+]);
+export type SitePublisher = z.infer<typeof SitePublisherSchema>;
+
 export const SiteVersionsResponseSchema = z.object({
-  versions: z.array(SiteVersionSchema.omit({ config: true })),
+  versions: z.array(
+    SiteVersionSchema.omit({ config: true }).extend({ publishedBy: SitePublisherSchema.nullable() }),
+  ),
 });
 export type SiteVersionsResponse = z.infer<typeof SiteVersionsResponseSchema>;
 

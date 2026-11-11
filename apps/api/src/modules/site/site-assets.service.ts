@@ -139,6 +139,39 @@ export class SiteAssetsService {
     return rows.map(toAsset);
   }
 
+  /**
+   * Retira un archivo que ya no se usa (Fase 5.4): pasa a DELETED, deja de servirse y de poder referenciarse, y se
+   * borran sus objetos. No se retira si lo usa el borrador o la versión publicada (409): primero hay que quitarlo y
+   * guardar. Una versión archivada que lo use ya no se podrá restaurar (la API lo explica al intentarlo).
+   */
+  async retire(assetId: string): Promise<void> {
+    if (!/^[0-9a-f-]{36}$/.test(assetId)) throw new AppError('NOT_FOUND', 'Recurso no encontrado', 404);
+    const keys = await this.db.transaction(async (tx) => {
+      // Mismo candado que las escrituras del sitio: nadie guarda una referencia a este archivo mientras se retira.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`site:${this.tenantId()}`}, 0))`;
+      const row = await tx.fileAsset.findFirst({
+        where: { id: assetId, status: 'READY' },
+        select: { kind: true, storageKey: true },
+      });
+      if (!row) throw new AppError('NOT_FOUND', 'Recurso no encontrado', 404);
+      const live = await tx.siteVersion.findMany({
+        where: { status: { in: ['DRAFT', 'PUBLISHED'] } },
+        select: { config: true },
+      });
+      if (live.some((v) => references(v.config, assetId))) {
+        throw new AppError(
+          'CONFLICT',
+          'Este archivo está en uso en el borrador o en el sitio publicado: quítalo y guarda antes de retirarlo',
+          409,
+        );
+      }
+      await tx.fileAsset.update({ where: { id: assetId }, data: { status: 'DELETED' } });
+      return row.kind === 'SITE_LOGO' ? [row.storageKey, faviconKey(row.storageKey)] : [row.storageKey];
+    });
+    // Ya no se sirve (DELETED): si borrar el objeto falla, queda un huérfano inofensivo y no se repite el error.
+    for (const key of keys) await this.storage.delete(key).catch(() => undefined);
+  }
+
   /** Para el portal público: un archivo PUBLIC y READY de la empresa del host (RLS), o null. */
   async publicObject(assetId: string, variant: 'original' | 'favicon') {
     if (!/^[0-9a-f-]{36}$/.test(assetId)) return null;
@@ -169,6 +202,13 @@ export class SiteAssetsService {
     if (support) return { kind: 'PLATFORM_USER', id: support.platformUserId };
     throw new Error('SiteAssetsService requiere una sesión verificada');
   }
+}
+
+/** El JSON guardado referencia el archivo como logo o como imagen de portada (sin validar el resto). */
+function references(config: unknown, assetId: string): boolean {
+  if (typeof config !== 'object' || config === null) return false;
+  const c = config as { logoAssetId?: unknown; hero?: { imageAssetId?: unknown } };
+  return c.logoAssetId === assetId || c.hero?.imageAssetId === assetId;
 }
 
 const SELECT = {

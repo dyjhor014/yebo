@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
   SaveSiteDraftRequestSchema,
@@ -73,5 +73,13 @@ export class SiteController {
     const parsed = SiteAssetKindSchema.safeParse(kind);
     if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'Indica kind=logo o kind=hero', 400);
     return this.assets.upload(parsed.data, body);
+  }
+
+  /** Retira un archivo que ya no usan ni el borrador ni la versión publicada (Fase 5.4). */
+  @Delete('assets/:id')
+  @HttpCode(204)
+  @Protected('site.manage', 'CONFIGURE')
+  async retireAsset(@Param('id') id: string): Promise<void> {
+    await this.assets.retire(id);
   }
 }
