@@ -2,7 +2,9 @@
 # Crea los roles y bases de datos de YEBO (ADR-003).
 #   yebo_owner    → propietario de las tablas; solo migraciones.
 #   yebo_app      → API y worker en contexto de tenant. RLS APLICA (no es propietario, sin BYPASSRLS).
-#   yebo_platform → resolver de dominios, identidad, superadmin y jobs entre tenants. BYPASSRLS.
+#   yebo_platform → resolver de dominios, superadmin y jobs entre tenants. BYPASSRLS.
+#   yebo_identity → solo el módulo identity: sesiones y tokens (Fase 3.2a). SIN BYPASSRLS; sus permisos
+#                   sobre tablas los conceden las migraciones de forma explícita (nunca privilegios por defecto).
 # Se ejecuta una sola vez, al inicializar el volumen de datos.
 set -eu
 
@@ -10,6 +12,7 @@ psql -v ON_ERROR_STOP=1 --username postgres --dbname postgres <<SQL
 CREATE ROLE yebo_owner    LOGIN PASSWORD '${YEBO_OWNER_PASSWORD}'    NOSUPERUSER NOCREATEROLE NOBYPASSRLS;
 CREATE ROLE yebo_app      LOGIN PASSWORD '${YEBO_APP_PASSWORD}'      NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 CREATE ROLE yebo_platform LOGIN PASSWORD '${YEBO_PLATFORM_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;
+CREATE ROLE yebo_identity LOGIN PASSWORD '${YEBO_IDENTITY_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 SQL
 
 # yebo_dev: desarrollo · yebo_test: pruebas de integración · yebo_poc_*: pruebas de concepto de la Fase 2
@@ -19,10 +22,10 @@ for db in yebo_dev yebo_test yebo_poc_tenancy yebo_poc_inventory yebo_shadow yeb
   psql -v ON_ERROR_STOP=1 --username postgres --dbname postgres -c "CREATE DATABASE ${db} OWNER yebo_owner;"
   psql -v ON_ERROR_STOP=1 --username postgres --dbname "${db}" <<SQL
 REVOKE ALL ON DATABASE ${db} FROM PUBLIC;
-GRANT CONNECT ON DATABASE ${db} TO yebo_owner, yebo_app, yebo_platform;
+GRANT CONNECT ON DATABASE ${db} TO yebo_owner, yebo_app, yebo_platform, yebo_identity;
 ALTER SCHEMA public OWNER TO yebo_owner;
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
-GRANT USAGE ON SCHEMA public TO yebo_app, yebo_platform;
+GRANT USAGE ON SCHEMA public TO yebo_app, yebo_platform, yebo_identity;
 -- Todo lo que cree yebo_owner queda disponible para la app y la plataforma con permisos DML (nunca DDL).
 ALTER DEFAULT PRIVILEGES FOR ROLE yebo_owner IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO yebo_app, yebo_platform;

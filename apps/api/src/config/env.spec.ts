@@ -37,6 +37,12 @@ describe('parseEnv', () => {
     expect(() => parseEnv({ ...valid, PG_PLATFORM_USER: 'yebo_app' })).toThrow(/rol de plataforma/);
   });
 
+  it('exige que el rol de identidad sea distinto de los de aplicación y plataforma', () => {
+    expect(() => parseEnv({ ...valid, PG_IDENTITY_USER: 'yebo_app' })).toThrow(/PG_IDENTITY_USER/);
+    expect(() => parseEnv({ ...valid, PG_IDENTITY_USER: 'yebo_platform' })).toThrow(/PG_IDENTITY_USER/);
+    expect(parseEnv(valid).PG_IDENTITY_USER).toBe('yebo_identity');
+  });
+
   it('prohíbe logs con formato pretty en producción', () => {
     expect(() => parseEnv({ ...valid, NODE_ENV: 'production', LOG_PRETTY: 'true' })).toThrow(/LOG_PRETTY/);
   });

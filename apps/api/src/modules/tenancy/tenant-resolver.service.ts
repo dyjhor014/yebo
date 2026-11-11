@@ -56,6 +56,19 @@ export class TenantResolverService {
     return tenant;
   }
 
+  /**
+   * Nombres comerciales de varios tenants (p. ej., el selector de empresa del hub). Lectura de `tenants`
+   * con yebo_platform: el rol de identidad no tiene acceso a esa tabla (multitenancy §4.3).
+   */
+  async describe(tenantIds: readonly string[]): Promise<Map<string, string>> {
+    if (tenantIds.length === 0) return new Map();
+    const rows = await this.platform.client.tenant.findMany({
+      where: { id: { in: [...tenantIds] } },
+      select: { id: true, tradeName: true },
+    });
+    return new Map(rows.map((r) => [r.id, r.tradeName]));
+  }
+
   /** Para la Fase 4: al cambiar un dominio o el estado de un tenant, se invalida su entrada. */
   async invalidate(rawHost: string): Promise<void> {
     const host = normalizeHost(rawHost);

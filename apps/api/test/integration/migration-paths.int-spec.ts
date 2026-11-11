@@ -165,12 +165,36 @@ const SETS: MigrationSet[] = [
     schema: 'prisma/schema.prisma',
     migrations: 'prisma/migrations',
     tenantTables: ['tenant_memberships', 'roles', 'role_permissions', 'membership_roles'],
-    globalTablesWithTenantId: ['tenant_domains'],
+    globalTablesWithTenantId: ['tenant_domains', 'tenant_sessions', 'authorization_codes'],
     extensions: ['btree_gist', 'citext'],
-    // Esquema anterior = el de la Fase 2 (solo extensiones). Prueba que la Fase 3 se aplica sobre él.
-    previous: ['20261105000000_init_extensions'],
+    // Esquema anterior = el de la etapa 3.1, con datos. Prueba que la migración de sesiones (3.2) se aplica
+    // sobre membresías existentes (añade un índice único compuesto a tenant_memberships).
+    previous: ['20261105000000_init_extensions', '20261105195054_fase3_1_tenancy_identity'],
     previousHadRlsBug: false,
-    seed: () => Promise.resolve({}),
+    async seed(platform) {
+      const user = randomUUID();
+      for (const [tenant, n] of [
+        [A, 1],
+        [B, 2],
+      ] as const) {
+        await platform.query(
+          `INSERT INTO tenants (id, slug, legal_name, trade_name, tax_id_type, tax_id, updated_at)
+           VALUES ($1, $2, $3, $3, 'RUC', $4, now())`,
+          [tenant, `empresa-${n}`, `Empresa ${n}`, `2000000000${n}`],
+        );
+      }
+      await platform.query(
+        `INSERT INTO users (id, email, password_hash, full_name, updated_at) VALUES ($1, 'u@example.com', 'x', 'U', now())`,
+        [user],
+      );
+      for (const tenant of [A, B]) {
+        await platform.query(
+          `INSERT INTO tenant_memberships (id, tenant_id, user_id, status, updated_at) VALUES ($1, $2, $3, 'ACTIVE', now())`,
+          [randomUUID(), tenant, user],
+        );
+      }
+      return { tenants: 2, users: 1, tenant_memberships: 2 };
+    },
   },
   {
     name: 'PoC aislamiento',

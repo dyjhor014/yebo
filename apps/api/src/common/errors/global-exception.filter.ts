@@ -30,6 +30,7 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   VALIDATION_FAILED: 'Los datos enviados no son válidos',
   BAD_REQUEST: 'Solicitud inválida',
   UNAUTHENTICATED: 'Se requiere autenticación',
+  PERMISSIONS_CHANGED: 'Tus permisos cambiaron; renueva la sesión',
   FORBIDDEN: 'No tiene permiso para realizar esta operación',
   NOT_FOUND: 'Recurso no encontrado',
   CONFLICT: 'La operación entra en conflicto con el estado actual',

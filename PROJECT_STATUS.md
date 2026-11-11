@@ -4,7 +4,14 @@
 
 ## Fase actual
 
-**Fase 3: Multitenancy y seguridad — en curso** (rama `fase-3/multitenancy-seguridad`, apilada sobre `fase-2/fundacion-tecnica` por decisión del responsable, sin esperar al merge del PR #1). **Etapa 3.1** (esquema base de tenancy e identidad + resolución del tenant por host) **lista para revisión**. Plan: [phase-3-plan.md](docs/development/phase-3-plan.md).
+**Fase 3: Multitenancy y seguridad — en curso** (rama `fase-3/multitenancy-seguridad`, apilada sobre `fase-2/fundacion-tecnica` por decisión del responsable, sin esperar al merge del PR #1). **Etapa 3.1** (esquema base de tenancy e identidad + resolución del tenant por host) **lista para revisión** (PR #4). **Etapa 3.2a** (servicios de sesión) **lista para revisión tras la segunda iteración** en la rama `fase-3/3.2-sesiones`, apilada sobre la 3.1. Incluye:
+- Argon2id;
+- JWT EdDSA con `aud`;
+- verificación de sesión en PostgreSQL en cada request;
+- sucesor cifrado;
+- rol dedicado `yebo_identity`.
+
+La **3.2b** (hub de cuentas y flujo OAuth propio + PKCE S256, con sus pantallas) está **implementada y pendiente de revisión** en la misma rama; su migración no se aplicó a ninguna base del proyecto. Plan: [phase-3-plan.md](docs/development/phase-3-plan.md).
 
 La Fase 2 sigue en revisión mediante el PR #1, sin merge. Orden de integración previsto: #1 → #3 → #2.
 
@@ -54,5 +61,7 @@ Ninguno abierto.
 
 1. Revisión de los PR abiertos por el responsable del proyecto; el merge lo hace él. Orden de integración previsto: #1 (Fase 2) → #3 (Impeccable) → #2 (MKT-01) → #4 (Fase 3.1, apilado sobre la rama de la Fase 2).
 2. Tras el cierre de la Fase 2: activar la protección de `main` exigiendo el check de CI.
-3. Revisión de la etapa 3.1 (PR #4).
-4. Etapa 3.2 (autenticación y sesiones), **solo con autorización expresa** tras la revisión de la 3.1.
+3. Revisión de la etapa 3.1 (PR #4) y de la etapa 3.2a.
+4. Revisión del SQL de **ADR-034** (separación de privilegios: `yebo_platform` sin BYPASSRLS; rol `yebo_test_bypass` solo para pruebas), propuesto en [phase-3-plan](docs/development/phase-3-plan.md). Dirección aprobada; **no implementado**.
+5. Para migrar `yebo_dev` tras aprobar la 3.2a: `scripts/dev/create-identity-role.sh` y después `pnpm --filter @yebo/api db:migrate:deploy` (reversión en [phase-3-plan](docs/development/phase-3-plan.md)).
+6. Revisión de la 3.2b. La 3.3 (diseño aceptado) **solo con autorización expresa**.

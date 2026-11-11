@@ -22,7 +22,15 @@ function parseTrustProxy(value: string): boolean | number | string {
  */
 export function configureApp(app: NestExpressApplication, env: Env, options: { swagger: boolean }): void {
   app.use(requestIdMiddleware);
-  app.use(helmet());
+  // La API nunca se muestra en un marco (frame-ancestors 'none') ni filtra la URL de origen (no-referrer):
+  // protege el hub de cuentas y el canje del código (identity-and-sessions §5).
+  app.use(
+    helmet({
+      contentSecurityPolicy: { directives: { 'frame-ancestors': ["'none'"] } },
+      frameguard: { action: 'deny' },
+      referrerPolicy: { policy: 'no-referrer' },
+    }),
+  );
   app.set('trust proxy', parseTrustProxy(env.TRUST_PROXY));
   app.useBodyParser('json', { limit: BODY_LIMIT });
   app.useBodyParser('urlencoded', { limit: BODY_LIMIT, extended: false });

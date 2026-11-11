@@ -64,9 +64,11 @@ model Tenant {
   createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  domains     TenantDomain[]
-  memberships TenantMembership[]
-  roles       Role[]
+  domains            TenantDomain[]
+  memberships        TenantMembership[]
+  roles              Role[]
+  tenantSessions     TenantSession[]
+  authorizationCodes AuthorizationCode[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -133,7 +135,9 @@ model User {
   createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  memberships TenantMembership[]
+  memberships      TenantMembership[]
+  identitySessions IdentitySession[]
+  tenantSessions   TenantSession[]
 
   @@map("users")
 }
@@ -153,12 +157,15 @@ model TenantMembership {
   createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  user   User             @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  roles  MembershipRole[]
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  roles          MembershipRole[]
+  tenantSessions TenantSession[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, userId])
+  /// Destino de la FK compuesta de tenant_sessions: la membresía es de ese usuario y de ese tenant.
+  @@unique([tenantId, userId, id])
   @@index([userId])
   @@map("tenant_memberships")
 }
@@ -241,4 +248,137 @@ model MembershipRole {
   @@id([tenantId, membershipId, roleId])
   @@index([tenantId, roleId])
   @@map("membership_roles")
+}
+
+// ============================================================================
+// Fase 3.2 · Sesiones (ADR-009, ADR-022; identity-and-sessions §6–8, §11)
+// Tablas globales gestionadas por identidad con yebo_platform. yebo_app no tiene acceso.
+// ============================================================================
+
+enum SessionRevokeReason {
+  LOGOUT
+  LOGOUT_ALL
+  PASSWORD_CHANGED
+  MEMBERSHIP_REVOKED
+  ADMIN_REVOKED
+  REFRESH_REUSE
+  USER_DISABLED
+  /// Fase 3.2b: se canjeó de nuevo un código de autorización ya usado (RFC 6749 §4.1.2).
+  AUTH_CODE_REUSE
+
+  @@map("session_revoke_reason")
+}
+
+/// 🌐 Sesión de identidad del hub de cuentas (cookie __Host-yebo_hub). No da acceso a datos de ninguna empresa.
+/// Tablas de sesión: solo el rol dedicado yebo_identity (Fase 3.2a); ni yebo_app ni yebo_platform.
+model IdentitySession {
+  id                String               @id @default(uuid(7)) @db.Uuid
+  userId            String               @map("user_id") @db.Uuid
+  ip                String?              @db.Inet
+  userAgent         String?              @map("user_agent")
+  authMethods       String[]             @map("auth_methods")
+  mfaVerifiedAt     DateTime?            @map("mfa_verified_at") @db.Timestamptz(6)
+  lastSeenAt        DateTime             @map("last_seen_at") @db.Timestamptz(6)
+  idleExpiresAt     DateTime             @map("idle_expires_at") @db.Timestamptz(6)
+  absoluteExpiresAt DateTime             @map("absolute_expires_at") @db.Timestamptz(6)
+  revokedAt         DateTime?            @map("revoked_at") @db.Timestamptz(6)
+  revokeReason      SessionRevokeReason? @map("revoke_reason")
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user               User                @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  tenantSessions     TenantSession[]
+  authorizationCodes AuthorizationCode[]
+
+  /// Destino de la FK compuesta de tenant_sessions: la sesión hija es del mismo usuario.
+  @@unique([id, userId])
+  @@index([userId])
+  @@map("identity_sessions")
+}
+
+/// 🌐 Sesión de UNA empresa en UN dominio, hija de una sesión de identidad. Excepción global con tenant_id:
+/// se consulta para validar el token antes de abrir el contexto de tenant (multitenancy §4.3).
+model TenantSession {
+  id                String               @id @default(uuid(7)) @db.Uuid
+  identitySessionId String               @map("identity_session_id") @db.Uuid
+  userId            String               @map("user_id") @db.Uuid
+  tenantId          String               @map("tenant_id") @db.Uuid
+  membershipId      String               @map("membership_id") @db.Uuid
+  host              String               @db.Citext
+  lastSeenAt        DateTime             @map("last_seen_at") @db.Timestamptz(6)
+  idleExpiresAt     DateTime             @map("idle_expires_at") @db.Timestamptz(6)
+  absoluteExpiresAt DateTime             @map("absolute_expires_at") @db.Timestamptz(6)
+  revokedAt         DateTime?            @map("revoked_at") @db.Timestamptz(6)
+  revokeReason      SessionRevokeReason? @map("revoke_reason")
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  /// FK compuestas: la sesión de identidad es del mismo usuario, y la membresía es de ese usuario en ese tenant.
+  identitySession    IdentitySession     @relation(fields: [identitySessionId, userId], references: [id, userId], onDelete: Restrict, onUpdate: Restrict)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  membership         TenantMembership    @relation(fields: [tenantId, userId, membershipId], references: [tenantId, userId, id], onDelete: Restrict, onUpdate: Restrict)
+  refreshTokens      RefreshToken[]
+  authorizationCodes AuthorizationCode[]
+
+  @@index([identitySessionId])
+  @@index([userId])
+  @@index([tenantId, membershipId])
+  @@map("tenant_sessions")
+}
+
+/// 🌐 Refresh token opaco (solo el SHA-256). Familia = sesión de empresa. Rotación con ventana de gracia.
+/// El sucesor se obtiene por parent_id: UNIQUE(tenant_session_id, parent_id) garantiza un único sucesor.
+model RefreshToken {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  tenantSessionId     String    @map("tenant_session_id") @db.Uuid
+  tokenHash           Bytes     @unique @map("token_hash")
+  parentId            String?   @map("parent_id") @db.Uuid
+  rotatedAt           DateTime? @map("rotated_at") @db.Timestamptz(6)
+  /// Sucesor cifrado (AES-256-GCM, clave HKDF del token padre en claro, que nunca se guarda). Solo se usa
+  /// dentro de la ventana de gracia para devolver el MISMO sucesor; sin el token padre no se puede descifrar.
+  successorCiphertext Bytes?    @map("successor_ciphertext")
+  expiresAt           DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt           DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenantSession TenantSession @relation(fields: [tenantSessionId], references: [id], onDelete: Cascade, onUpdate: Restrict)
+  parent        RefreshToken? @relation("RefreshTokenRotation", fields: [tenantSessionId, parentId], references: [tenantSessionId, id], onDelete: Restrict, onUpdate: Restrict)
+  successor     RefreshToken? @relation("RefreshTokenRotation")
+
+  /// Destino de la FK compuesta del sucesor: la cadena de rotación no cruza sesiones.
+  @@unique([tenantSessionId, id])
+  /// Un token tiene como máximo un sucesor.
+  @@unique([tenantSessionId, parentId])
+  @@map("refresh_tokens")
+}
+
+// ============================================================================
+// Fase 3.2b · Códigos de autorización del hub (OAuth 2.0 Authorization Code + PKCE S256; ADR-022)
+// ============================================================================
+
+/// 🌐 Código de un solo uso emitido por el hub. Solo se guarda su SHA-256. Ligado al tenant, al redirect_uri
+/// derivado del dominio verificado, al host que lo canjea y a la sesión de identidad. Excepción global con
+/// tenant_id (se canjea antes de que exista la sesión de empresa). Solo yebo_identity.
+model AuthorizationCode {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  codeHash            Bytes     @unique @map("code_hash")
+  userId              String    @map("user_id") @db.Uuid
+  tenantId            String    @map("tenant_id") @db.Uuid
+  identitySessionId   String    @map("identity_session_id") @db.Uuid
+  redirectUri         String    @map("redirect_uri")
+  redemptionHost      String    @map("redemption_host") @db.Citext
+  codeChallenge       String    @map("code_challenge")
+  codeChallengeMethod String    @default("S256") @map("code_challenge_method")
+  expiresAt           DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt          DateTime? @map("consumed_at") @db.Timestamptz(6)
+  /// Sesión emitida al canjearlo: se revoca si el código se presenta de nuevo (RFC 6749 §4.1.2).
+  tenantSessionId     String?   @map("tenant_session_id") @db.Uuid
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  identitySession IdentitySession @relation(fields: [identitySessionId, userId], references: [id, userId], onDelete: Restrict, onUpdate: Restrict)
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  tenantSession   TenantSession?  @relation(fields: [tenantSessionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([identitySessionId])
+  @@index([tenantSessionId])
+  @@map("authorization_codes")
 }

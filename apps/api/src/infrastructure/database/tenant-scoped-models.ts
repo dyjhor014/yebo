@@ -15,8 +15,21 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set<string>([
   'MembershipRole',
 ]);
 
-/** tenant_domains: el resolver la consulta para DESCUBRIR el tenant a partir del host (ADR-004). */
-export const GLOBAL_MODELS_WITH_TENANT_ID: ReadonlySet<string> = new Set<string>(['TenantDomain']);
+/**
+ * - tenant_domains: el resolver la consulta para DESCUBRIR el tenant a partir del host (ADR-004).
+ * - tenant_sessions: se consulta para validar el token ANTES de abrir el contexto de tenant (ADR-009);
+ *   la gestiona identidad con yebo_identity (Fase 3.2).
+ * - authorization_codes: se canjea antes de que exista la sesión de empresa (Fase 3.2b); solo yebo_identity.
+ */
+export const GLOBAL_MODELS_WITH_TENANT_ID: ReadonlySet<string> = new Set<string>([
+  'TenantDomain',
+  'TenantSession',
+  'AuthorizationCode',
+]);
 
 /** Nombres de tabla equivalentes, para las verificaciones sobre el catálogo de PostgreSQL. */
-export const GLOBAL_TABLES_WITH_TENANT_ID: readonly string[] = ['tenant_domains'];
+export const GLOBAL_TABLES_WITH_TENANT_ID: readonly string[] = [
+  'tenant_domains',
+  'tenant_sessions',
+  'authorization_codes',
+];

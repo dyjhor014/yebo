@@ -26,6 +26,9 @@ export const EnvSchema = z
     PG_APP_PASSWORD: secret,
     PG_PLATFORM_USER: z.string().min(1),
     PG_PLATFORM_PASSWORD: secret,
+    // Rol dedicado de identidad (Fase 3.2a): solo lo usa el módulo identity. Opcional para el worker.
+    PG_IDENTITY_USER: z.string().min(1).default('yebo_identity'),
+    PG_IDENTITY_PASSWORD: secret.optional(),
     // Credenciales de propietario: solo para migraciones. Opcionales para la API en ejecución.
     PG_OWNER_USER: z.string().min(1).optional(),
     PG_OWNER_PASSWORD: secret.optional(),
@@ -38,6 +41,38 @@ export const EnvSchema = z
       .string()
       .regex(/^[a-z0-9_-]+$/)
       .default('yebo'),
+
+    // Autenticación (security.md §1; identity-and-sessions §6–7)
+    /** Clave privada Ed25519 (PKCS#8 PEM codificado en base64) para firmar los access tokens (EdDSA). */
+    /** Opcional en el esquema: solo la exige el módulo de identidad (el worker no firma tokens). */
+    AUTH_JWT_PRIVATE_KEY: z.string().min(1).optional(),
+    AUTH_JWT_KEY_ID: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,64}$/)
+      .default('k1'),
+    /** Claves públicas anteriores aún válidas (rotación): JSON [{"kid":"…","key":"<PEM SPKI en base64>"}]. */
+    AUTH_JWT_PREVIOUS_PUBLIC_KEYS: z.string().default('[]'),
+    AUTH_JWT_ISSUER: z.string().min(1).default('yebo'),
+    /** Audiencia de los access tokens de empresa. Un token de otra audiencia (p. ej., plataforma) se rechaza. */
+    AUTH_JWT_AUDIENCE: z.string().min(1).default('yebo-tenant-api'),
+    /** Host del hub de cuentas (identity-and-sessions §2). Único lugar donde se escriben credenciales. */
+    AUTH_HUB_HOST: z
+      .string()
+      .regex(/^[a-z0-9.-]+$/)
+      .default('cuentas.yebo.pe'),
+    /** Clave HMAC de las cookies del flujo (petición de autorización y sesión del hub). Opcional para el worker. */
+    AUTH_COOKIE_SECRET: z.string().min(32, 'debe tener al menos 32 caracteres').optional(),
+    AUTH_ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(600),
+    AUTH_REFRESH_GRACE_SECONDS: z.coerce.number().int().min(1).max(60).default(20),
+    AUTH_SESSION_IDLE_MINUTES: z.coerce.number().int().min(5).max(43200).default(720),
+    AUTH_SESSION_ABSOLUTE_DAYS: z.coerce.number().int().min(1).max(90).default(30),
+    // Argon2id: los mínimos son los de OWASP (m=19 MiB, t=2, p=1). Se recalibran con scripts/calibrate-argon2.ts.
+    ARGON2_MEMORY_KIB: z.coerce.number().int().min(19456).max(1048576).default(19456),
+    ARGON2_ITERATIONS: z.coerce.number().int().min(2).max(10).default(2),
+    ARGON2_PARALLELISM: z.coerce.number().int().min(1).max(8).default(1),
+    /** Cálculos de Argon2id simultáneos por proceso y cola máxima (hallazgo M6): el exceso responde 503. */
+    ARGON2_MAX_CONCURRENT: z.coerce.number().int().min(1).max(64).default(4),
+    ARGON2_MAX_QUEUE: z.coerce.number().int().min(0).max(10000).default(64),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && env.LOG_PRETTY) {
@@ -48,6 +83,13 @@ export const EnvSchema = z
         code: 'custom',
         path: ['PG_PLATFORM_USER'],
         message: 'el rol de plataforma debe ser distinto del rol de aplicación (ADR-003)',
+      });
+    }
+    if (env.PG_IDENTITY_USER === env.PG_APP_USER || env.PG_IDENTITY_USER === env.PG_PLATFORM_USER) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['PG_IDENTITY_USER'],
+        message: 'el rol de identidad debe ser distinto de los roles de aplicación y de plataforma',
       });
     }
   });

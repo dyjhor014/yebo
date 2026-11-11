@@ -39,6 +39,7 @@ A partir de la aprobación, cualquier cambio se registra como **un ADR nuevo que
 | 024 | Restricciones de BD: FK en el esquema Prisma, EXCLUDE/CHECK/RLS en SQL y prueba de deriva | **Aceptado** · Fase 2 |
 | 025 | Políticas RLS con `NULLIF(current_setting(...), '')` y contexto por transacción | **Aceptado** · Fase 2 |
 | 026 | Bloqueo ordenado de recursos antes de la exclusión GIST | **Aceptado** · Fase 2 |
+| 034 | Separación efectiva de privilegios de PostgreSQL por rol: `yebo_platform` sin BYPASSRLS y lista blanca de permisos (precisa ADR-003) | **Aceptado como dirección** (2026-11-09) · SQL e implementación **pendientes de revisión** |
 
 ---
 
@@ -208,3 +209,45 @@ Surgen de las pruebas de concepto. Evidencia en [phase-2-results.md](../developm
 **Alternativas:** reintentar ante `40P01` (más latencia y más código); `SERIALIZABLE` (descartado en ADR-007).
 
 **Afecta:** ADR-007, capacity-and-inventory §3.
+
+---
+
+## ADR de la Fase 3
+
+> **Numeración:** ADR-027 a 033 existen en otras ramas sin integrar (PR #2: 027 y 028; PR #5: 029 a 033). Para no chocar con ellos al integrar, este ADR es el **034**. El salto 026 → 034 en esta rama es intencionado.
+
+### ADR-034 · Separación efectiva de privilegios de PostgreSQL por rol (aceptado como dirección; implementación pendiente)
+
+- **Estado:** dirección arquitectónica **aprobada** por el responsable el 2026-11-09. El SQL concreto (ver [phase-3-plan](../development/phase-3-plan.md), "SQL propuesto para ADR-034") y su implementación están **pendientes de revisión**. Hasta entonces sigue vigente lo que describe ADR-003.
+- **Relación con ADR aceptados:**
+  - **precisa ADR-003** en un punto: ADR-003 define `yebo_platform` como "`BYPASSRLS`, acceso restringido"; este ADR le **quita `BYPASSRLS`** y lo reduce a lectura. El resto de ADR-003 (BD compartida, FK compuestas, RLS forzado, contexto por transacción) no cambia, y su texto no se edita;
+  - es **coherente con ADR-025** (contexto de tenant por transacción) y con el patrón de rol dedicado de **ADR-028** (`yebo_leads`) y de la etapa 3.2a (`yebo_identity`);
+  - **multitenancy §4.2** describe hoy `yebo_platform` con BYPASSRLS; se actualizará al implementar.
+- **Contexto:**
+  - los privilegios por defecto del esquema conceden SELECT, INSERT, UPDATE y DELETE sobre toda tabla nueva a `yebo_app` y `yebo_platform`, y cada migración tiene que retirar lo que sobra (lista negra);
+  - `yebo_platform` tiene `BYPASSRLS` y DML sobre casi todo;
+  - en ejecución solo se usa para el resolvedor de dominios (lectura de `tenant_domains` y `tenants`) y el health check;
+  - la contención depende de ESLint;
+  - además, `yebo_app` y `yebo_platform` pueden modificar `_prisma_migrations` (el historial de migraciones).
+- **Problema:** unas credenciales de `yebo_platform` filtradas, o un error en un módulo autorizado, darían acceso de lectura y escritura a los datos de todas las empresas. El aislamiento no está respaldado por PostgreSQL para ese rol.
+- **Alternativas:**
+  1. mantener `BYPASSRLS` y recortar los GRANT: una concesión futura volvería a abrir el acceso entre empresas sin que nadie lo note;
+  2. **quitar `BYPASSRLS` y pasar a una lista blanca explícita** (elegida);
+  3. un rol por función desde ya (resolvedor, superadmin, jobs): se deja para la Fase 4, cuando existan esas funciones.
+- **Decisión:**
+
+  | Rol | Atributos | Permisos |
+  |---|---|---|
+  | `yebo_app` | Sin BYPASSRLS, NOINHERIT | Lista blanca explícita por migración; RLS forzado en toda tabla de tenant |
+  | `yebo_identity` | Sin BYPASSRLS, NOINHERIT | Mínimos de identidad y sesiones (etapa 3.2a) |
+  | `yebo_platform` | **Sin BYPASSRLS**, NOINHERIT | **Solo SELECT sobre `tenants` y `tenant_domains`** |
+  | `yebo_owner` | Sin BYPASSRLS; sujeto al RLS forzado | Propietario y migraciones; nunca en ejecución |
+  | Rol de pruebas (`yebo_test_bypass`) | BYPASSRLS | **Solo en bases de prueba**; nunca en producción ni en `yebo_dev`; la CI comprueba que ningún servicio de ejecución lo usa |
+
+  - **Sin privilegios por defecto** para los roles de ejecución. Nadie es miembro de ningún rol. Ningún rol de ejecución es propietario de objetos.
+  - **Futuras operaciones administrativas** (Fase 4+): GRANT explícito sobre tablas de plataforma; políticas `FOR … TO <rol>` por tabla para lecturas entre tenants; escrituras en datos de tenant con `yebo_app` y el contexto de tenant fijado; roles separados por función si hace falta. **Nunca `BYPASSRLS`** en un rol de ejecución.
+- **Consecuencias:**
+  - cada migración que cree una tabla declara sus GRANT; una prueba de "foto de privilegios" falla ante cualquier diferencia;
+  - el cambio de atributos de los roles requiere un superusuario: script idempotente para volúmenes existentes y para el despliegue (Fase 15);
+  - las siembras de las pruebas dejan de usar `yebo_platform`.
+- **Dependencias:** ADR-003, ADR-024 (deriva), ADR-025, ADR-028; etapas 3.2a y 3.4 (medición); Fase 4 (superadmin y jobs); Fase 15 (despliegue).

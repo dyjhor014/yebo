@@ -95,7 +95,10 @@ CREATE POLICY tenant_isolation ON shipments
 |---|---|---|
 | `yebo_owner` | Migraciones (propietario de las tablas) | No aplica (solo se usa en el despliegue) |
 | `yebo_app` | API y worker en contexto de tenant | **Aplica** |
-| `yebo_platform` | Resolver de dominios, auth, superadmin, jobs entre tenants (métricas, facturación SaaS) | `BYPASSRLS`, credenciales y *pool* separados |
+| `yebo_platform` | Resolver de dominios, superadmin, jobs entre tenants (métricas, facturación SaaS) | `BYPASSRLS`, credenciales y *pool* separados |
+| `yebo_identity` | **Solo el módulo identity** (Fase 3.2a): sesiones y tokens; lectura de `users`, `tenant_memberships` y `tenant_domains` | **Aplica** (sin BYPASSRLS); política propia de solo lectura sobre `tenant_memberships`. Permisos explícitos, nunca por defecto. Detalle en [phase-3-plan](../development/phase-3-plan.md) |
+
+> **ADR-034 (dirección aprobada el 2026-11-09, aún no implementado):** `yebo_platform` perderá `BYPASSRLS` y quedará con SELECT sobre `tenants` y `tenant_domains`; todos los roles de ejecución pasarán a una lista blanca de permisos explícitos. Hasta su implementación, esta tabla describe el estado vigente. Ver [ADR-034](architecture-decisions.md) y [phase-3-plan](../development/phase-3-plan.md).
 
 - La extensión de Prisma envuelve cada operación de tenant en una transacción que primero ejecuta `SELECT set_config('app.tenant_id', $1, true)`. El tercer parámetro, `true`, hace el valor **local a la transacción**, lo que evita fugas entre requests que comparten conexión del *pool*.
 - Sin `app.tenant_id`, `current_setting(..., true)` devuelve `NULL` (conexión nueva) o `''` (conexión reutilizada). Con `NULLIF`, en ambos casos la política no devuelve filas y la escritura falla. La falla es segura por defecto.
@@ -106,7 +109,11 @@ CREATE POLICY tenant_isolation ON shipments
 
 `users`, `platform_users`, `platform_sessions`, `identity_sessions`, `tenant_sessions`, `refresh_tokens`, `authorization_codes`, `permissions`, `modules`, `plans`, `plan_versions`, `plan_version_modules`, `tenants`, `tenant_domains`, `vehicle_type_catalog`, `data_processing_purpose_catalog` y `notification_templates` con `tenant_id IS NULL` (defaults).
 
-`yebo_app` solo tiene `SELECT` sobre las tablas de catálogo. `users`, las sesiones y `tenant_memberships` se gestionan desde el módulo de identidad con `yebo_platform`.
+`yebo_app` solo tiene `SELECT` sobre las tablas de catálogo. `users` y `tenant_memberships` se gestionan con `yebo_platform`.
+
+> **Precisión de la Fase 3.2a (2026-11-09):**
+> - Las sesiones (`identity_sessions`, `tenant_sessions`, `refresh_tokens`) son **exclusivas del rol `yebo_identity`**; ni `yebo_app` ni `yebo_platform` tienen acceso.
+> - `tenant_sessions` y `tenant_domains` son las **excepciones globales con `tenant_id`** (sin RLS de tenant), declaradas en el registro de modelos y en la prueba de cobertura de RLS.
 
 ## 5. Estados del tenant y operaciones permitidas
 
