@@ -35,7 +35,7 @@ Todas las migraciones están aplicadas a `yebo_dev` con copia previa. Hay ademá
 - 5.1, modelo y API del sitio (`0bb5f66`);
 - 5.2, archivos con Garage (`24f9d9f`);
 - 5.3, portal público en `apps/web` (`99e55f2`);
-- **5.4, editor «Mi sitio» del panel de la empresa: implementada y verificada, sin commit, pendiente de revisión**;
+- 5.4, editor «Mi sitio» del panel de la empresa, revisado con Impeccable (`7a5f02c`);
 - 5.5, cierre: sin empezar.
 
 Las migraciones de la 5.1 y la 5.2 **no están aplicadas a `yebo_dev`**: esperan autorización y copia previa. Detalle en [phase-5-plan.md](docs/development/phase-5-plan.md).
@@ -94,4 +94,4 @@ Ninguno abierto. El `500` intermitente bajo carga de `isolation-e2e` se corrigi�
 2. Tras el cierre de la Fase 2: activar la protección de `main` exigiendo el check de CI.
 3. Revisión de la etapa 3.1 (PR #4) y de la etapa 3.2a.
 4. Revisión de la Fase 3 completa: 3.2 (`83df1c1`), 3.3 (`1c695b1`), 3.4 (`da999d8`) y ADR-034 (sin commit). Push y PR **solo con autorización expresa**. Las fases 4 y 5, también.
-5. Revisión de la 5.4 (sin commit). Después, la 5.5 (cierre de la Fase 5), solo con aprobación.
+5. La 5.5 (cierre de la Fase 5), solo con aprobación.
