@@ -8,7 +8,7 @@ import {
   type LayoutVersionDetail,
   type ZoneKind,
 } from '@yebo/contracts';
-import { Alert, LINK, PRIMARY, Warning } from '@yebo/ui/form';
+import { Alert, LINK, PRIMARY } from '@yebo/ui/form';
 import Link from 'next/link';
 import { useState } from 'react';
 import { MODALITY_NAME } from '@/components/fleet/fleet-view';
@@ -25,6 +25,7 @@ import {
 } from '@/components/panel/kit';
 import { layoutsApi } from '@/lib/panel-api';
 import { errorMessage } from '@/lib/site-api';
+import { LayoutEditor } from './layout-editor';
 import { summaryText } from './layouts-view';
 
 export const ZONE_NAME: Record<ZoneKind, string> = {
@@ -92,6 +93,20 @@ export function LayoutDetail({ id }: { id: string }) {
   const doc = detail.document;
   const draft = detail.status === 'DRAFT';
 
+  if (draft) {
+    return (
+      <LayoutEditor
+        key={`${layout.id}-${detail.version}`}
+        layout={layout}
+        detail={detail}
+        onPublished={async () => {
+          await reload();
+          setStatus(`Versión ${detail.version} publicada`);
+        }}
+      />
+    );
+  }
+
   return (
     <>
       <PageHeader
@@ -107,19 +122,19 @@ export function LayoutDetail({ id }: { id: string }) {
           </>
         }
         actions={
-          draft && (
+          !layout.archived && (
             <button
               type="button"
               className={PRIMARY}
-              disabled={busy || detail.issues.length > 0}
+              disabled={busy}
               aria-busy={busy || undefined}
               onClick={async () => {
                 setBusy(true);
                 setActionError(null);
                 try {
-                  await layoutsApi.publish(id);
+                  // El borrador nuevo parte de esta versión; la publicada no cambia.
+                  await layoutsApi.saveDraft(id, doc);
                   await reload();
-                  setStatus(`Versión ${detail.version} publicada`);
                 } catch (e) {
                   setActionError(errorMessage(e));
                 } finally {
@@ -127,7 +142,7 @@ export function LayoutDetail({ id }: { id: string }) {
                 }
               }}
             >
-              {busy ? 'Publicando…' : `Publicar la versión ${detail.version}`}
+              {busy ? 'Creando…' : 'Editar en una versión nueva'}
             </button>
           )
         }
@@ -135,10 +150,10 @@ export function LayoutDetail({ id }: { id: string }) {
       <LiveStatus message={status} />
       <div className={PAGE_BODY}>
         {actionError && <Alert>{actionError}</Alert>}
-        <Warning>
-          El editor del plano (añadir pisos, filas de asientos, camarotes y zonas, y cambiar sus medidas)
-          llega en la siguiente entrega. Esta ficha muestra el plano tal como lo guarda YEBO.
-        </Warning>
+        <p className="text-sm leading-5 text-ink-muted">
+          Una versión publicada ya no cambia. Para modificar el plano, edítalo en una versión nueva: esta
+          sigue asignada a sus vehículos hasta que asignes la nueva desde Flota.
+        </p>
         <div className="flex flex-wrap items-start gap-5">
           <div className="flex min-w-0 flex-[999_1_34rem] flex-col gap-4">
             {doc.decks.map((deck) => (
@@ -164,22 +179,6 @@ export function LayoutDetail({ id }: { id: string }) {
                   ))}
               </ul>
             </section>
-            {draft && (
-              <section aria-labelledby="h-issues" className={CARD}>
-                <h2 id="h-issues" className={CARD_TITLE}>
-                  Antes de publicar
-                </h2>
-                {detail.issues.length === 0 ? (
-                  <p className="text-sm">Todo en orden: se puede publicar.</p>
-                ) : (
-                  <ul className="flex list-disc flex-col gap-1 pl-5 text-sm text-danger">
-                    {detail.issues.map((i) => (
-                      <li key={`${i.path}-${i.message}`}>{i.message}</li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            )}
           </aside>
         </div>
       </div>

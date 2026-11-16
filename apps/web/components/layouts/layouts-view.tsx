@@ -184,9 +184,9 @@ export function LayoutsView({ modalities }: { modalities: Modality[] }) {
                         <Link
                           href={`/panel/planos/${l.id}`}
                           className={ROW_ACTION}
-                          aria-label={`Ver ${l.name}`}
+                          aria-label={`${draft ? 'Editar' : 'Ver'} ${l.name}`}
                         >
-                          Ver
+                          {draft ? 'Editar' : 'Ver'}
                         </Link>
                         {draft && !l.archived && (
                           <button

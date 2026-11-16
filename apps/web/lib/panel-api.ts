@@ -23,6 +23,7 @@ import {
   type CreateLayoutAssignmentRequest,
   type CreateLayoutRequest,
   type CreateVehicleRequest,
+  type LayoutDocument,
   type LocationInput,
   type UpdateBranchRequest,
   type UpdateLayoutRequest,
@@ -138,4 +139,6 @@ export const layoutsApi = {
   version: (id: string, version: number) =>
     get(LayoutVersionDetailSchema, `/api/v1/layouts/${id}/versions/${version}`),
   publish: (id: string) => send(LayoutVersionDetailSchema, `/api/v1/layouts/${id}/publish`),
+  saveDraft: (id: string, document: LayoutDocument) =>
+    send(LayoutVersionDetailSchema, `/api/v1/layouts/${id}/draft`, { document }, 'PUT'),
 };
