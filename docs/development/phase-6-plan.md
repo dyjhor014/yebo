@@ -1,6 +1,6 @@
 # Fase 6 · Ubicaciones, agencias, flota y capacidades (plan)
 
-- **Estado:** ✅ Decisiones F6-Q1 a F6-Q7 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapas 6.1 a 6.3 aprobadas. De la 6.4 están aprobadas la 6.4a, la 6.4b y la 6.4c (al 2026-11-16); la 6.4d está implementada y en revisión.
+- **Estado:** ✅ Decisiones F6-Q1 a F6-Q7 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapas 6.1 a 6.3 aprobadas. Etapa 6.4 aprobada completa (6.4a a 6.4d, al 2026-11-17). Siguiente: la 6.5 (agencias), pendiente de autorización.
 - **Rama:** `fase-6/plan`, desde el cierre de la Fase 5 (`8b580c0`).
 - **Criterio de aceptación** ([roadmap](roadmap.md)): «Embarcación con camarotes, zona libre, bodega y cubierta; bus con asientos y bodega».
 
@@ -413,11 +413,11 @@
 | **6.4a · Modelo ajustado** | Lo de la tabla anterior en contratos, migración y API, con sus pruebas (unitarias, integración y mutaciones) | ✅ Aprobada el 2026-11-11 (`ad4d6e6`). Migración `20261114010000_fase6_4a_layouts_v2` aplicada a `yebo_dev` el 2026-11-11, con copia previa (`~/yebo-backups/yebo_dev-antes-6.4a-20261111140645.dump`) |
 | **6.4b · Pantallas de Ubicaciones, Flota y Planos** | En el panel de la empresa (`apps/web`), según la maqueta | ✅ Aprobada el 2026-11-11 (`6bb0ae8`) |
 | **6.4c · Editor del plano** | Según la maqueta, con `validateLayout`, `deriveInventory`, generadores y plantillas de contratos | ✅ Aprobada el 2026-11-16 (`c0d3e19`). Tipos, lint, formato, pruebas de `apps/web` (25) y compilación ✅ |
-| **6.4d · E2E y revisión** | Recorrido con Playwright y axe, y `critique` de Impeccable sobre las pantallas renderizadas | ⏳ Implementada el 2026-11-16; en revisión (ver abajo) |
+| **6.4d · E2E y revisión** | Recorrido con Playwright y axe, y `critique` de Impeccable sobre las pantallas renderizadas | ✅ Aprobada el 2026-11-17 (`1314e11`; ver abajo) |
 
 Cada parte se aprueba por separado, como en la 4.7.
 
-### 6.4d · E2E y revisión (implementada el 2026-11-16; en revisión)
+### 6.4d · E2E y revisión (implementada el 2026-11-16; aprobada el 2026-11-17, `1314e11`)
 
 **E2E `08-flota-planos.spec.ts`** (proyecto `flota`, 11 pruebas). La empresa de prueba es fluvial, con pasajeros y encomiendas, y su administradora se registra desde la invitación. axe (WCAG 2.1 AA) en cada pantalla y diálogo:
 - **Ubicaciones:** puerto con departamento, provincia y distrito (ubigeo 250101); sucursal con su mostrador `MOSTRADOR-PUC`.
