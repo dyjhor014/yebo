@@ -2,6 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { AgenciesView } from '@/components/agencies/agencies-view';
 import { FleetView } from '@/components/fleet/fleet-view';
 import { LayoutDetail } from '@/components/layouts/layout-detail';
 import { LayoutsView } from '@/components/layouts/layouts-view';
@@ -23,6 +24,23 @@ export function LocationsSection() {
   return (
     <Guard permission="locations.manage">
       <LocationsView />
+    </Guard>
+  );
+}
+
+/** Agencias externas (Fase 6.5b): además del permiso, la empresa necesita el módulo AGENCIES, que activa YEBO. */
+export function AgenciesSection() {
+  const { hasModule } = usePanel();
+  return (
+    <Guard permission="agencies.manage">
+      {hasModule('AGENCIES') ? (
+        <AgenciesView />
+      ) : (
+        <p className="px-4 py-10 text-ink-muted sm:px-8 lg:px-10">
+          Tu empresa aún no tiene el módulo de agencias externas. Si quieres vender por agencias, pídelo a
+          YEBO.
+        </p>
+      )}
     </Guard>
   );
 }

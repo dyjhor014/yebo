@@ -3,13 +3,13 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { usePanel } from '@/components/panel/panel-session';
-import { SECTIONS } from '@/components/panel/panel-shell';
+import { SECTIONS, canOpen } from '@/components/panel/panel-shell';
 
 /** Inicio del panel: lleva a la primera sección permitida; sin ninguna, lo explica. */
 export function PanelHome() {
-  const { company, can } = usePanel();
+  const { company, can, hasModule } = usePanel();
   const router = useRouter();
-  const first = SECTIONS.find((s) => can(s.permission));
+  const first = SECTIONS.find((s) => canOpen(s, can, hasModule));
   useEffect(() => {
     if (first) router.replace(first.href);
   }, [first, router]);

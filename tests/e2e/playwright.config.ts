@@ -9,6 +9,7 @@ import { ADMIN_URL, API_ENV, E2E, ROOT } from './support/env';
  *  - recorrido: la maqueta 4.7 v2 de punta a punta, con axe en cada pantalla y diálogo;
  *  - accesibilidad en modo oscuro y en móvil (390 px): axe y sin desplazamiento horizontal;
  *  - flota: Ubicaciones, Flota, Planos y el editor del plano (Fase 6.4d).
+ *  - agencias: Agencias externas detrás del módulo AGENCIES y su canal de venta (Fase 6.5b).
  */
 export default defineConfig({
   testDir: './specs',
@@ -70,6 +71,12 @@ export default defineConfig({
     {
       name: 'flota',
       testMatch: /08-.*\.spec\.ts/,
+      dependencies: ['recorrido'],
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
+    {
+      name: 'agencias',
+      testMatch: /09-.*\.spec\.ts/,
       dependencies: ['recorrido'],
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
     },

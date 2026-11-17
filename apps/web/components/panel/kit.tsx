@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { PRIMARY, SECONDARY } from '@yebo/ui/form';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { errorMessage } from '@/lib/site-api';
 
 /** Piezas comunes de las secciones del panel (Fase 6.4b, maqueta aprobada): cabecera, tarjetas, chips y fechas. */
@@ -139,4 +140,45 @@ export function Check({
       {label}
     </label>
   );
+}
+
+/** Cancelar y guardar al pie de un diálogo de formulario. */
+export function DialogActions({
+  busy,
+  label,
+  onCancel,
+}: {
+  busy: boolean;
+  label: string;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap justify-end gap-3">
+      <button type="button" className={SECONDARY} onClick={onCancel}>
+        Cancelar
+      </button>
+      <button type="submit" className={PRIMARY} disabled={busy} aria-busy={busy || undefined}>
+        {busy ? 'Guardando…' : label}
+      </button>
+    </div>
+  );
+}
+
+/** Envío de un formulario de diálogo: estado ocupado, error de la API y aviso al guardar con el nombre. */
+export function useSubmit(onSaved: (name: string) => Promise<void>) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const submit = (run: () => Promise<{ name: string }>) => async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await run();
+      await onSaved(saved.name);
+    } catch (err) {
+      setError(errorMessage(err));
+      setBusy(false);
+    }
+  };
+  return { busy, error, submit };
 }

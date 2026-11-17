@@ -31,6 +31,8 @@ export type PanelContext = {
   /** Datos públicos de la empresa del host: nombre, sitio publicado y servicios que opera. */
   company: PublicSiteResponse;
   can: (permission: string) => boolean;
+  /** Módulo efectivo de la empresa (plan y excepciones de YEBO): la interfaz oculta lo no habilitado. */
+  hasModule: (module: string) => boolean;
   signOut: () => Promise<void>;
   leaving: boolean;
 };
@@ -88,6 +90,7 @@ export function PanelSession({
     session: state.session,
     company: state.company,
     can: (p) => state.session.permissions.includes(p),
+    hasModule: (m) => state.session.modules.includes(m),
     signOut,
     leaving,
   };

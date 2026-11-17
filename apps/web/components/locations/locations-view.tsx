@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  type Agency,
   type Branch,
   type Location,
   type LocationKind,
@@ -9,11 +10,12 @@ import {
   type SalesChannelKind,
 } from '@yebo/contracts';
 import { Dialog } from '@yebo/ui/dialog';
-import { Alert, Input, PRIMARY, ScrollRegion, SECONDARY, Select } from '@yebo/ui/form';
-import { useEffect, useState, type FormEvent } from 'react';
+import { Alert, Input, PRIMARY, ScrollRegion, Select } from '@yebo/ui/form';
+import { useEffect, useState } from 'react';
 import {
   Check,
   Chip,
+  DialogActions,
   Empty,
   LiveStatus,
   Loading,
@@ -21,9 +23,11 @@ import {
   PageHeader,
   ROW_ACTION,
   useLoad,
+  useSubmit,
 } from '@/components/panel/kit';
 import { Tabs } from '@/components/site-editor/editor-fields';
-import { locationsApi } from '@/lib/panel-api';
+import { usePanel } from '@/components/panel/panel-session';
+import { agenciesApi, locationsApi } from '@/lib/panel-api';
 import { errorMessage } from '@/lib/site-api';
 import { loadUbigeo, ubigeoLabel, type UbigeoCatalog } from '@/lib/ubigeo';
 
@@ -45,16 +49,28 @@ const CHANNEL_KIND: Record<SalesChannelKind, string> = {
 const TH = 'px-4 py-3 text-left text-[0.8125rem] font-semibold text-ink-muted';
 const TD = 'px-4 py-3.5 align-top text-sm';
 
-type Data = { locations: LocationsResponse; branches: Branch[]; channels: SalesChannel[] };
+type Data = {
+  locations: LocationsResponse;
+  branches: Branch[];
+  channels: SalesChannel[];
+  /** Solo con el módulo AGENCIES y el permiso: para nombrar la agencia de cada canal (Fase 6.5b). */
+  agencies: Agency[] | null;
+};
 
-async function loadAll(): Promise<Data> {
-  const [locations, branches, channels] = await Promise.all([
+const loadAll = (withAgencies: boolean) => async (): Promise<Data> => {
+  const [locations, branches, channels, agencies] = await Promise.all([
     locationsApi.list(),
     locationsApi.branches(),
     locationsApi.channels(),
+    withAgencies ? agenciesApi.list() : null,
   ]);
-  return { locations, branches: branches.branches, channels: channels.channels };
-}
+  return {
+    locations,
+    branches: branches.branches,
+    channels: channels.channels,
+    agencies: agencies?.agencies ?? null,
+  };
+};
 
 type Editing =
   | { kind: 'location'; item: Location | null }
@@ -64,7 +80,8 @@ type Editing =
 
 /** Ubicaciones, sucursales y canales de venta (Fase 6.4b; API de la 6.1). */
 export function LocationsView() {
-  const { data, error, reload } = useLoad(loadAll);
+  const { can, hasModule } = usePanel();
+  const { data, error, reload } = useLoad(loadAll(hasModule('AGENCIES') && can('agencies.manage')));
   const [ubigeos, setUbigeos] = useState<UbigeoCatalog | null>(null);
   useEffect(() => {
     // Solo para mostrar el distrito en la tabla; si no carga, se muestra la región guardada.
@@ -323,7 +340,7 @@ export function LocationsView() {
                       Clase
                     </th>
                     <th scope="col" className={TH}>
-                      Sucursal
+                      Sucursal o agencia
                     </th>
                     <th scope="col" className={TH}>
                       Estado
@@ -336,6 +353,7 @@ export function LocationsView() {
                 <tbody>
                   {data.channels.map((c) => {
                     const branch = data.branches.find((b) => b.id === c.branchId);
+                    const agency = data.agencies?.find((a) => a.id === c.agencyId);
                     return (
                       <tr key={c.id} className="border-t border-divider">
                         <td className={TD}>
@@ -346,7 +364,11 @@ export function LocationsView() {
                         </td>
                         <td className={TD}>{CHANNEL_KIND[c.kind]}</td>
                         <td className={TD}>
-                          {branch ? `${branch.code}${branch.archived ? ' (archivada)' : ''}` : '—'}
+                          {branch
+                            ? `${branch.code}${branch.archived ? ' (archivada)' : ''}`
+                            : agency
+                              ? `${agency.name}${agency.archived ? ' (archivada)' : ''}`
+                              : '—'}
                         </td>
                         <td className={TD}>
                           <Chip tone={c.isActive ? 'ok' : 'none'}>{c.isActive ? 'Activo' : 'Inactivo'}</Chip>
@@ -360,7 +382,8 @@ export function LocationsView() {
                           >
                             Editar
                           </button>
-                          {!branch?.archived && (
+                          {/* El canal de una sucursal o agencia archivada no se activa: se restaura ella. */}
+                          {!branch?.archived && !agency?.archived && (
                             <button
                               type="button"
                               className={ROW_ACTION}
@@ -391,7 +414,7 @@ export function LocationsView() {
               ? 'Una ubicación no se archiva mientras tenga sucursales activas. El ubigeo del INEI es opcional y sirve para relacionarla con otras empresas más adelante.'
               : tab === 'branches'
                 ? 'Cada sucursal nace con su mostrador de venta; al archivarla, el mostrador se desactiva. El código no cambia después de crearla.'
-                : 'Los canales se renombran y se activan o desactivan. Las agencias externas llegarán con su módulo.'}
+                : 'Los canales se renombran y se activan o desactivan. El de una agencia externa nace con ella, en «Agencias», y sigue a su agencia al archivarla.'}
           </p>
         </div>
       </div>
@@ -433,37 +456,6 @@ export function LocationsView() {
       )}
     </>
   );
-}
-
-function DialogActions({ busy, label, onCancel }: { busy: boolean; label: string; onCancel: () => void }) {
-  return (
-    <div className="flex flex-wrap justify-end gap-3">
-      <button type="button" className={SECONDARY} onClick={onCancel}>
-        Cancelar
-      </button>
-      <button type="submit" className={PRIMARY} disabled={busy} aria-busy={busy || undefined}>
-        {busy ? 'Guardando…' : label}
-      </button>
-    </div>
-  );
-}
-
-function useSubmit(onSaved: (name: string) => Promise<void>) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const submit = (run: () => Promise<{ name: string }>) => async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const saved = await run();
-      await onSaved(saved.name);
-    } catch (err) {
-      setError(errorMessage(err));
-      setBusy(false);
-    }
-  };
-  return { busy, error, submit };
 }
 
 const num = (s: string) => (s.trim() === '' ? null : Number(s.replace(',', '.')));

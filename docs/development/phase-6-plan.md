@@ -1,6 +1,6 @@
 # Fase 6 · Ubicaciones, agencias, flota y capacidades (plan)
 
-- **Estado:** ✅ Decisiones F6-Q1 a F6-Q7 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapas 6.1 a 6.3 aprobadas. Etapa 6.4 aprobada completa (6.4a a 6.4d, al 2026-11-17). La 6.5a (agencias: modelo y API) está aprobada (2026-11-17); la 6.5b, pendiente de autorización.
+- **Estado:** ✅ Decisiones F6-Q1 a F6-Q7 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapas 6.1 a 6.3 aprobadas. Etapa 6.4 aprobada completa (6.4a a 6.4d, al 2026-11-17). Etapa 6.5 aprobada completa (6.5a y 6.5b, al 2026-11-17). La 6.6 (cierre) está autorizada y en curso.
 - **Rama:** `fase-6/plan`, desde el cierre de la Fase 5 (`8b580c0`).
 - **Criterio de aceptación** ([roadmap](roadmap.md)): «Embarcación con camarotes, zona libre, bodega y cubierta; bus con asientos y bodega».
 
@@ -479,7 +479,7 @@ Cada parte se aprueba por separado, como en la 4.7.
 | Parte | Contenido | Estado |
 |---|---|---|
 | **6.5a · Modelo y API** | Tabla `agencies` con su canal `EXTERNAL_AGENCY`, permiso `agencies.manage` y rutas detrás del módulo `AGENCIES`, con sus pruebas (unitarias, integración y mutaciones) | ✅ Aprobada el 2026-11-17 (`e3c7bcc`). Migración `20261117010000_fase6_5_agencies` aplicada a `yebo_dev` el 2026-11-17, con copia previa (`~/yebo-backups/yebo_dev-antes-6.5a-20261117014327.dump`) |
-| **6.5b · Pantalla en el panel** | «Agencias» en el panel de la empresa, visible solo con el módulo encendido; lista, alta, edición y archivar, con E2E y axe | Pendiente de autorización |
+| **6.5b · Pantalla en el panel** | «Agencias» en el panel de la empresa, visible solo con el módulo encendido; lista, alta, edición y archivar, con E2E y axe | ✅ Aprobada el 2026-11-17 (ver abajo) |
 
 ### 6.5a · Decisiones de implementación
 
@@ -535,4 +535,25 @@ Cada parte se aprueba por separado, como en la 4.7.
 ### Pendiente
 
 - ✅ Migración aplicada a `yebo_dev` el 2026-11-17, con copia previa (`~/yebo-backups/yebo_dev-antes-6.5a-20261117014327.dump`, hecha con el `pg_dump` 17 del contenedor como `postgres`: el `pg_dump` 14 del sistema no admite el servidor 17, y `yebo_owner` choca con el RLS forzado). El permiso quedó en la plantilla y en el rol Administrador existente; ningún canal de agencia previo.
-- 6.5b · pantalla en el panel, con su propia autorización.
+
+### 6.5b · Pantalla en el panel (aprobada el 2026-11-17)
+
+Sin maqueta previa, como se acordó: una pantalla de lista y formulario con las piezas de la 6.4b.
+
+- **Carril y módulo:** las secciones pueden exigir un módulo además del permiso (`canOpen`). «Agencias» aparece solo con `agencies.manage` y el módulo `AGENCIES` (la sesión trae los módulos efectivos). Si se entra por la dirección sin el módulo, la página explica que lo activa YEBO.
+- **Agencias (`/panel/agencias`):**
+  - tabla con la agencia y su RUC, el contacto, su canal de venta (código y estado) y el estado de la agencia;
+  - «Nueva agencia»: RUC (solo dígitos, hasta 11; se puede pegar con espacios o guiones), nombre y contacto opcional. El dígito verificador se comprueba antes de enviar, junto al campo (`aria-invalid` y foco), con `isValidRuc` de contratos;
+  - «Editar»: nombre y contacto; el RUC se muestra y no cambia;
+  - «Archivar» y «Restaurar», que anuncian lo que pasa con su canal.
+- **Ubicaciones › Canales de venta:** la columna «Sucursal o agencia» nombra la agencia de cada canal (si la persona puede ver las agencias), y el canal de una agencia archivada no ofrece «Activar», como el mostrador de una sucursal archivada.
+- **Piezas compartidas:** `DialogActions` y `useSubmit` pasan de Ubicaciones a `kit.tsx`.
+
+**Defecto encontrado y corregido (6.4b):** a 390 px, Ubicaciones se desplazaba 284 px en horizontal cuando había datos. El texto `sr-only` («Acciones») de la cabecera de las tablas, con posición absoluta, salía de la región desplazable (`ScrollRegion`, sin `relative`) y ensanchaba la página. El E2E 08 no lo veía porque comprobaba antes de que cargaran los datos. Ahora `ScrollRegion` es `relative` (también en el panel de YEBO), y los E2E 08 y 09 esperan a los datos: fallaban antes del cambio y pasan después.
+
+**E2E `09-agencias.spec.ts`** (proyecto `agencias`, 6 pruebas): ver `e2e.md`.
+
+**Totales:**
+- E2E con capturas: 44 + 1 opcional ✅ (6 nuevas de `agencias`, y la de 390 px del 08 ahora espera a los datos);
+- `apps/web`: 25 unitarias; tipos, lint y formato ✅;
+- revisión de las capturas (claro, oscuro, 390 px y el diálogo con el RUC por corregir): sin defectos.

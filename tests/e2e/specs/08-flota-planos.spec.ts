@@ -383,6 +383,8 @@ test.describe('con la sesión de la empresa', () => {
       ] as const) {
         await page.goto(hostUrl(HOST, path));
         await expect(page.getByRole('heading', { level: 1, name: h1 })).toBeVisible();
+        // Con los datos ya cargados: las tablas anchas son las que pueden desbordar.
+        await expect(page.getByText(/^Cargando /)).toHaveCount(0);
         if (scheme === 'light') await expectNoHorizontalScroll(page, `${h1} en ${label}`);
         await expectAccessible(page, `${h1} en ${label}`);
       }

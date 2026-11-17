@@ -1,6 +1,8 @@
 'use client';
 
 import {
+  AgenciesResponseSchema,
+  AgencySchema,
   BranchSchema,
   BranchesResponseSchema,
   LayoutAssignmentSchema,
@@ -19,12 +21,14 @@ import {
   VehicleTypeSchema,
   VehicleTypesResponseSchema,
   VehiclesResponseSchema,
+  type CreateAgencyRequest,
   type CreateBranchRequest,
   type CreateLayoutAssignmentRequest,
   type CreateLayoutRequest,
   type CreateVehicleRequest,
   type LayoutDocument,
   type LocationInput,
+  type UpdateAgencyRequest,
   type UpdateBranchRequest,
   type UpdateLayoutRequest,
   type UpdateSalesChannelRequest,
@@ -75,6 +79,16 @@ export const locationsApi = {
   channels: () => get(SalesChannelsResponseSchema, '/api/v1/sales-channels'),
   updateChannel: (id: string, input: UpdateSalesChannelRequest) =>
     send(SalesChannelSchema, `/api/v1/sales-channels/${id}`, input, 'PUT'),
+};
+
+// Agencias externas (6.5), detrás del módulo AGENCIES
+export const agenciesApi = {
+  list: () => get(AgenciesResponseSchema, '/api/v1/agencies'),
+  create: (input: CreateAgencyRequest) => send(AgencySchema, '/api/v1/agencies', input),
+  update: (id: string, input: UpdateAgencyRequest) =>
+    send(AgencySchema, `/api/v1/agencies/${id}`, input, 'PUT'),
+  archive: (id: string) => send(AgencySchema, `/api/v1/agencies/${id}/archive`),
+  restore: (id: string) => send(AgencySchema, `/api/v1/agencies/${id}/restore`),
 };
 
 // Flota (6.2) y asignación de planos (6.3)

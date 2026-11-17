@@ -6,15 +6,38 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { SessionView } from '@/components/auth/session-view';
 import { PanelSession, usePanel } from './panel-session';
 
-/** Secciones del carril, según el permiso de cada una (sin enlaces a lo que no se puede usar). */
-export const SECTIONS = [
+type Section = {
+  href: string;
+  label: string;
+  permission: string;
+  /** Módulo que la empresa necesita además del permiso (sin él, la sección no aparece). */
+  module?: string;
+  icon: 'site' | 'pin' | 'agency' | 'fleet' | 'plan';
+};
+
+/** Secciones del carril, según el permiso (y el módulo) de cada una: sin enlaces a lo que no se puede usar. */
+export const SECTIONS: readonly Section[] = [
   { href: '/panel/sitio', label: 'Mi sitio', permission: 'site.manage', icon: 'site' },
   { href: '/panel/ubicaciones', label: 'Ubicaciones', permission: 'locations.manage', icon: 'pin' },
+  {
+    href: '/panel/agencias',
+    label: 'Agencias',
+    permission: 'agencies.manage',
+    module: 'AGENCIES',
+    icon: 'agency',
+  },
   { href: '/panel/flota', label: 'Flota', permission: 'fleet.manage', icon: 'fleet' },
   { href: '/panel/planos', label: 'Planos', permission: 'layouts.manage', icon: 'plan' },
-] as const;
+];
 
-const ICON_PATHS: Record<(typeof SECTIONS)[number]['icon'], ReactNode> = {
+/** La persona puede usar la sección: tiene el permiso y la empresa, el módulo. */
+export const canOpen = (
+  s: Section,
+  can: (permission: string) => boolean,
+  hasModule: (module: string) => boolean,
+) => can(s.permission) && (!s.module || hasModule(s.module));
+
+const ICON_PATHS: Record<Section['icon'], ReactNode> = {
   site: (
     <>
       <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -25,6 +48,13 @@ const ICON_PATHS: Record<(typeof SECTIONS)[number]['icon'], ReactNode> = {
     <>
       <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" />
       <circle cx="12" cy="10" r="2.5" />
+    </>
+  ),
+  agency: (
+    <>
+      <path d="M4 20V9l8-5 8 5v11" />
+      <path d="M9 20v-6h6v6" />
+      <path d="M3 20h18" />
     </>
   ),
   fleet: (
@@ -43,7 +73,7 @@ const ICON_PATHS: Record<(typeof SECTIONS)[number]['icon'], ReactNode> = {
   ),
 };
 
-function SectionIcon({ name }: { name: (typeof SECTIONS)[number]['icon'] }) {
+function SectionIcon({ name }: { name: Section['icon'] }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -82,7 +112,7 @@ export function PanelShell({ children }: { children: ReactNode }) {
 }
 
 function Frame({ children }: { children: ReactNode }) {
-  const { company, can, signOut, leaving } = usePanel();
+  const { company, can, hasModule, signOut, leaving } = usePanel();
   const path = usePathname();
   const [open, setOpen] = useState(false);
   const toggle = useRef<HTMLButtonElement>(null);
@@ -132,7 +162,7 @@ function Frame({ children }: { children: ReactNode }) {
           className={`${open ? 'flex' : 'hidden'} flex-col gap-4 pt-3 pb-1 lg:flex lg:flex-1 lg:justify-between lg:gap-8 lg:p-0`}
         >
           <nav aria-label="Secciones del panel" className="flex flex-col gap-1">
-            {SECTIONS.filter((s) => can(s.permission)).map((s) => {
+            {SECTIONS.filter((s) => canOpen(s, can, hasModule)).map((s) => {
               const active = path === s.href || path.startsWith(`${s.href}/`);
               return (
                 <Link
