@@ -142,10 +142,10 @@ Ver [identity-and-sessions.md](../architecture/identity-and-sessions.md).
 - **warehouse_bins:** `warehouse_id`, `code`, `description`.
 
 ### sales_channels
-`code`, `name`, `kind enum COUNTER|ONLINE|EXTERNAL_AGENCY|CALL_CENTER|API`, `branch_id?`, `is_active`. Fase 6.1: `COUNTER` ⇔ con sucursal, UNIQUE (tenant_id, branch_id, kind) (un mostrador por sucursal); `ONLINE` ⇔ `code = 'ONLINE'` (uno por empresa, creado en el alta). La clase, el código y la sucursal no cambian.
+`code`, `name`, `kind enum COUNTER|ONLINE|EXTERNAL_AGENCY|CALL_CENTER|API`, `branch_id?`, `is_active`. Fase 6.1: `COUNTER` ⇔ con sucursal, UNIQUE (tenant_id, branch_id, kind) (un mostrador por sucursal); `ONLINE` ⇔ `code = 'ONLINE'` (uno por empresa, creado en el alta). La clase, el código y la sucursal no cambian. Fase 6.5: `agency_id?`; `EXTERNAL_AGENCY` ⇔ con agencia, UNIQUE (tenant_id, agency_id) (un canal por agencia, código `AGENCIA-<RUC>`). La agencia del canal no cambia.
 
 ### agencies (módulo `AGENCIES`, D7 — por validar)
-`sales_channel_id`, `legal_name`, `tax_id`, `contact jsonb`, `status enum ACTIVE|SUSPENDED|TERMINATED`, `settlement_frequency?`.
+Fase 6.5 (registro mínimo, F6-Q2): `name`, `tax_id` (RUC de 11 dígitos; único por empresa y sin cambios después del alta), `contact_name?`, `contact_phone?`, `contact_email?`, `archived_at?`. Su canal de venta es la fila de `sales_channels` con su `agency_id`, creada en la misma transacción. El estado se expresa como en el resto de la fase: archivada (`archived_at`, su canal inactivo) o activa, y su canal se puede pausar sin archivarla. Con la venta y la liquidación (fases 8 y 11, D7 validado): `legal_name`, `settlement_frequency?` y lo que pida la liquidación.
 
 ### agency_commission_rules
 `agency_id`, `service enum`, `route_id?`, `calc enum PERCENT|FIXED_PER_UNIT`, `value numeric`, `valid_from`, `valid_to?`, `priority int`.

@@ -64,6 +64,12 @@ export const PERMISSION_CATALOG = {
     sensitive: false,
     description: 'Diseñar, publicar y asignar los layouts de los vehículos',
   },
+  // Fase 6.5: agencias externas (F6-Q2). Sus rutas exigen además el módulo AGENCIES, apagado por defecto.
+  'agencies.manage': {
+    module: 'AGENCIES',
+    sensitive: false,
+    description: 'Gestionar las agencias externas y sus canales de venta',
+  },
 } as const satisfies Record<string, { module: string; sensitive: boolean; description: string }>;
 
 export type PermissionCode = keyof typeof PERMISSION_CATALOG;

@@ -23,6 +23,7 @@ const RUNTIME = ['yebo_app', 'yebo_platform', 'yebo_identity', 'yebo_backoffice'
 
 /** Matriz esperada de privilegios de TABLA (explícitos) de los roles de ejecución en el esquema public. */
 const EXPECTED_TABLE_GRANTS = [
+  'yebo_app agencies INSERT,SELECT',
   'yebo_app billing_periods SELECT',
   'yebo_app branches INSERT,SELECT',
   'yebo_app capacity_rules INSERT,SELECT',
@@ -65,6 +66,7 @@ const EXPECTED_TABLE_GRANTS = [
   'yebo_app vehicle_type_catalog SELECT',
   'yebo_app vehicle_types INSERT,SELECT',
   'yebo_app vehicles INSERT,SELECT',
+  'yebo_backoffice agencies SELECT',
   'yebo_backoffice billing_periods INSERT,SELECT',
   'yebo_backoffice branches SELECT',
   'yebo_backoffice capacity_rules SELECT',
@@ -142,6 +144,12 @@ const EXPECTED_TABLE_GRANTS = [
 
 /** Privilegios de COLUMNA explícitos (Fase 3.3). */
 const EXPECTED_COLUMN_GRANTS = [
+  'yebo_app agencies.archived_at UPDATE',
+  'yebo_app agencies.contact_email UPDATE',
+  'yebo_app agencies.contact_name UPDATE',
+  'yebo_app agencies.contact_phone UPDATE',
+  'yebo_app agencies.name UPDATE',
+  'yebo_app agencies.updated_at UPDATE',
   'yebo_app branches.address UPDATE',
   'yebo_app branches.archived_at UPDATE',
   'yebo_app branches.is_pickup_point UPDATE',

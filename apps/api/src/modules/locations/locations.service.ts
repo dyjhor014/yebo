@@ -32,7 +32,8 @@ const isUnique = (e: unknown): boolean =>
  * - Nada se borra: se archiva. Una ubicación no se archiva con sucursales activas; una sucursal nueva o editada
  *   va a una ubicación activa.
  * - Cada sucursal nace con su mostrador (canal COUNTER) en la misma transacción; al archivarla, el mostrador se
- *   desactiva, y al restaurarla vuelve a estar activo. El canal ONLINE nace con la empresa (alta).
+ *   desactiva, y al restaurarla vuelve a estar activo. El canal ONLINE nace con la empresa (alta). Los canales de
+ *   agencia (EXTERNAL_AGENCY) los crea el módulo de agencias (Fase 6.5).
  */
 @Injectable()
 export class LocationsService {
@@ -139,7 +140,8 @@ export class LocationsService {
           data: {
             tenantId,
             code: `MOSTRADOR-${row.code}`,
-            name: `Mostrador ${row.name}`,
+            // El nombre del canal tiene 80 caracteres como máximo, como el de la sucursal: se recorta.
+            name: `Mostrador ${row.name}`.slice(0, 80),
             kind: 'COUNTER',
             branchId: row.id,
           },
@@ -203,7 +205,11 @@ export class LocationsService {
     return this.db.transaction(async (tx) => {
       const current = await tx.salesChannel.findFirst({
         where: { id },
-        select: { kind: true, branch: { select: { archivedAt: true } } },
+        select: {
+          kind: true,
+          branch: { select: { archivedAt: true } },
+          agency: { select: { archivedAt: true } },
+        },
       });
       if (!current) throw NOT_FOUND();
       if (input.isActive && current.branch?.archivedAt) {
@@ -212,6 +218,10 @@ export class LocationsService {
           'El mostrador es de una sucursal archivada: restaura la sucursal',
           409,
         );
+      }
+      // Fase 6.5: el canal de una agencia archivada tampoco se reactiva.
+      if (input.isActive && current.agency?.archivedAt) {
+        throw new AppError('CONFLICT', 'El canal es de una agencia archivada: restaura la agencia', 409);
       }
       return toChannel(await tx.salesChannel.update({ where: { id }, data: input }));
     });
@@ -379,7 +389,16 @@ function toChannel(r: {
   name: string;
   kind: SalesChannel['kind'];
   branchId: string | null;
+  agencyId: string | null;
   isActive: boolean;
 }): SalesChannel {
-  return { id: r.id, code: r.code, name: r.name, kind: r.kind, branchId: r.branchId, isActive: r.isActive };
+  return {
+    id: r.id,
+    code: r.code,
+    name: r.name,
+    kind: r.kind,
+    branchId: r.branchId,
+    agencyId: r.agencyId,
+    isActive: r.isActive,
+  };
 }

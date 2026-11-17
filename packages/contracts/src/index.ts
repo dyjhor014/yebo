@@ -14,3 +14,4 @@ export * from './locations';
 export * from './fleet';
 export * from './layouts';
 export * from './layout-templates';
+export * from './agencies';

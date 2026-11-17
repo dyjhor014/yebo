@@ -1,6 +1,6 @@
 # Fase 6 · Ubicaciones, agencias, flota y capacidades (plan)
 
-- **Estado:** ✅ Decisiones F6-Q1 a F6-Q7 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapas 6.1 a 6.3 aprobadas. Etapa 6.4 aprobada completa (6.4a a 6.4d, al 2026-11-17). Siguiente: la 6.5 (agencias), pendiente de autorización.
+- **Estado:** ✅ Decisiones F6-Q1 a F6-Q7 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapas 6.1 a 6.3 aprobadas. Etapa 6.4 aprobada completa (6.4a a 6.4d, al 2026-11-17). La 6.5a (agencias: modelo y API) está aprobada (2026-11-17); la 6.5b, pendiente de autorización.
 - **Rama:** `fase-6/plan`, desde el cierre de la Fase 5 (`8b580c0`).
 - **Criterio de aceptación** ([roadmap](roadmap.md)): «Embarcación con camarotes, zona libre, bodega y cubierta; bus con asientos y bodega».
 
@@ -471,3 +471,68 @@ Cada parte se aprueba por separado, como en la 4.7.
 - E2E: 36 + 3 opcionales; con capturas, 38 + 1 ✅;
 - `apps/web`: 25 unitarias; contratos: 29; integración de planos en la API: 9 ✅;
 - tipos, lint y formato ✅.
+
+## Etapa 6.5 · Agencias (según F6-Q2)
+
+### División
+
+| Parte | Contenido | Estado |
+|---|---|---|
+| **6.5a · Modelo y API** | Tabla `agencies` con su canal `EXTERNAL_AGENCY`, permiso `agencies.manage` y rutas detrás del módulo `AGENCIES`, con sus pruebas (unitarias, integración y mutaciones) | ✅ Aprobada el 2026-11-17. Migración sin aplicar a `yebo_dev` |
+| **6.5b · Pantalla en el panel** | «Agencias» en el panel de la empresa, visible solo con el módulo encendido; lista, alta, edición y archivar, con E2E y axe | Pendiente de autorización |
+
+### 6.5a · Decisiones de implementación
+
+| Tema | Decisión |
+|---|---|
+| Datos (F6-Q2) | Nombre, RUC y contacto (persona, teléfono y correo, opcionales). Sin comisiones ni usuarios de agencia: llegan con la venta (Fase 8) y la liquidación (Fase 11), cuando D7 esté validado |
+| RUC | 11 dígitos con prefijo de contribuyente (10, 15, 17 o 20) y dígito verificador (módulo 11 de SUNAT), comprobado en contratos (`isValidRuc`); la base comprueba el formato. Único por empresa, también entre las archivadas (se restaura en vez de repetirla). No cambia después del alta (privilegio por columna) |
+| Canal de venta | Cada agencia nace con su canal `EXTERNAL_AGENCY` en la misma transacción: código `AGENCIA-<RUC>` y nombre «Agencia <nombre>» (recortado a 80 caracteres). El enlace va del canal a la agencia (`sales_channels.agency_id`), como el mostrador con su sucursal: canal de agencia ⇔ con agencia (CHECK) y uno por agencia (UNIQUE) |
+| Estado | Como en el resto de la fase: nada se borra, se archiva. Al archivar la agencia su canal se desactiva, y al restaurarla vuelve a estar activo; el canal de una agencia archivada no se reactiva (409). Una agencia activa puede pausar su canal sin archivarse |
+| Módulo `AGENCIES` | Apagado por defecto (no está en ningún plan). Todas las rutas llevan `@RequiresModule('AGENCIES')`: sin él, 403 `MODULE_NOT_ENABLED` aunque la persona tenga el permiso. YEBO lo enciende con una excepción de módulo; al terminarla, las rutas vuelven a responder 403 y los datos se conservan |
+| Diccionario de datos | Se actualizó `agencies` y `sales_channels` a lo implementado. El borrador anterior traía `sales_channel_id`, `legal_name`, `contact jsonb`, `status ACTIVE|SUSPENDED|TERMINATED` y `settlement_frequency`; lo que pida la liquidación se añadirá con D7 |
+
+### API de la empresa (permiso `agencies.manage`, módulo `AGENCIES`)
+
+| Método y ruta | Categoría | Qué hace |
+|---|---|---|
+| `GET /agencies` | READ | Agencias, activas primero y por nombre, con su canal |
+| `POST /agencies` | CONFIGURE | Alta con su canal; RUC repetido → 409 |
+| `PUT /agencies/:id` | CONFIGURE | Nombre y contacto (el RUC no se acepta) |
+| `POST /agencies/:id/archive` y `/restore` | CONFIGURE | Archiva o restaura la agencia y su canal |
+
+`GET /sales-channels` incluye ahora `agencyId` en cada canal (null en las demás clases).
+
+### Base de datos (migración `20261117010000_fase6_5_agencies`, reversión en su cabecera)
+
+- `agencies` de tenant con RLS forzado. `yebo_app`: SELECT, INSERT y UPDATE de nombre, contacto, `archived_at` y `updated_at` (sin RUC ni DELETE). `yebo_backoffice`: SELECT.
+- `sales_channels.agency_id` con FK compuesta a `agencies` (tenant, id), CHECK `EXTERNAL_AGENCY` ⇔ con agencia y UNIQUE (tenant, agency_id). Su UPDATE no se concede.
+- CHECK de nombre (2 a 80, sin espacios a los lados), RUC (formato) y contacto (largos y correo con @).
+- Permiso `agencies.manage` (módulo `AGENCIES`) en la plantilla Administrador y en los roles Administrador existentes, que suben su versión de permisos.
+
+### Pruebas
+
+- **`agencies.spec` (5, contratos):** `isValidRuc` con RUC reales y con dígito, prefijo o largo equivocados; normalización (texto, correo en minúsculas, contacto vacío = null); campos de más; el RUC no se acepta al editar.
+- **`agencies.int-spec` (9):**
+  - módulo apagado: 403 `MODULE_NOT_ENABLED` en todas las rutas, aun con el permiso;
+  - con el módulo encendido por YEBO: alta con su canal, datos normalizados, contacto opcional y nombre de 80 caracteres sin romper el del canal;
+  - validación: RUC con dígito verificador, único por empresa (409) e inmutable; correo, teléfono y campos de más → 400;
+  - archivar: el canal sigue a su agencia y no se reactiva mientras está archivada; restaurar; pausar el canal de una agencia activa;
+  - aislamiento: 404 entre empresas, el mismo RUC en otra empresa no choca, y RLS sin contexto y con el de otra empresa;
+  - reglas de la base: RUC y agencia del canal sin cambios y sin borrados (42501); canal de agencia sin agencia u otra clase con agencia → 23514; dos canales para una agencia → 23505; RUC mal formado → 23514;
+  - sin permiso → 403 y sin sesión → 401;
+  - empresa suspendida: consulta, pero no configura;
+  - al terminar la excepción de YEBO, 403 de nuevo y los datos se conservan.
+- **Inventario actualizado:** matriz de privilegios (+2 de tabla y +6 de columna), catálogo de permisos (`access.int-spec` reconoce la siembra), registro de modelos y tablas de tenant, y reinicio de datos de las pruebas.
+- **Mutaciones (6), todas detectadas:** rutas sin el módulo; archivar sin desactivar el canal; reactivar el canal de una agencia archivada; RUC sin dígito verificador; nombre del canal sin recortar; alta sin canal.
+- **Defecto de la 6.1 corregido:** el mostrador se llama «Mostrador <nombre>» y el canal admite 80 caracteres, como la sucursal; con un nombre de sucursal de más de 70, el alta fallaba con 500 (CHECK `sales_channels_text`). Ahora el nombre del mostrador se recorta a 80. `locations.int-spec` crea una sucursal de 80 caracteres: fallaba antes del cambio y pasa después.
+- **Totales:**
+  - integración: 29 suites y 420 pruebas ✅;
+  - unitarias de la API: 146; contratos: 34 ✅;
+  - E2E: 36 + 3 opcionales ✅ (sin cambios: el panel aún no muestra agencias);
+  - tipos, lint y formato ✅.
+
+### Pendiente
+
+- Aplicar la migración a `yebo_dev`, con copia previa, cuando el responsable lo autorice.
+- 6.5b · pantalla en el panel, con su propia autorización.

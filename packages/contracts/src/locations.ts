@@ -110,6 +110,8 @@ export const SalesChannelSchema = z.object({
   name: z.string(),
   kind: SalesChannelKindSchema,
   branchId: z.string().nullable(),
+  /** Agencia del canal EXTERNAL_AGENCY (Fase 6.5); null en las demás clases. */
+  agencyId: z.string().nullable(),
   isActive: z.boolean(),
 });
 export type SalesChannel = z.infer<typeof SalesChannelSchema>;

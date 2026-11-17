@@ -223,6 +223,21 @@ describe('Fase 6.1 · ubicaciones, sucursales y canales', () => {
     const edited = await as(a, 'put', `/api/v1/branches/${branchId}`, withoutCode);
     expect(edited.status).toBe(200);
     expect(edited.body).toMatchObject({ code: 'PCL-01', name: 'Agencia Central' });
+
+    // Un nombre de 80 caracteres (el máximo) no rompe el de su mostrador, que también tiene 80 como máximo.
+    const long = await as(
+      a,
+      'post',
+      '/api/v1/branches',
+      branchInput(locationId, { code: 'PCL-80', name: 'N'.repeat(80) }),
+    );
+    expect(long.status).toBe(201);
+    const counter = (await as(a, 'get', '/api/v1/sales-channels')).body.channels.find(
+      (c: { branchId: string | null }) => c.branchId === long.body.id,
+    );
+    expect(counter.name).toBe(`Mostrador ${'N'.repeat(70)}`);
+    // Se archiva para no alterar las cuentas de las pruebas siguientes.
+    expect((await as(a, 'post', `/api/v1/branches/${long.body.id}/archive`)).status).toBe(200);
   });
 
   it('archivar: la ubicación no se archiva con sucursales activas; el mostrador sigue a su sucursal', async () => {
