@@ -478,7 +478,7 @@ Cada parte se aprueba por separado, como en la 4.7.
 
 | Parte | Contenido | Estado |
 |---|---|---|
-| **6.5a · Modelo y API** | Tabla `agencies` con su canal `EXTERNAL_AGENCY`, permiso `agencies.manage` y rutas detrás del módulo `AGENCIES`, con sus pruebas (unitarias, integración y mutaciones) | ✅ Aprobada el 2026-11-17. Migración sin aplicar a `yebo_dev` |
+| **6.5a · Modelo y API** | Tabla `agencies` con su canal `EXTERNAL_AGENCY`, permiso `agencies.manage` y rutas detrás del módulo `AGENCIES`, con sus pruebas (unitarias, integración y mutaciones) | ✅ Aprobada el 2026-11-17 (`e3c7bcc`). Migración `20261117010000_fase6_5_agencies` aplicada a `yebo_dev` el 2026-11-17, con copia previa (`~/yebo-backups/yebo_dev-antes-6.5a-20261117014327.dump`) |
 | **6.5b · Pantalla en el panel** | «Agencias» en el panel de la empresa, visible solo con el módulo encendido; lista, alta, edición y archivar, con E2E y axe | Pendiente de autorización |
 
 ### 6.5a · Decisiones de implementación
@@ -534,5 +534,5 @@ Cada parte se aprueba por separado, como en la 4.7.
 
 ### Pendiente
 
-- Aplicar la migración a `yebo_dev`, con copia previa, cuando el responsable lo autorice.
+- ✅ Migración aplicada a `yebo_dev` el 2026-11-17, con copia previa (`~/yebo-backups/yebo_dev-antes-6.5a-20261117014327.dump`, hecha con el `pg_dump` 17 del contenedor como `postgres`: el `pg_dump` 14 del sistema no admite el servidor 17, y `yebo_owner` choca con el RLS forzado). El permiso quedó en la plantilla y en el rol Administrador existente; ningún canal de agencia previo.
 - 6.5b · pantalla en el panel, con su propia autorización.
