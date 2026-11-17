@@ -490,7 +490,7 @@ export class LayoutsService {
         : [
             {
               path: `zones.${i}.service`,
-              message: `La empresa no opera ${SERVICE_NAME[z.service]} en esta modalidad (zona ${z.code})`,
+              message: `La empresa no opera ${SERVICE_NAME[z.service]} en esta modalidad (zona «${z.name}»)`,
             },
           ],
     );

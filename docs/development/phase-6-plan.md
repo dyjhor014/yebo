@@ -1,6 +1,6 @@
 # Fase 6 · Ubicaciones, agencias, flota y capacidades (plan)
 
-- **Estado:** ✅ Decisiones F6-Q1 a F6-Q7 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapas 6.1 a 6.3 aprobadas. De la 6.4 están aprobadas la 6.4a, la 6.4b y la 6.4c (al 2026-11-16); sigue la 6.4d, que espera aprobación para empezar.
+- **Estado:** ✅ Decisiones F6-Q1 a F6-Q7 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapas 6.1 a 6.3 aprobadas. De la 6.4 están aprobadas la 6.4a, la 6.4b y la 6.4c (al 2026-11-16); la 6.4d está implementada y en revisión.
 - **Rama:** `fase-6/plan`, desde el cierre de la Fase 5 (`8b580c0`).
 - **Criterio de aceptación** ([roadmap](roadmap.md)): «Embarcación con camarotes, zona libre, bodega y cubierta; bus con asientos y bodega».
 
@@ -413,6 +413,61 @@
 | **6.4a · Modelo ajustado** | Lo de la tabla anterior en contratos, migración y API, con sus pruebas (unitarias, integración y mutaciones) | ✅ Aprobada el 2026-11-11 (`ad4d6e6`). Migración `20261114010000_fase6_4a_layouts_v2` aplicada a `yebo_dev` el 2026-11-11, con copia previa (`~/yebo-backups/yebo_dev-antes-6.4a-20261111140645.dump`) |
 | **6.4b · Pantallas de Ubicaciones, Flota y Planos** | En el panel de la empresa (`apps/web`), según la maqueta | ✅ Aprobada el 2026-11-11 (`6bb0ae8`) |
 | **6.4c · Editor del plano** | Según la maqueta, con `validateLayout`, `deriveInventory`, generadores y plantillas de contratos | ✅ Aprobada el 2026-11-16 (`c0d3e19`). Tipos, lint, formato, pruebas de `apps/web` (25) y compilación ✅ |
-| **6.4d · E2E y revisión** | Recorrido con Playwright y axe, y `critique` de Impeccable sobre las pantallas renderizadas | ⏳ Espera aprobación para empezar |
+| **6.4d · E2E y revisión** | Recorrido con Playwright y axe, y `critique` de Impeccable sobre las pantallas renderizadas | ⏳ Implementada el 2026-11-16; en revisión (ver abajo) |
 
 Cada parte se aprueba por separado, como en la 4.7.
+
+### 6.4d · E2E y revisión (implementada el 2026-11-16; en revisión)
+
+**E2E `08-flota-planos.spec.ts`** (proyecto `flota`, 11 pruebas). La empresa de prueba es fluvial, con pasajeros y encomiendas, y su administradora se registra desde la invitación. axe (WCAG 2.1 AA) en cada pantalla y diálogo:
+- **Ubicaciones:** puerto con departamento, provincia y distrito (ubigeo 250101); sucursal con su mostrador `MOSTRADOR-PUC`.
+- **Nuevo plano:** con una sola modalidad no se pide elegirla y el bus no se ofrece. «En blanco» pide medidas y escala; la plantilla «Lancha rápida» abre el editor.
+- **Editor a la altura de la ventana (ronda 5 de la maqueta):** a 1440 × 900 la página no se desplaza. Al bajar en la columna izquierda, la cabecera y el plano siguen a la vista.
+- **Teclado del plano:**
+  - un solo punto de Tab (los otros 40 elementos con `tabindex=-1`);
+  - las flechas recorren los elementos;
+  - Enter toma, las flechas mueven y Esc devuelve a su sitio;
+  - Enter deja el elemento, y «Deshacer» lo devuelve;
+  - Supr quita, con un aviso que permite deshacer.
+- **«Antes de publicar»:**
+  - una fila 2 + 3 que no cabe: el mensaje lo avisa, el botón pasa a «Corregir N datos para publicar» y cada problema lleva al elemento;
+  - «Deshacer» deja el plano publicable.
+- **Pisos y zonas:**
+  - piso nuevo renombrado;
+  - zona libre creada en el primer tramo libre, acortada, movida y sin salir del piso;
+  - aforo de 12 personas.
+- **Autoguardado:** al recargar, el piso y la zona siguen ahí.
+- **Publicar y versión nueva:**
+  - el diálogo resume pisos, asientos y personas, y la ficha publicada queda de solo lectura;
+  - «Editar en una versión nueva» crea el borrador de la versión 2 a partir de la publicada.
+- **Flota:**
+  - tipo y vehículo (código y matrícula en mayúsculas);
+  - asignación de la versión 1, «Vigente»;
+  - Planos muestra «asignado a 1 vehículo» y ya no ofrece archivar el plano.
+- **Modo oscuro y 390 px:** Ubicaciones, Flota, Planos y el editor. axe en todas, y a 390 px nada se desplaza en horizontal.
+
+**Defectos encontrados y corregidos:**
+- **El editor no ocupaba la altura de la ventana** (6.4c). A 1440 × 900 la página entera se desplazaba 1353 px y el plano salía de la vista. La causa: con `flex-1` (base 0 %) dentro de `main`, el alto lo ponía el contenido y no `h-dvh`. Ahora la raíz del editor usa `flex-none` desde 1100 px. El E2E fallaba antes del cambio y pasa después.
+- **«Terminar hoy» en la ficha del vehículo** (6.4b). Su nombre accesible («Terminar … hoy») no contenía el texto visible: axe `label-content-name-mismatch`, WCAG 2.5.3. Ahora es «Terminar hoy la asignación de …».
+
+**Crítica de Impeccable:**
+- **Detector** sobre 10 capturas: 141 avisos, todos falsos positivos.
+  - `cramped-padding` (109), `overused-font` (10) y `marquee` (10): los mismos de las fases 4 y 5.
+  - `codex-grid-background` (6): es la cuadrícula del plano, una superficie de medida.
+  - `nested-cards` (6): es el lienzo del plano dentro de su tarjeta.
+  - Telemetría desactivada (`~/.impeccable/config.json`).
+- **Revisión de las capturas** (claro, oscuro y 390 px): sin más defectos de funcionamiento.
+
+**Mejoras menores aplicadas** (aprobadas por el responsable el 2026-11-17):
+- **Rótulo de orientación:** el editor ya no pone «Proa» fijo encima de todo plano. Dice «Proa» en los fluviales y «Frente» en los terrestres, y no aparece si el piso ya trae su propio rótulo (las plantillas fluviales traen «Proa», que salía dos veces).
+- **Avisos con el nombre de la zona:** los mensajes de `validateLayout` y el de servicio no operado de la API dicen «se sale de su zona «Asientos»» en vez del código interno (`ASIENTOS`). El código repetido sigue mostrando el código, que es el dato a corregir.
+- **Texto de los elementos ajustado a su ancho:** con filas de dos cifras («10A») el texto se salía del asiento en «Mediana». Ahora el tamaño de letra se ajusta al ancho, entre 8 y 12 px. El E2E lo comprueba en 1A, 10A y 10D: fallaba antes del cambio (−4 px) y pasa después.
+- **Lista de zonas:** el borde de los botones usa `border-control` (3:1), como la lista de plantillas, y ya se ve en modo oscuro.
+- **Comentario de `meters()`:** decía «coma decimal». es-PE usa punto, como el resto del panel.
+- **`.prettierignore`:** excluye `ubigeo-inei.json`, minificado a propósito.
+- **No aplicada:** las tildes del catálogo de ubigeo. Viene de su fuente sin tildes en sus ~1 900 nombres («Calleria», «Huanuco», «Junin»…). Corregirlo pide otra fuente o una tabla de corrección: queda como tarea aparte.
+
+**Totales:**
+- E2E: 36 + 3 opcionales; con capturas, 38 + 1 ✅;
+- `apps/web`: 25 unitarias; contratos: 29; integración de planos en la API: 9 ✅;
+- tipos, lint y formato ✅.

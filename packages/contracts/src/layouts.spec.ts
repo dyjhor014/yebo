@@ -103,7 +103,7 @@ describe('validateLayout', () => {
   it('códigos repetidos, elementos solapados o fuera de su zona o piso', () => {
     const [first, second] = bus.elements.filter((e) => e.kind === 'SEAT') as [LayoutElement, LayoutElement];
     expect(messages({ ...bus, elements: [...bus.elements, { ...first, x: 0, y: 23 }] })).toEqual(
-      expect.arrayContaining(['Código de elemento repetido: 1A', '1A se sale de su zona SALON']),
+      expect.arrayContaining(['Código de elemento repetido: 1A', '1A se sale de su zona «Salón»']),
     );
     expect(messages({ ...bus, elements: [...bus.elements, { ...second, code: '99Z' }] })).toEqual([
       '1B y 99Z se solapan',
@@ -113,7 +113,7 @@ describe('validateLayout', () => {
     );
     // Si el piso se acorta, lo que queda fuera aparece.
     expect(messages({ ...bus, decks: [{ ...bus.decks[0]!, lengthM: 10 }] })).toEqual(
-      expect.arrayContaining(['La zona SALON se sale de la cubierta']),
+      expect.arrayContaining(['La zona «Salón» se sale de la cubierta']),
     );
   });
 
@@ -146,7 +146,7 @@ describe('validateLayout', () => {
         ...boat,
         elements: [...boat.elements, seat({ cellCm: 50, code: 'S2', zoneCode: 'LIBRE', x: 0, y: 12 })],
       }),
-    ).toEqual(['Un elemento de este tipo no va en la zona LIBRE']);
+    ).toEqual(['Un elemento de este tipo no va en la zona «Zona libre»']);
   });
 
   it('zonas: solapadas, servicio o dimensión que su tipo no admite, sin capacidad, sin nada que vender', () => {
@@ -160,8 +160,8 @@ describe('validateLayout', () => {
     expect(messages({ ...bus, zones: [...bus.zones, extra] })).toEqual(
       expect.arrayContaining([
         'Ese servicio no corresponde a una zona de este tipo',
-        'Las zonas BODEGA y OTRA se solapan',
-        expect.stringMatching(/^La zona OTRA necesita su capacidad/),
+        'Las zonas «Bodega de equipaje» y «Otra» se solapan',
+        expect.stringMatching(/^La zona «Otra» necesita su capacidad/),
       ]),
     );
     const salonPersons = bus.zones.map((z) =>
@@ -169,7 +169,7 @@ describe('validateLayout', () => {
     );
     expect(messages({ ...bus, zones: salonPersons })).toEqual(['Una zona de este tipo no mide personas']);
     expect(messages({ ...bus, elements: bus.elements.filter((e) => e.kind !== 'SEAT') })).toEqual([
-      'La zona SALON no tiene ningún elemento que vender',
+      'La zona «Salón» no tiene ningún elemento que vender',
     ]);
   });
 

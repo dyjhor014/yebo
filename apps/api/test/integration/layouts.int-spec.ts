@@ -243,12 +243,12 @@ describe('Fase 6.3 · layouts', () => {
     const saved = await as(a, 'put', `/api/v1/layouts/${boatId}/draft`, { document: broken });
     expect(saved.status).toBe(200);
     expect(saved.body.issues.map((i: { message: string }) => i.message)).toEqual([
-      'La zona LIBRE necesita su capacidad (personas)',
+      'La zona «Zona libre» necesita su capacidad (personas)',
     ]);
     const refused = await as(a, 'post', `/api/v1/layouts/${boatId}/publish`);
     expect(refused.status).toBe(400);
     expect(refused.body.error.message).toBe(
-      'No se puede publicar: hay un dato por corregir. La zona LIBRE necesita su capacidad (personas)',
+      'No se puede publicar: hay un dato por corregir. La zona «Zona libre» necesita su capacidad (personas)',
     );
 
     await as(a, 'put', `/api/v1/layouts/${boatId}/draft`, { document: boatTemplate() });
@@ -299,8 +299,10 @@ describe('Fase 6.3 · layouts', () => {
     const refused = await as(b, 'post', `/api/v1/layouts/${created.body.layoutId}/publish`);
     expect(refused.status).toBe(400);
     expect(refused.body.error.message).toMatch(/hay 2 datos por corregir/);
-    expect(refused.body.error.message).toMatch(/no opera carga en esta modalidad \(zona CUBIERTA\)/);
-    expect(refused.body.error.message).toMatch(/no opera encomiendas en esta modalidad \(zona BODEGA\)/);
+    expect(refused.body.error.message).toMatch(
+      /no opera carga en esta modalidad \(zona «Cubierta de carga»\)/,
+    );
+    expect(refused.body.error.message).toMatch(/no opera encomiendas en esta modalidad \(zona «Bodega»\)/);
   });
 
   it('una nueva versión no toca la publicada; varias versiones publicadas conviven', async () => {

@@ -361,9 +361,9 @@ export function validateLayout(doc: LayoutDocument): LayoutIssue[] {
     zoneByCode.set(z.code, z);
     const deck = decks.get(z.deck);
     const rules = ZONE_RULES[z.kind];
-    if (!deck) add(`${p}.deck`, `La zona ${z.code} está en una cubierta que no existe`);
+    if (!deck) add(`${p}.deck`, `La zona «${z.name}» está en una cubierta que no existe`);
     else if (!inside(z.rect, { x: 0, y: 0, ...wh(deckGrid(doc, deck)) })) {
-      add(`${p}.rect`, `La zona ${z.code} se sale de la cubierta`);
+      add(`${p}.rect`, `La zona «${z.name}» se sale de la cubierta`);
     }
     if (!rules.services.includes(z.service))
       add(`${p}.service`, `Ese servicio no corresponde a una zona de este tipo`);
@@ -381,7 +381,7 @@ export function validateLayout(doc: LayoutDocument): LayoutIssue[] {
     if (rules.needsCapacity && z.capacity.length === 0) {
       add(
         `${p}.capacity`,
-        `La zona ${z.code} necesita su capacidad (${rules.dimensions.map((d) => DIMENSION_LABEL[d]).join(', ')})`,
+        `La zona «${z.name}» necesita su capacidad (${rules.dimensions.map((d) => DIMENSION_LABEL[d]).join(', ')})`,
       );
     }
     if (z.constraints && z.kind !== 'VEHICLE_DECK' && z.kind !== 'CARGO_DECK') {
@@ -391,7 +391,7 @@ export function validateLayout(doc: LayoutDocument): LayoutIssue[] {
   doc.zones.forEach((a, i) =>
     doc.zones.forEach((b, j) => {
       if (j > i && a.deck === b.deck && overlaps(a.rect, b.rect)) {
-        add(`zones.${j}.rect`, `Las zonas ${a.code} y ${b.code} se solapan`);
+        add(`zones.${j}.rect`, `Las zonas «${a.name}» y «${b.name}» se solapan`);
       }
     }),
   );
@@ -421,9 +421,9 @@ export function validateLayout(doc: LayoutDocument): LayoutIssue[] {
       else {
         const rules = ZONE_RULES[zone.kind];
         if (rules.mode !== 'ASSIGNED' || !rules.elements.includes(e.kind)) {
-          add(`${p}.zoneCode`, `Un elemento de este tipo no va en la zona ${zone.code}`);
+          add(`${p}.zoneCode`, `Un elemento de este tipo no va en la zona «${zone.name}»`);
         } else if (zone.deck !== e.deck || !inside(rectOf(e), zone.rect)) {
-          add(`${p}`, `${e.code} se sale de su zona ${zone.code}`);
+          add(`${p}`, `${e.code} se sale de su zona «${zone.name}»`);
         }
       }
     }
@@ -472,7 +472,7 @@ export function validateLayout(doc: LayoutDocument): LayoutIssue[] {
   doc.zones.forEach((z, i) => {
     if (ZONE_RULES[z.kind].mode !== 'ASSIGNED') return;
     const has = doc.elements.some((e) => e.zoneCode === z.code && INVENTORY_ELEMENT_KINDS.includes(e.kind));
-    if (!has) add(`zones.${i}`, `La zona ${z.code} no tiene ningún elemento que vender`);
+    if (!has) add(`zones.${i}`, `La zona «${z.name}» no tiene ningún elemento que vender`);
   });
   if (doc.zones.length === 0) add('zones', 'Añade al menos una zona con capacidad');
   return issues;

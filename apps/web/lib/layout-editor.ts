@@ -42,7 +42,7 @@ export function grid(doc: LayoutDocument, deck: number) {
   return d ? deckGrid(doc, d) : { cols: 0, rows: 0 };
 }
 
-/** Metros que ocupan `n` celdas, con coma decimal: «2,5 m». */
+/** Metros que ocupan `n` celdas, con el separador decimal de es-PE (punto, como el resto del panel): «2.5 m». */
 export const meters = (n: number, cellCm: number) =>
   `${((n * cellCm) / 100).toLocaleString('es-PE', { maximumFractionDigits: 2 })} m`;
 

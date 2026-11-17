@@ -411,7 +411,7 @@ function VehicleDetail({
                         <button
                           type="button"
                           className={ROW_ACTION}
-                          aria-label={`Terminar ${a.layoutName} hoy`}
+                          aria-label={`Terminar hoy la asignación de ${a.layoutName}`}
                           onClick={() => {
                             setActionError(null);
                             fleetApi
@@ -947,8 +947,8 @@ function AssignDialog({
       {options.length === 0 ? (
         <>
           <Empty>
-            No hay versiones publicadas de planos {vehicle.modality === 'RIVER' ? 'fluviales' : 'terrestres'} para este
-            tipo de vehículo. Crea y publica uno en{' '}
+            No hay versiones publicadas de planos {vehicle.modality === 'RIVER' ? 'fluviales' : 'terrestres'}{' '}
+            para este tipo de vehículo. Crea y publica uno en{' '}
             <Link href="/panel/planos" className={LINK}>
               Planos
             </Link>

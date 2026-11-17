@@ -354,7 +354,9 @@ export function LayoutEditor({
 
   // ------------------------------------------------------------------------------------------------------------------
   return (
-    <div className="flex min-w-0 flex-1 flex-col min-[1100px]:h-dvh min-[1100px]:overflow-hidden">
+    // flex-none en escritorio: con flex-1 (base 0 %) el alto lo pondría el contenido y no h-dvh, y la página entera
+    // se desplazaría en lugar de las columnas (lo comprueba el E2E 08).
+    <div className="flex min-w-0 flex-1 flex-col min-[1100px]:h-dvh min-[1100px]:flex-none min-[1100px]:overflow-hidden">
       <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b border-divider bg-raised px-4 py-3.5 sm:px-8 lg:px-10">
         <div className="flex min-w-0 flex-col gap-0.5">
           <nav aria-label="Ruta" className="text-sm text-ink-muted">
@@ -491,7 +493,7 @@ export function LayoutEditor({
                           );
                         }}
                         className={`flex min-h-12 w-full flex-col items-start justify-center gap-0.5 rounded-[var(--radius-control)] px-2.5 py-1.5 text-left text-sm font-semibold ${
-                          on ? 'border-2 border-ink bg-ink/5' : 'border border-divider hover:bg-ink/5'
+                          on ? 'border-2 border-ink bg-ink/5' : 'border border-control hover:bg-ink/5'
                         }`}
                       >
                         <span>{z.name}</span>
@@ -772,12 +774,16 @@ export function LayoutEditor({
                 backgroundSize: `${C}px ${C}px`,
               }}
             >
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-x-0 top-0 z-[1] text-center text-[0.6875rem] font-bold tracking-[0.08em] text-ink-muted uppercase"
-              >
-                Proa
-              </span>
+              {/* Orientación por defecto, según la modalidad, y solo si el piso no trae su propio rótulo: las
+                  plantillas fluviales ya ponen «Proa» y saldría dos veces. */}
+              {!deckEls.some((e) => e.kind === 'LABEL') && (
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 top-0 z-[1] text-center text-[0.6875rem] font-bold tracking-[0.08em] text-ink-muted uppercase"
+                >
+                  {layout.modality === 'RIVER' ? 'Proa' : 'Frente'}
+                </span>
+              )}
               {deckZones.map((z) => {
                 const on = selZone?.code === z.code;
                 return (
@@ -825,6 +831,14 @@ export function LayoutEditor({
                           ? 'border-action bg-raised text-ink'
                           : 'border-control bg-ink/10 text-ink';
                   const inset = bedInCabin ? Math.round(C * 0.9) : 0;
+                  const text = bedInCabin ? e.code.split('-').pop()! : label ? (e.label ?? '') : e.code;
+                  const width = e.w * C - 2 - (bedInCabin ? 4 : 0);
+                  // El texto se ajusta al ancho del elemento (≈0,62 em por carácter y 2 px de aire a cada lado): con
+                  // filas de dos cifras («10A») a 12 px se tocaban los asientos vecinos.
+                  const fontSize = Math.max(
+                    8,
+                    Math.min(C >= 20 ? 12 : 10, Math.floor((width - 4) / (text.length * 0.62))),
+                  );
                   return (
                     <button
                       key={e.code}
@@ -837,19 +851,19 @@ export function LayoutEditor({
                       onFocus={() => {
                         if (!on) setSel({ type: 'element', code: e.code });
                       }}
-                      className={`absolute flex justify-center rounded border font-semibold ${
+                      className={`absolute flex justify-center overflow-hidden rounded border leading-none font-semibold whitespace-nowrap ${
                         e.kind === 'CABIN' ? 'items-start pt-0.5' : 'items-center'
                       } ${tone} ${grabbed ? 'shadow-[0_0_0_2px_var(--surface-raised),0_0_0_5px_var(--text-primary)]' : ''}`}
                       style={{
                         left: e.x * C + 1 + (bedInCabin ? 2 : 0),
                         top: e.y * C + 1 + inset,
-                        width: e.w * C - 2 - (bedInCabin ? 4 : 0),
+                        width,
                         height: e.h * C - 2 - inset - (bedInCabin ? 2 : 0),
                         zIndex: e.kind === 'CABIN' ? 2 : label ? 1 : 3,
-                        fontSize: C >= 20 ? 12 : 10,
+                        fontSize,
                       }}
                     >
-                      {bedInCabin ? e.code.split('-').pop() : label ? e.label : e.code}
+                      {text}
                     </button>
                   );
                 })}
