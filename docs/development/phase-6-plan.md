@@ -1,6 +1,6 @@
 # Fase 6 · Ubicaciones, agencias, flota y capacidades (plan)
 
-- **Estado:** ✅ Decisiones F6-Q1 a F6-Q7 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapas 6.1 a 6.3 aprobadas; sigue la 6.4.
+- **Estado:** ✅ Decisiones F6-Q1 a F6-Q7 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapas 6.1 a 6.3 aprobadas. De la 6.4 están aprobadas la 6.4a, la 6.4b y la 6.4c (al 2026-11-16); sigue la 6.4d, que espera aprobación para empezar.
 - **Rama:** `fase-6/plan`, desde el cierre de la Fase 5 (`8b580c0`).
 - **Criterio de aceptación** ([roadmap](roadmap.md)): «Embarcación con camarotes, zona libre, bodega y cubierta; bus con asientos y bodega».
 
@@ -408,11 +408,11 @@
 
 ### División
 
-| Parte | Contenido |
-|---|---|
-| **6.4a · Modelo ajustado** | Lo de la tabla anterior en contratos, migración y API, con sus pruebas (unitarias, integración y mutaciones) |
-| **6.4b · Pantallas de Ubicaciones, Flota y Planos** | En el panel de la empresa (`apps/web`), según la maqueta |
-| **6.4c · Editor del plano** | Según la maqueta, con `validateLayout`, `deriveInventory`, generadores y plantillas de contratos |
-| **6.4d · E2E y revisión** | Recorrido con Playwright y axe, y `critique` de Impeccable sobre las pantallas renderizadas |
+| Parte | Contenido | Estado |
+|---|---|---|
+| **6.4a · Modelo ajustado** | Lo de la tabla anterior en contratos, migración y API, con sus pruebas (unitarias, integración y mutaciones) | ✅ Aprobada el 2026-11-11 (`ad4d6e6`). Migración `20261114010000_fase6_4a_layouts_v2` aplicada a `yebo_dev` el 2026-11-11, con copia previa (`~/yebo-backups/yebo_dev-antes-6.4a-20261111140645.dump`) |
+| **6.4b · Pantallas de Ubicaciones, Flota y Planos** | En el panel de la empresa (`apps/web`), según la maqueta | ✅ Aprobada el 2026-11-11 (`6bb0ae8`) |
+| **6.4c · Editor del plano** | Según la maqueta, con `validateLayout`, `deriveInventory`, generadores y plantillas de contratos | ✅ Aprobada el 2026-11-16 (`c0d3e19`). Tipos, lint, formato, pruebas de `apps/web` (25) y compilación ✅ |
+| **6.4d · E2E y revisión** | Recorrido con Playwright y axe, y `critique` de Impeccable sobre las pantallas renderizadas | ⏳ Espera aprobación para empezar |
 
 Cada parte se aprueba por separado, como en la 4.7.
