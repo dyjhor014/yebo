@@ -11,7 +11,7 @@ Se trabaja una fase a la vez. No se avanza con errores críticos, decisiones blo
 | 4 | Superadmin SaaS y membresías | Crear empresa, asignar plan, medir usuarios y calcular el importe | 🚧 Implementada (4.1–4.8), pendiente de revisión · criterio cumplido ([plan](phase-4-plan.md), [resultados](phase-4-results.md)) |
 | 5 | White label | Dos portales visualmente distintos sin duplicar apps | 🚧 Implementada (5.1–5.5), pendiente de revisión · criterio cumplido ([plan](phase-5-plan.md), [resultados](phase-5-results.md)) |
 | 6 | Ubicaciones, agencias, flota y capacidades | Embarcación con camarotes, zona libre, bodega y cubierta; bus con asientos y bodega | 🚧 Implementada (6.1–6.6), pendiente de revisión · criterio cumplido ([plan](phase-6-plan.md), [resultados](phase-6-results.md)) |
-| 7 | Rutas, programación y viajes | Ruta multiparada con capacidad correcta por tramo | 🚧 En curso: plan aprobado, etapa 7.1 ([plan](phase-7-plan.md)) |
+| 7 | Rutas, programación y viajes | Ruta multiparada con capacidad correcta por tramo | 🚧 En curso: plan aprobado (F7-Q1–Q9); etapa 7.1 (rutas, paradas y trazas) implementada, en revisión; 7.2–7.7 pendientes ([plan](phase-7-plan.md)) |
 | 8 | Pasajeros y boletos | Venta multicanal sin doble venta bajo concurrencia | Pendiente |
 | 9 | Encomiendas y logística | Tenant solo de encomiendas operativo; PIN de 4 dígitos según la regla de negocio | Pendiente |
 | 10 | Carga y transporte especial | Vehículo y maquinaria pesada con cotización y validación de capacidad | Pendiente |
