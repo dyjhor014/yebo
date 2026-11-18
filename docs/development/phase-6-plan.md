@@ -1,6 +1,6 @@
 # Fase 6 · Ubicaciones, agencias, flota y capacidades (plan)
 
-- **Estado:** ✅ Decisiones F6-Q1 a F6-Q7 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapas 6.1 a 6.3 aprobadas. Etapa 6.4 aprobada completa (6.4a a 6.4d, al 2026-11-17). Etapa 6.5 aprobada completa (6.5a y 6.5b, al 2026-11-17). La 6.6 (cierre) está autorizada y en curso.
+- **Estado:** ✅ Decisiones F6-Q1 a F6-Q7 **aprobadas** por el responsable el 2026-11-10, tal como se recomendaron. Etapas 6.1 a 6.3 aprobadas. Etapa 6.4 aprobada completa (6.4a a 6.4d, al 2026-11-17). Etapa 6.5 aprobada completa (6.5a y 6.5b, al 2026-11-17). Etapa 6.6 (cierre) aprobada el 2026-11-17: criterio cumplido ([resultados](phase-6-results.md)).
 - **Rama:** `fase-6/plan`, desde el cierre de la Fase 5 (`8b580c0`).
 - **Criterio de aceptación** ([roadmap](roadmap.md)): «Embarcación con camarotes, zona libre, bodega y cubierta; bus con asientos y bodega».
 
@@ -479,7 +479,7 @@ Cada parte se aprueba por separado, como en la 4.7.
 | Parte | Contenido | Estado |
 |---|---|---|
 | **6.5a · Modelo y API** | Tabla `agencies` con su canal `EXTERNAL_AGENCY`, permiso `agencies.manage` y rutas detrás del módulo `AGENCIES`, con sus pruebas (unitarias, integración y mutaciones) | ✅ Aprobada el 2026-11-17 (`e3c7bcc`). Migración `20261117010000_fase6_5_agencies` aplicada a `yebo_dev` el 2026-11-17, con copia previa (`~/yebo-backups/yebo_dev-antes-6.5a-20261117014327.dump`) |
-| **6.5b · Pantalla en el panel** | «Agencias» en el panel de la empresa, visible solo con el módulo encendido; lista, alta, edición y archivar, con E2E y axe | ✅ Aprobada el 2026-11-17 (ver abajo) |
+| **6.5b · Pantalla en el panel** | «Agencias» en el panel de la empresa, visible solo con el módulo encendido; lista, alta, edición y archivar, con E2E y axe | ✅ Aprobada el 2026-11-17 (`00bf625`; ver abajo) |
 
 ### 6.5a · Decisiones de implementación
 
@@ -557,3 +557,13 @@ Sin maqueta previa, como se acordó: una pantalla de lista y formulario con las 
 - E2E con capturas: 44 + 1 opcional ✅ (6 nuevas de `agencias`, y la de 390 px del 08 ahora espera a los datos);
 - `apps/web`: 25 unitarias; tipos, lint y formato ✅;
 - revisión de las capturas (claro, oscuro, 390 px y el diálogo con el RUC por corregir): sin defectos.
+
+## Etapa 6.6 · Cierre (aprobada el 2026-11-17)
+
+Criterio cumplido; el detalle está en [phase-6-results.md](phase-6-results.md).
+- **Integración** (`phase6-criterion.int-spec.ts`, CI, 10 pruebas): la lancha, el bus (de dos pisos) y una camioneta pickup 4×4 (cabina y tolva), a pedido del responsable, se construyen por la API de la empresa desde un plano en blanco, se publican y se asignan a sus vehículos. La capacidad derivada de la versión vigente de cada vehículo y lo materializado en la base coinciden con cifras escritas a mano. Seis mutaciones detectadas.
+- **E2E** (`10-criterio-fase6.spec.ts`, proyecto `criterio`, 7 pruebas): los mismos tres planos construidos con el editor, publicados, asignados desde Flota y comprobados en la base, con axe.
+- **Catálogo de tipos:** migración `20261117020000_fase6_6_vehicle_catalog` (Van y Camioneta pickup 4×4), aplicada a `yebo_dev` el 2026-11-17 con copia previa (`~/yebo-backups/yebo_dev-antes-6.6-catalogo-20261117192943.dump`); su reversión se probó en una transacción deshecha. La prueba de flota de la 6.2 ahora comprueba las 12 sugerencias en orden.
+- **Editor, corregido en el cierre** (aprobado por el responsable): la ayuda y el error de los campos van fuera de la etiqueta, enlazados con `aria-describedby` (el nombre accesible era la frase entera), y la zona tiene su «Clase de precio (opcional)».
+- **Queda para la Fase 8:** la tolva compartida (personas y carga en un mismo cupo).
+

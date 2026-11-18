@@ -17,7 +17,16 @@ import {
 import { Dialog } from '@yebo/ui/dialog';
 import { Alert, INPUT, LINK, PRIMARY, SECONDARY } from '@yebo/ui/form';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { CARD, CARD_TITLE, fmtNumber } from '@/components/panel/kit';
 import {
   NEW_ZONE_KINDS,
@@ -59,6 +68,10 @@ const ZOOMS = [
   { id: 'M', label: 'Mediana', pxPerM: 44 },
   { id: 'L', label: 'Grande', pxPerM: 64 },
 ] as const;
+
+/** Clase de precio de una zona o un elemento: el mismo formato que el esquema de contratos. */
+const PRICE_CLASS = /^[A-Z][A-Z0-9_]{1,23}$/;
+const PRICE_CLASS_ERROR = 'Usa mayúsculas, números o guion bajo (p. ej., VIP, CAMA_DOBLE)';
 
 const DIM_LABEL: Record<CapacityDimension, string> = {
   PERSONS: 'Personas',
@@ -1055,6 +1068,28 @@ function ZoneProps({
           </select>
         </Labeled>
       )}
+      <TextInput
+        label="Clase de precio (opcional)"
+        value={zone.priceClassCode ?? ''}
+        maxLength={24}
+        hint={
+          rules.elements.includes('SEAT')
+            ? `Vacía: ${rules.priceClass}. Los asientos la toman si no tienen la suya; las camas y los camarotes usan CAMA y CAMAROTE.`
+            : rules.mode === 'ASSIGNED'
+              ? `Vacía: ${rules.priceClass}. Los espacios la toman si no tienen la suya.`
+              : `Vacía: ${rules.priceClass}. Lo que se venda en esta zona usará esta clase.`
+        }
+        upper
+        onCommit={(v) => {
+          const code = v.trim().toUpperCase();
+          if (code && !PRICE_CLASS.test(code)) return PRICE_CLASS_ERROR;
+          commit(
+            updateZone(doc, zone.code, { priceClassCode: code || null }),
+            code ? `${zone.name}: clase ${code}` : `${zone.name}: clase por defecto`,
+          );
+          return null;
+        }}
+      />
       {rules.dimensions.length > 0 && (
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-2 text-sm font-medium">
@@ -1214,8 +1249,7 @@ function ElementProps({
           upper
           onCommit={(v) => {
             const code = v.trim().toUpperCase();
-            if (code && !/^[A-Z][A-Z0-9_]{1,23}$/.test(code))
-              return 'Usa mayúsculas, números o guion bajo (p. ej., VIP, CAMA_DOBLE)';
+            if (code && !PRICE_CLASS.test(code)) return PRICE_CLASS_ERROR;
             commit(
               updateElement(doc, el.code, { priceClassCode: code || null }),
               code ? `${el.code}: clase ${code}` : `${el.code}: clase por defecto`,
@@ -1335,36 +1369,44 @@ function TextInput({
   const [draft, setDraft] = useState(value);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => setDraft(value), [value]);
+  const helpId = useId();
+  const help = error ?? hint;
   const done = () => {
     if (draft === value) return;
     const r = onCommit(draft);
     setError(typeof r === 'string' && r ? r : null);
   };
+  // La ayuda y el error van fuera de la etiqueta, enlazados con aria-describedby: el nombre del campo es solo su
+  // etiqueta («Clase de precio (opcional)»), y la ayuda se lee como descripción.
   return (
-    <label className="flex flex-col gap-1.5 text-sm font-medium">
-      {label}
-      <input
-        className={`${INPUT} ${upper ? 'uppercase' : ''}`}
-        value={draft}
-        maxLength={maxLength}
-        aria-invalid={error ? true : undefined}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={done}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            done();
-          }
-        }}
-      />
-      {(error || hint) && (
+    <div className="flex flex-col gap-1.5 text-sm font-medium">
+      <label className="flex flex-col gap-1.5">
+        {label}
+        <input
+          className={`${INPUT} ${upper ? 'uppercase' : ''}`}
+          value={draft}
+          maxLength={maxLength}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={help ? helpId : undefined}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={done}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              done();
+            }
+          }}
+        />
+      </label>
+      {help && (
         <span
+          id={helpId}
           className={`text-[0.8125rem] ${error ? 'font-semibold text-danger' : 'font-normal text-ink-muted'}`}
         >
-          {error ?? hint}
+          {help}
         </span>
       )}
-    </label>
+    </div>
   );
 }
 
@@ -1393,28 +1435,36 @@ function MetersInput({
     setError(null);
     onCommit(v);
   };
+  const errorId = useId();
   return (
-    <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
-      {label}
-      <input
-        className={INPUT}
-        type="number"
-        min={1}
-        max={max}
-        step={0.25}
-        value={draft}
-        aria-invalid={error ? true : undefined}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={done}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            done();
-          }
-        }}
-      />
-      {error && <span className="text-[0.8125rem] font-semibold text-danger">{error}</span>}
-    </label>
+    <div className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
+      <label className="flex min-w-0 flex-col gap-1.5">
+        {label}
+        <input
+          className={INPUT}
+          type="number"
+          min={1}
+          max={max}
+          step={0.25}
+          value={draft}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={done}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              done();
+            }
+          }}
+        />
+      </label>
+      {error && (
+        <span id={errorId} className="text-[0.8125rem] font-semibold text-danger">
+          {error}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -1453,33 +1503,37 @@ function NumberInput({
     setError(null);
     onCommit(v === 0 ? null : v);
   };
+  const helpId = useId();
+  // En línea, la ayuda no se muestra (solo el error), como antes.
+  const help = error ?? (inline ? undefined : hint);
   return (
-    <label
-      className={`flex text-sm font-medium ${inline ? 'items-center justify-between gap-3' : 'flex-col gap-1.5'}`}
-    >
-      <span className={inline ? '' : 'font-semibold'}>{label}</span>
-      <input
-        className={`${INPUT} ${inline ? 'w-28 text-right' : ''}`}
-        inputMode={decimal ? 'decimal' : 'numeric'}
-        value={draft}
-        aria-invalid={error ? true : undefined}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={done}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            done();
-          }
-        }}
-      />
-      {(error || hint) && !inline && (
+    <div className="flex flex-col gap-1.5 text-sm font-medium">
+      <label className={`flex ${inline ? 'items-center justify-between gap-3' : 'flex-col gap-1.5'}`}>
+        <span className={inline ? '' : 'font-semibold'}>{label}</span>
+        <input
+          className={`${INPUT} ${inline ? 'w-28 text-right' : ''}`}
+          inputMode={decimal ? 'decimal' : 'numeric'}
+          value={draft}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={help ? helpId : undefined}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={done}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              done();
+            }
+          }}
+        />
+      </label>
+      {help && (
         <span
+          id={helpId}
           className={`text-[0.8125rem] leading-[1.125rem] ${error ? 'font-semibold text-danger' : 'font-normal text-ink-muted'}`}
         >
-          {error ?? hint}
+          {help}
         </span>
       )}
-      {error && inline && <span className="text-[0.8125rem] font-semibold text-danger">{error}</span>}
-    </label>
+    </div>
   );
 }

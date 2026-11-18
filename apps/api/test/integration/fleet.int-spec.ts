@@ -182,7 +182,21 @@ describe('Fase 6.2 · flota', () => {
   it('tipos: el catálogo global sugiere; cada tipo es de una modalidad que la empresa opera', async () => {
     const list = await as(a, 'get', '/api/v1/vehicle-types');
     expect(list.status).toBe(200);
-    expect(list.body.catalog).toHaveLength(10);
+    // 12 sugerencias desde la 6.6 (Van y Camioneta pickup 4×4), en el orden del catálogo: terrestres y fluviales.
+    expect(list.body.catalog.map((c: { code: string }) => c.code)).toEqual([
+      'BUS',
+      'MINIBUS',
+      'MINIVAN',
+      'VAN',
+      'CAR',
+      'PICKUP',
+      'TRUCK',
+      'LANCHA',
+      'MOTONAVE',
+      'DESLIZADOR',
+      'CHATA',
+      'BOTE',
+    ]);
     expect(list.body.types).toEqual([]);
 
     const l = await as(a, 'post', '/api/v1/vehicle-types', {
