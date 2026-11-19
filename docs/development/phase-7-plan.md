@@ -1,6 +1,6 @@
 # Fase 7 · Rutas, programación y viajes (plan)
 
-- **Estado:** ✅ Decisiones F7-Q1 a F7-Q8 **aprobadas** por el responsable el 2026-11-18, tal como se recomendaron; F7-Q9 (trazas y mapa con **teselas propias**) decidida por el responsable el mismo día. Etapa 7.1 autorizada el 2026-11-18.
+- **Estado:** ✅ Decisiones F7-Q1 a F7-Q8 **aprobadas** por el responsable el 2026-11-18, tal como se recomendaron; F7-Q9 (trazas y mapa con **teselas propias**) decidida por el responsable el mismo día. Etapa 7.1 autorizada el 2026-11-18 y aprobada el 2026-11-19 (migración aplicada a `yebo_dev`); 7.2 autorizada el 2026-11-19.
 - **Rama:** `fase-7/plan`, desde el cierre de la Fase 6 (`3fce518`).
 - **Criterio de aceptación** ([roadmap](roadmap.md)): «Ruta multiparada con capacidad correcta por tramo».
 
@@ -81,3 +81,59 @@
 ## Pendientes heredados de la Fase 6
 
 No bloquean esta fase: tildes del ubigeo, limpieza de archivos subidos sin usar, registro de auditoría general, tolva con cupo compartido (decisión de la Fase 8) y E2E en la CI.
+
+## Etapa 7.1 · Rutas, paradas y trazas (aprobada el 2026-11-19)
+
+### Decisiones de implementación
+
+| Tema | Decisión |
+|---|---|
+| Módulo | `routes` (capa L1): `RoutesService`, `RoutesController` y el importador de trazas (`trace-import.ts`). Contrato en `@yebo/contracts` (`routes.ts`): esquemas y la geometría de las trazas, que la pantalla con mapa (7.6) reutilizará |
+| Ruta | Código en mayúsculas (`^[A-Z0-9][A-Z0-9-]{1,15}$`), único por empresa y **que no cambia**, igual que la modalidad (privilegio por columna). La empresa debe operar esa modalidad (algún servicio activo). Se archiva y se restaura; no se borra |
+| Paradas | De 2 a 50, en orden (`seq` desde 0), sobre ubicaciones **activas de la empresa**. Minutos desde la salida del origen (hasta 30 días) y minutos de parada (hasta 2 días). El origen tiene 0 minutos y permite subir; el destino permite bajar y no tiene traza. Cada parada llega después de salir de la anterior; dos paradas seguidas no son la misma ubicación (una ida y vuelta sí vale); una intermedia permite subir, bajar o ambas. Al editar, se **reemplazan enteras** en una transacción: nada referencia a una parada, y los viajes las copiarán (7.3) |
+| Reglas en dos capas | El esquema Zod da los mensajes por campo (400). La base comprueba la **ruta completa al confirmar** con un trigger de restricción diferido (`route_stops_check`): aunque la API fallara, no se guarda una ruta con huecos, minutos que retroceden, origen o destino mal marcados o una sola parada |
+| Ubicaciones | Se bloquean `FOR SHARE` al guardar la ruta. **Una ubicación no se archiva mientras sea parada de una ruta activa** (409 con los códigos de las rutas). Una ruta no se crea ni se restaura con una ubicación archivada (400) |
+| Avisos (F7-Q7) | En una ruta fluvial, cada parada que no es puerto ni embarcadero da un aviso en `warnings` (no impide guardar) |
+| Traza (F7-Q9) | `path_to_next`: GeoJSON `[[lng, lat], …]` de 2 a 2000 puntos hasta la parada siguiente, redondeado a 6 decimales y dentro del Perú. Solo entre paradas **ubicadas en el mapa**, y sus extremos a **≤ 5 km** de sus paradas (400 con el tramo y la distancia). Sin traza, el mapa dibujará una línea recta |
+| Kilómetros | No se guardan: se calculan al leer (haversine). Por tramo: el largo de la traza o, sin ella, la línea recta entre las paradas; `null` si alguna no está ubicada. Desde el origen y total: `null` si algún tramo anterior no se puede medir. Así, ubicar una parada en el mapa actualiza los km sin migrar nada |
+| Importar GPX o KML | `POST /routes/traces/import` con el archivo en el cuerpo (`application/gpx+xml`, `application/vnd.google-earth.kml+xml`, `application/xml` o `text/xml`; hasta 5 MB). Devuelve la traza para revisarla; **no guarda nada** (se guarda con la ruta). GPX: los puntos de las pistas en orden (o los de la ruta si no hay pista); KML: líneas y pistas `gx:Track`, sin los puntos sueltos. KMZ no se admite |
+| Seguridad del importador | Sin analizador XML: un **recorrido lineal** de las etiquetas que solo extrae coordenadas. Rechaza `<!DOCTYPE` y `<!ENTITY` (XXE y expansión de entidades), etiquetas, comentarios e instrucciones sin cerrar, texto que no es UTF-8, números no válidos y puntos fuera del Perú. Ninguna expresión regular puede retroceder sobre el archivo entero: uno hostil de 5 MB se resuelve en milisegundos (prueba unitaria) |
+| Simplificación | Una traza de GPS de cientos de miles de puntos se reduce a 2000 con **Visvalingam–Whyatt con montículo** (O(n log n) en cualquier traza), después de quitar los puntos a menos de ~5 m del anterior (ruido con el vehículo detenido). Douglas–Peucker se descartó: con una traza en zigzag se vuelve cuadrático (medido: no terminó en 2 minutos con 200 000 puntos) |
+| Pantallas | Esta etapa es solo la API. Las rutas y el mapa tendrán pantalla en la 7.5 y la 7.6, con maqueta previa |
+
+### API de la empresa
+
+| Ruta | Permiso y categoría |
+|---|---|
+| `GET /api/v1/routes`, `GET /{id}` | `routes.manage`, READ |
+| `POST /api/v1/routes`, `PUT /{id}` (nombre y paradas), `POST /{id}/archive`, `POST /{id}/restore` | `routes.manage`, CONFIGURE |
+| `POST /api/v1/routes/traces/import` (cuerpo GPX o KML) | `routes.manage`, CONFIGURE |
+
+### Base de datos (migración `20261118010000_fase7_1_routes`, reversión en su cabecera)
+
+- **Tablas:** `routes` y `route_stops`, de tenant, con RLS forzado y FK compuestas `(tenant_id, …)` a la ruta y a la ubicación.
+- **CHECK:** código y nombre de la ruta; `seq` de 0 a 49; minutos y minutos de parada en rango; traza nula o un arreglo de 2 a 2000 puntos.
+- **UNIQUE:** (empresa, código) de la ruta; (ruta, `seq`) de la parada.
+- **Trigger diferido** `route_stops_check`: las reglas de la ruta entera, al confirmar (`P0001` con el motivo).
+- **Privilegios:**
+  - `yebo_app`: `routes` SELECT, INSERT y UPDATE de nombre, archivado y fecha (sin DELETE); `route_stops` SELECT, INSERT y DELETE (se reemplazan; sin UPDATE);
+  - `yebo_backoffice`: SELECT de ambas.
+- **Permiso `routes.manage`:** módulo `ROUTES`, en la plantilla Administrador y en los roles Administrador existentes (sube su `permissions_version`).
+- **`yebo_dev`:** migración aplicada el 2026-11-19, con copia previa.
+
+### Pruebas
+
+- **`routes.int-spec` (9):**
+  - crear: paradas en orden, km por la traza o en línea recta (valores calculados a mano), aviso de Iquitos (ciudad) en una ruta fluvial;
+  - validación: reglas de las paradas (400), código repetido (409), modalidad que la empresa no opera (400), ida y vuelta válida;
+  - trazas: extremo a 6,6 km o a 9,5 km (400 con el mensaje exacto), parada sin ubicar en el mapa, puntos fuera del Perú; sin traza, km `null`;
+  - editar: reemplaza las paradas; el código y la modalidad no se aceptan; una ruta archivada no se edita (409);
+  - archivar: una ubicación no se archiva siendo parada de una ruta activa (409); ruta nueva o restaurada con una ubicación archivada (400);
+  - importar: GPX y KML con los cuatro tipos de contenido, DOCTYPE → 400, JSON o PDF → 400, y no guarda nada;
+  - reglas de la base: el trigger diferido rechaza al confirmar una sola parada, huecos en `seq`, minutos que retroceden, destino con traza, paradas seguidas repetidas y borrar todas las paradas; código y modalidad fijos, sin borrar rutas ni editar paradas (42501); CHECK (23514);
+  - aislamiento: 404 y 400 entre empresas, y RLS con el contexto de otra empresa y sin contexto;
+  - permisos (403 sin `routes.manage`, 401 sin sesión) y empresa suspendida (consulta, pero no configura ni importa).
+- **Unitarias:** `routes.spec` en contratos (11: distancia, largo, límites del Perú, simplificación densa y hostil, reglas del esquema) y `trace-import.spec` en la API (8: GPX, KML con BOM, simplificación, DOCTYPE y entidades, archivos no válidos, etiquetas sin cerrar y archivos hostiles de 5 MB).
+- **Mutaciones detectadas:** tolerancia de los extremos (1 falla), archivar una ubicación con rutas activas (1), km sin la traza (1), editar una ruta archivada (1), paradas en ubicaciones archivadas (2), aviso fluvial (1) y, en la base, quitar la regla de paradas seguidas repetidas del trigger (1).
+- **Inventario actualizado:** matriz de privilegios (+4 de tabla y +3 de columna), registro de modelos y de tablas de tenant (`Route`, `RouteStop`; lo exigen las pruebas de RLS de la 3.1 y de rutas de migración), siembra de permisos de `access.int-spec` y limpieza de datos de las pruebas.
+- **Resultado (2026-11-18):** integración completa 439/439; unitarias: API 154, contratos 45, web 25 y panel de plataforma 18; lint, tipos y formato sin errores.

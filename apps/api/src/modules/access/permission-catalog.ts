@@ -70,6 +70,12 @@ export const PERMISSION_CATALOG = {
     sensitive: false,
     description: 'Gestionar las agencias externas y sus canales de venta',
   },
+  // Fase 7.1: rutas, sus paradas y sus trazas (F7-Q9).
+  'routes.manage': {
+    module: 'ROUTES',
+    sensitive: false,
+    description: 'Gestionar las rutas, sus paradas y sus trazas',
+  },
 } as const satisfies Record<string, { module: string; sensitive: boolean; description: string }>;
 
 export type PermissionCode = keyof typeof PERMISSION_CATALOG;

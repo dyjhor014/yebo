@@ -41,6 +41,12 @@ export function configureApp(app: NestExpressApplication, env: Env, options: { s
     type: ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'],
     limit: '10mb',
   });
+  // 7.1: trazas de rutas (GPX o KML) en el cuerpo, como texto sin interpretar: las lee el importador, que no
+  // resuelve entidades ni referencias externas (routes/trace-import.ts). Su propio límite es de 5 MB.
+  app.useBodyParser('raw', {
+    type: ['application/gpx+xml', 'application/vnd.google-earth.kml+xml', 'application/xml', 'text/xml'],
+    limit: '6mb',
+  });
   app.useLogger(app.get(Logger));
   app.setGlobalPrefix('api');
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });

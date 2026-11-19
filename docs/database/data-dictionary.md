@@ -193,7 +193,7 @@ Fase 6.5 (registro mínimo, F6-Q2): `name`, `tax_id` (RUC de 11 dígitos; único
 
 ### routes / route_stops
 - **routes:** `code`, `name`, `modality`, `status enum ACTIVE|ARCHIVED`.
-- **route_stops:** `route_id`, `seq int`, `location_id`, `offset_minutes int` (desde el origen), `dwell_minutes int`, `distance_km?`, `allows_boarding bool`, `allows_alighting bool`. UNIQUE (route_id, seq).
+- **route_stops:** `route_id`, `seq int`, `location_id`, `offset_minutes int` (desde el origen), `dwell_minutes int`, `allows_boarding bool`, `allows_alighting bool`, `path_to_next jsonb?` (traza GeoJSON hasta la parada siguiente, F7-Q9). UNIQUE (route_id, seq). Los km no se guardan: se calculan de la traza o, sin ella, en línea recta entre las coordenadas de las ubicaciones (Fase 7.1). Las reglas de la ruta entera las comprueba un trigger diferido.
 
 ### fares
 `route_id`, `origin_location_id`, `destination_location_id`, `service enum`, `price_class_code` (GENERAL, VIP, CAMA, CAMAROTE, HAMACA…), `channel_kind?`, `currency`, `amount`, `valid_from`, `valid_to?`, `status`. Índice (tenant_id, route_id, origin, destination, price_class_code, valid_from).

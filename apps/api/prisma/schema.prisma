@@ -91,6 +91,8 @@ model Tenant {
   vehicles           Vehicle[]
   vehicleDocuments   VehicleDocument[]
   vehicleLayouts     VehicleLayout[]
+  routes             Route[]
+  routeStops         RouteStop[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -1342,9 +1344,10 @@ model Location {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  kind     LocationKind @relation(fields: [kindCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
-  branches Branch[]
+  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  kind       LocationKind @relation(fields: [kindCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  branches   Branch[]
+  routeStops RouteStop[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, name])
@@ -1786,4 +1789,51 @@ model VehicleLayoutAssignment {
   @@index([tenantId, vehicleId])
   @@index([tenantId, layoutVersionId])
   @@map("vehicle_layout_assignments")
+}
+
+/// Ruta de la empresa (Fase 7.1; data-dictionary §5). El código y la modalidad no cambian. Se archiva, no se borra.
+model Route {
+  id         String          @id @default(uuid(7)) @db.Uuid
+  tenantId   String          @map("tenant_id") @db.Uuid
+  code       String
+  name       String
+  modality   ServiceModality
+  archivedAt DateTime?       @map("archived_at") @db.Timestamptz(6)
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  stops  RouteStop[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@map("routes")
+}
+
+/// Parada de una ruta, en orden (`seq` desde 0). Las paradas se reemplazan enteras al editar la ruta: los viajes las
+/// copian a `trip_stops` (Fase 7.3) y nada referencia a una parada. Las reglas de la ruta entera (seq consecutivos,
+/// minutos crecientes, origen y destino) las comprueba un trigger diferido. Traza hacia la siguiente (F7-Q9).
+model RouteStop {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  routeId         String   @map("route_id") @db.Uuid
+  seq             Int
+  locationId      String   @map("location_id") @db.Uuid
+  offsetMinutes   Int      @map("offset_minutes")
+  dwellMinutes    Int      @map("dwell_minutes")
+  allowsBoarding  Boolean  @map("allows_boarding")
+  allowsAlighting Boolean  @map("allows_alighting")
+  /// Traza GeoJSON hasta la parada siguiente: `[[lng, lat], …]`. Null: línea recta (y siempre en el destino).
+  pathToNext      Json?    @map("path_to_next")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  route    Route    @relation(fields: [tenantId, routeId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  location Location @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([routeId, seq])
+  @@index([tenantId, routeId])
+  @@index([tenantId, locationId])
+  @@map("route_stops")
 }
