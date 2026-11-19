@@ -3,10 +3,12 @@
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { AgenciesView } from '@/components/agencies/agencies-view';
+import { FaresView } from '@/components/fares/fares-view';
 import { FleetView } from '@/components/fleet/fleet-view';
 import { LayoutDetail } from '@/components/layouts/layout-detail';
 import { LayoutsView } from '@/components/layouts/layouts-view';
 import { LocationsView } from '@/components/locations/locations-view';
+import { RoutesView } from '@/components/routes/routes-view';
 import { usePanel } from './panel-session';
 
 /** Sin el permiso de la sección: lo explica (la API también lo rechaza). */
@@ -71,6 +73,24 @@ export function LayoutDetailSection() {
   return (
     <Guard permission="layouts.manage">
       <LayoutDetail id={id} />
+    </Guard>
+  );
+}
+
+/** Rutas (Fase 7.5a): paradas en orden, tiempos y trazas. */
+export function RoutesSection() {
+  return (
+    <Guard permission="routes.manage">
+      <RoutesView />
+    </Guard>
+  );
+}
+
+/** Tarifas (Fase 7.5a): matriz tramo × clase con vigencias. */
+export function FaresSection() {
+  return (
+    <Guard permission="fares.manage">
+      <FaresView />
     </Guard>
   );
 }

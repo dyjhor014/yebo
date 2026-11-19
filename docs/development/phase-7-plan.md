@@ -377,3 +377,25 @@ La 7.3 se divide, como la 4.3 y la 6.5: **7.3a**, viajes puntuales (`ON_DEMAND`)
 - **Para el código:** en el celular, las filas de la agenda y de las tablas se apilan; el plano de asientos de la ficha será una lista navegable con teclado, no una imagen.
 
 **Maqueta aprobada por el responsable el 2026-11-19.** El código se divide, como la 6.4b y la 6.4c: **7.5a** Rutas y Tarifas; **7.5b** Programaciones, Viajes y la ficha del viaje (disponibilidad, bloqueos y control preoperacional); **7.5c** equipamiento de la unidad e inspección en el celular (la 7.E2). Cada parte con sus E2E (axe, modo oscuro, celular y teclado) y su revisión.
+
+### Etapa 7.5a · Rutas y Tarifas en el panel (aprobada el 2026-11-19)
+
+| Tema | Decisión |
+|---|---|
+| Carril | Dos grupos, como la maqueta: **Operación** (Rutas y Tarifas; Viajes y Programaciones llegan con la 7.5b) y **Configuración** (Mi sitio, Ubicaciones, Agencias, Flota y Planos). El orden de `SECTIONS` sigue decidiendo la sección de inicio del panel (Mi sitio), así que no cambia el aterrizaje |
+| Rutas | Lista y editor de paradas. Los tiempos se escriben como se dicen («12 h», «1 d 12 h», «90 min», «12:30»; `lib/durations.ts`, con pruebas) y se muestran como «día 3 · +2 d 12 h». Sube y baja (fijos en el origen y el destino), traza del tramo importada de un **GPX o KML** (la API la lee y la devuelve; se guarda con la ruta), quitar traza, km por la traza o en línea recta (o «sin km» si una parada no está en el mapa). Mover con ↑ y ↓ o **Alt + flechas** en la fila, con aviso por lector de pantalla. Errores del contrato junto a cada fila. Aviso fluvial que no impide guardar. Archivada = solo lectura. Esquema de tramos con km (el mapa, en la 7.6) |
+| Tarifas | Ruta, servicio (los que la empresa opera en la modalidad) y fecha. Matriz tramo × clase con **«Sin precio»** y «cambia a S/ … el …» cuando hay un precio programado. **Agregar clase** a mano (p. ej., GENERAL) cuando aún no hay planos que la tengan. Celda: historial (vigente, programada, terminada, anulada), anular una programada, **cambiar el fin** (diálogo) y poner o cambiar el precio (la vigente termina ese día). **Poner precios** en lote: los que faltan, todos o ninguno |
+| Formato | Montos y km con la configuración regional `es-PE` (punto decimal: «S/ 120.00», «126.57 km»), como Flota; el campo de precio acepta punto o coma |
+| Accesibilidad | Tablas en regiones desplazables con nombre propio («Paradas de la ruta», «Tabla de precios»); celdas sin precio con nombre completo («Pucallpa a Iquitos, General: sin precio. Poner precio»); estados por `role="status"` |
+
+**Pruebas:**
+- **E2E `11-rutas-tarifas` (proyecto `rutas`, 6 pruebas):**
+  - el carril con sus grupos;
+  - nueva ruta: un tiempo que no se entiende (error junto a la fila), Alt + flechas, GPX importado (km por la traza), aviso fluvial, archivar (solo lectura) y restaurar;
+  - Tarifas: clase a mano, precio, cambio programado (la celda lo anuncia), anular, cambiar el fin y precios en lote;
+  - modo oscuro y 390 px sin desplazamiento horizontal;
+  - axe (WCAG 2.1 AA) en cada pantalla y diálogo.
+- **Unitarias:** `durations.spec` (3).
+- **Regresión:** E2E de Flota, Agencias, criterio de la Fase 6, oscuro y móvil (37) en verde con el carril nuevo.
+- **Detector de Impeccable sobre las capturas renderizadas:** se corrigió «tarjeta dentro de tarjeta» (las tablas ya no llevan borde propio dentro de su tarjeta). Lo que queda (fuente de la marca, animación de carga del acceso y rellenos de bordes) también aparece en las capturas de Agencias, ya aprobada.
+- **Resultado (2026-11-19):** lint, tipos y formato sin errores; unitarias: web 28, API 157, contratos 63 y plataforma 18.

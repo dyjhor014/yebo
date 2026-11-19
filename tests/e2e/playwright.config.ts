@@ -88,6 +88,12 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
     },
     {
+      name: 'rutas',
+      testMatch: /11-.*\.spec\.ts/,
+      dependencies: ['recorrido'],
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
+    {
       name: 'capturas',
       testMatch: /0[45]-.*\.spec\.ts/,
       dependencies: ['recorrido'],

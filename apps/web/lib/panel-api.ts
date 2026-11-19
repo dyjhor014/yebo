@@ -2,6 +2,13 @@
 
 import {
   AgenciesResponseSchema,
+  CreateFaresResponseSchema,
+  FareMatrixSchema,
+  FareSchema,
+  FaresResponseSchema,
+  RouteSchema,
+  RoutesResponseSchema,
+  TraceImportResponseSchema,
   AgencySchema,
   BranchSchema,
   BranchesResponseSchema,
@@ -22,6 +29,10 @@ import {
   VehicleTypesResponseSchema,
   VehiclesResponseSchema,
   type CreateAgencyRequest,
+  type CreateFaresRequest,
+  type CreateRouteRequest,
+  type FareService,
+  type UpdateRouteRequest,
   type CreateBranchRequest,
   type CreateLayoutAssignmentRequest,
   type CreateLayoutRequest,
@@ -155,4 +166,45 @@ export const layoutsApi = {
   publish: (id: string) => send(LayoutVersionDetailSchema, `/api/v1/layouts/${id}/publish`),
   saveDraft: (id: string, document: LayoutDocument) =>
     send(LayoutVersionDetailSchema, `/api/v1/layouts/${id}/draft`, { document }, 'PUT'),
+};
+
+// Rutas (7.1) y tarifas (7.2)
+export const routesApi = {
+  list: () => get(RoutesResponseSchema, '/api/v1/routes'),
+  create: (input: CreateRouteRequest) => send(RouteSchema, '/api/v1/routes', input),
+  update: (id: string, input: UpdateRouteRequest) => send(RouteSchema, `/api/v1/routes/${id}`, input, 'PUT'),
+  archive: (id: string) => send(RouteSchema, `/api/v1/routes/${id}/archive`),
+  restore: (id: string) => send(RouteSchema, `/api/v1/routes/${id}/restore`),
+};
+
+/** Tipo del archivo de traza por su extensión (el navegador no siempre lo conoce). */
+const TRACE_TYPES: Record<string, string> = {
+  gpx: 'application/gpx+xml',
+  kml: 'application/vnd.google-earth.kml+xml',
+};
+
+/** Lee un GPX o un KML en la API y devuelve la traza (ya simplificada) para revisarla; no guarda nada. */
+export async function importTrace(file: File) {
+  const type = TRACE_TYPES[file.name.split('.').pop()?.toLowerCase() ?? ''];
+  if (!type) throw new AuthRequestError(400, 'VALIDATION_FAILED', 'Usa un archivo GPX o KML (no KMZ).');
+  if (file.size > 5 * 1024 * 1024) {
+    throw new AuthRequestError(413, 'PAYLOAD_TOO_LARGE', 'El archivo pesa más de 5 MB.');
+  }
+  const res = await apiFetch('/api/v1/routes/traces/import', {
+    method: 'POST',
+    csrf: readCsrfCookie(),
+    body: file,
+    headers: { 'Content-Type': type },
+  });
+  return TraceImportResponseSchema.parse(await res.json());
+}
+
+export const faresApi = {
+  list: (routeId: string) => get(FaresResponseSchema, `/api/v1/routes/${routeId}/fares`),
+  matrix: (routeId: string, service: FareService, date: string) =>
+    get(FareMatrixSchema, `/api/v1/routes/${routeId}/fares/matrix?service=${service}&date=${date}`),
+  create: (routeId: string, input: CreateFaresRequest) =>
+    send(CreateFaresResponseSchema, `/api/v1/routes/${routeId}/fares`, input),
+  end: (id: string, validTo: string) => send(FareSchema, `/api/v1/fares/${id}/end`, { validTo }),
+  cancel: (id: string) => send(FareSchema, `/api/v1/fares/${id}/cancel`),
 };

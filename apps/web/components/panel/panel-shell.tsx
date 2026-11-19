@@ -12,22 +12,42 @@ type Section = {
   permission: string;
   /** Módulo que la empresa necesita además del permiso (sin él, la sección no aparece). */
   module?: string;
-  icon: 'site' | 'pin' | 'agency' | 'fleet' | 'plan';
+  icon: 'site' | 'pin' | 'agency' | 'fleet' | 'plan' | 'route' | 'fare';
+  /** Grupo del carril (maqueta 7.5): la operación diaria y la configuración de la empresa. */
+  group: 'ops' | 'config';
 };
 
-/** Secciones del carril, según el permiso (y el módulo) de cada una: sin enlaces a lo que no se puede usar. */
+/** Grupos del carril, en el orden en que se muestran. */
+const GROUPS: readonly { id: Section['group']; label: string }[] = [
+  { id: 'ops', label: 'Operación' },
+  { id: 'config', label: 'Configuración' },
+];
+
+/**
+ * Secciones del carril, según el permiso (y el módulo) de cada una: sin enlaces a lo que no se puede usar. El orden
+ * de esta lista decide la sección de inicio del panel; el carril las agrupa por `group`.
+ */
 export const SECTIONS: readonly Section[] = [
-  { href: '/panel/sitio', label: 'Mi sitio', permission: 'site.manage', icon: 'site' },
-  { href: '/panel/ubicaciones', label: 'Ubicaciones', permission: 'locations.manage', icon: 'pin' },
+  { href: '/panel/sitio', label: 'Mi sitio', permission: 'site.manage', icon: 'site', group: 'config' },
+  {
+    href: '/panel/ubicaciones',
+    label: 'Ubicaciones',
+    permission: 'locations.manage',
+    icon: 'pin',
+    group: 'config',
+  },
   {
     href: '/panel/agencias',
     label: 'Agencias',
     permission: 'agencies.manage',
     module: 'AGENCIES',
     icon: 'agency',
+    group: 'config',
   },
-  { href: '/panel/flota', label: 'Flota', permission: 'fleet.manage', icon: 'fleet' },
-  { href: '/panel/planos', label: 'Planos', permission: 'layouts.manage', icon: 'plan' },
+  { href: '/panel/flota', label: 'Flota', permission: 'fleet.manage', icon: 'fleet', group: 'config' },
+  { href: '/panel/planos', label: 'Planos', permission: 'layouts.manage', icon: 'plan', group: 'config' },
+  { href: '/panel/rutas', label: 'Rutas', permission: 'routes.manage', icon: 'route', group: 'ops' },
+  { href: '/panel/tarifas', label: 'Tarifas', permission: 'fares.manage', icon: 'fare', group: 'ops' },
 ];
 
 /** La persona puede usar la sección: tiene el permiso y la empresa, el módulo. */
@@ -69,6 +89,19 @@ const ICON_PATHS: Record<Section['icon'], ReactNode> = {
     <>
       <rect x="4" y="3" width="16" height="18" rx="2" />
       <path d="M8 7h3v3H8zM13 7h3v3h-3zM8 13h3v3H8zM13 13h3v3h-3z" />
+    </>
+  ),
+  route: (
+    <>
+      <circle cx="6" cy="18" r="2" />
+      <circle cx="18" cy="6" r="2" />
+      <path d="M8 18h5a3 3 0 0 0 0-6h-2a3 3 0 0 1 0-6h5" />
+    </>
+  ),
+  fare: (
+    <>
+      <path d="M20 12l-8 8-9-9V3h8z" />
+      <circle cx="7.5" cy="7.5" r="1.5" />
     </>
   ),
 };
@@ -162,25 +195,36 @@ function Frame({ children }: { children: ReactNode }) {
           className={`${open ? 'flex' : 'hidden'} flex-col gap-4 pt-3 pb-1 lg:flex lg:flex-1 lg:justify-between lg:gap-8 lg:p-0`}
         >
           <nav aria-label="Secciones del panel" className="flex flex-col gap-1">
-            {SECTIONS.filter((s) => canOpen(s, can, hasModule)).map((s) => {
-              const active = path === s.href || path.startsWith(`${s.href}/`);
+            {GROUPS.map((g) => {
+              const items = SECTIONS.filter((s) => s.group === g.id && canOpen(s, can, hasModule));
+              if (items.length === 0) return null;
               return (
-                <Link
-                  key={s.href}
-                  href={s.href}
-                  aria-current={active ? 'page' : undefined}
-                  onClick={() => setOpen(false)}
-                  className={`flex min-h-11 items-center gap-3 rounded-[var(--radius-control)] px-3 text-[0.9375rem] whitespace-nowrap ${
-                    active
-                      ? 'bg-rail-track font-semibold text-on-rail'
-                      : 'font-medium text-on-rail-muted hover:text-on-rail'
-                  }`}
-                >
-                  <span className={active ? 'text-rail-accent' : undefined}>
-                    <SectionIcon name={s.icon} />
+                <div key={g.id} className="flex flex-col gap-1 pt-2 first:pt-0">
+                  <span className="px-3 pt-1 pb-1 text-xs font-bold tracking-[0.04em] text-on-rail-muted uppercase">
+                    {g.label}
                   </span>
-                  {s.label}
-                </Link>
+                  {items.map((s) => {
+                    const active = path === s.href || path.startsWith(`${s.href}/`);
+                    return (
+                      <Link
+                        key={s.href}
+                        href={s.href}
+                        aria-current={active ? 'page' : undefined}
+                        onClick={() => setOpen(false)}
+                        className={`flex min-h-11 items-center gap-3 rounded-[var(--radius-control)] px-3 text-[0.9375rem] whitespace-nowrap ${
+                          active
+                            ? 'bg-rail-track font-semibold text-on-rail'
+                            : 'font-medium text-on-rail-muted hover:text-on-rail'
+                        }`}
+                      >
+                        <span className={active ? 'text-rail-accent' : undefined}>
+                          <SectionIcon name={s.icon} />
+                        </span>
+                        {s.label}
+                      </Link>
+                    );
+                  })}
+                </div>
               );
             })}
           </nav>
