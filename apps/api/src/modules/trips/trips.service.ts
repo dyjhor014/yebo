@@ -220,6 +220,12 @@ export class TripsService {
           },
         });
         if (unit.layoutVersionId !== current.layoutVersionId) {
+          // Con ocupación en su historia (aunque esté liberada), el inventario no se reemplaza: cambiar de unidad con
+          // ocupación es el flujo trip_vehicle_changes (F7-Q3, Fase 8).
+          const history =
+            (await tx.resourceAllocation.count({ where: { tripId: id } })) +
+            (await tx.poolAllocation.count({ where: { pool: { tripId: id } } }));
+          if (history > 0) throw conflict('El viaje ya tuvo ocupación: su unidad y su plano no cambian');
           await this.clearInventory(tx, id);
           if (unit.layoutVersionId) await this.materialize(tx, id, unit.layoutVersionId);
         }
@@ -494,9 +500,11 @@ export class TripsService {
   }
 
   /** Sin ocupación en ningún tramo (7.4 sumará las asignaciones de recursos y los bloqueos). */
+  /** Sin ocupación: ningún contador con uso ni asignación de recursos sin liberar (bloqueos o, en la Fase 8, ventas). */
   private async assertNoOccupancy(tx: Tx, tripId: string): Promise<void> {
     const used = await tx.tripPoolSegmentUsage.count({ where: { pool: { tripId }, used: { gt: 0 } } });
-    if (used > 0) throw conflict('El viaje tiene ocupación: libérala antes');
+    const held = await tx.resourceAllocation.count({ where: { tripId, status: { not: 'RELEASED' } } });
+    if (used > 0 || held > 0) throw conflict('El viaje tiene ocupación (bloqueos o ventas): libérala antes');
   }
 
   /** Una ruta no sale dos veces a la misma hora (salvo viajes cancelados). */

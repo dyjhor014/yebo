@@ -785,7 +785,7 @@ describe('Fase 7.3a · viajes', () => {
       `DELETE FROM trip_stops WHERE trip_id = $1`,
       `UPDATE trip_stops SET location_id = location_id WHERE trip_id = $1`,
       `UPDATE trip_resources SET capacity = 1 WHERE trip_id = $1`,
-      `UPDATE trip_pool_segment_usage SET used = 1 WHERE pool_id IN (SELECT id FROM trip_capacity_pools WHERE trip_id = $1)`,
+      // `used` sí lo modifica yebo_app desde la 7.4 (el motor de inventario); su CHECK es la red final (abajo).
     ]) {
       await rejects((c) => c.query(sql, [planned]), '42501');
     }

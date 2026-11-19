@@ -19,3 +19,4 @@ export * from './routes';
 export * from './fares';
 export * from './trips';
 export * from './schedules';
+export * from './inventory';

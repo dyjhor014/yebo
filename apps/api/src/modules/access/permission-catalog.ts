@@ -84,6 +84,12 @@ export const PERMISSION_CATALOG = {
     sensitive: false,
     description: 'Gestionar los viajes y abrirlos a la venta',
   },
+  // Fase 7.4: bloqueos operativos de recursos y cupos (F7-Q5).
+  'trips.block': {
+    module: 'TRIPS',
+    sensitive: false,
+    description: 'Bloquear y liberar asientos y cupos de un viaje',
+  },
 } as const satisfies Record<string, { module: string; sensitive: boolean; description: string }>;
 
 export type PermissionCode = keyof typeof PERMISSION_CATALOG;

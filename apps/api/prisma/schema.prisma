@@ -66,40 +66,43 @@ model Tenant {
   createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  domains            TenantDomain[]
-  memberships        TenantMembership[]
-  roles              Role[]
-  tenantSessions     TenantSession[]
-  authorizationCodes AuthorizationCode[]
-  moduleOverrides    TenantModuleOverride[]
-  subscriptions      Subscription[]
-  settings           TenantSetting?
-  services           TenantService[]
-  statusHistory      TenantStatusHistory[]
-  operationOverrides TenantOperationOverride[]
-  invitations        MembershipInvitation[]
-  usageSnapshots     UsageDailySnapshot[]
-  invoices           PlatformInvoice[]
-  supportGrants      SupportAccessGrant[]
-  siteVersions       SiteVersion[]
-  fileAssets         FileAsset[]
-  locations          Location[]
-  branches           Branch[]
-  salesChannels      SalesChannel[]
-  agencies           Agency[]
-  vehicleTypes       VehicleType[]
-  vehicles           Vehicle[]
-  vehicleDocuments   VehicleDocument[]
-  vehicleLayouts     VehicleLayout[]
-  routes             Route[]
-  routeStops         RouteStop[]
-  fares              Fare[]
-  trips              Trip[]
-  tripStops          TripStop[]
-  tripResources      TripResource[]
-  tripPools          TripCapacityPool[]
-  tripPoolSegments   TripPoolSegmentUsage[]
-  schedules          Schedule[]
+  domains             TenantDomain[]
+  memberships         TenantMembership[]
+  roles               Role[]
+  tenantSessions      TenantSession[]
+  authorizationCodes  AuthorizationCode[]
+  moduleOverrides     TenantModuleOverride[]
+  subscriptions       Subscription[]
+  settings            TenantSetting?
+  services            TenantService[]
+  statusHistory       TenantStatusHistory[]
+  operationOverrides  TenantOperationOverride[]
+  invitations         MembershipInvitation[]
+  usageSnapshots      UsageDailySnapshot[]
+  invoices            PlatformInvoice[]
+  supportGrants       SupportAccessGrant[]
+  siteVersions        SiteVersion[]
+  fileAssets          FileAsset[]
+  locations           Location[]
+  branches            Branch[]
+  salesChannels       SalesChannel[]
+  agencies            Agency[]
+  vehicleTypes        VehicleType[]
+  vehicles            Vehicle[]
+  vehicleDocuments    VehicleDocument[]
+  vehicleLayouts      VehicleLayout[]
+  routes              Route[]
+  routeStops          RouteStop[]
+  fares               Fare[]
+  trips               Trip[]
+  tripStops           TripStop[]
+  tripResources       TripResource[]
+  tripPools           TripCapacityPool[]
+  tripPoolSegments    TripPoolSegmentUsage[]
+  schedules           Schedule[]
+  resourceAllocations ResourceAllocation[]
+  poolAllocations     PoolAllocation[]
+  tripBlocks          TripBlock[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -1971,14 +1974,16 @@ model Trip {
   createdAt            DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  route     Route              @relation(fields: [tenantId, routeId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
-  vehicle   Vehicle?           @relation(fields: [tenantId, vehicleId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
-  version   LayoutVersion?     @relation(fields: [tenantId, layoutVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
-  schedule  Schedule?          @relation(fields: [tenantId, scheduleId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
-  stops     TripStop[]
-  resources TripResource[]
-  pools     TripCapacityPool[]
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  route       Route                @relation(fields: [tenantId, routeId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  vehicle     Vehicle?             @relation(fields: [tenantId, vehicleId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  version     LayoutVersion?       @relation(fields: [tenantId, layoutVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  schedule    Schedule?            @relation(fields: [tenantId, scheduleId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  stops       TripStop[]
+  resources   TripResource[]
+  pools       TripCapacityPool[]
+  allocations ResourceAllocation[]
+  blocks      TripBlock[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -2031,14 +2036,16 @@ model TripResource {
   isSellable           Boolean           @map("is_sellable")
   sellableAsUnit       Boolean           @map("sellable_as_unit")
 
-  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  trip     Trip           @relation(fields: [tenantId, tripId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
-  element  LayoutElement  @relation(fields: [tenantId, layoutElementId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
-  parent   TripResource?  @relation("TripResourceParent", fields: [tenantId, parentTripResourceId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
-  children TripResource[] @relation("TripResourceParent")
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  trip        Trip                 @relation(fields: [tenantId, tripId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  element     LayoutElement        @relation(fields: [tenantId, layoutElementId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  parent      TripResource?        @relation("TripResourceParent", fields: [tenantId, parentTripResourceId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  children    TripResource[]       @relation("TripResourceParent")
+  allocations ResourceAllocation[]
 
   @@unique([tenantId, id])
   @@unique([tripId, code])
+  @@unique([tripId, id])
   @@index([tenantId, tripId])
   @@index([tenantId, layoutElementId])
   @@index([tenantId, parentTripResourceId])
@@ -2055,9 +2062,10 @@ model TripCapacityPool {
   dimension CapacityDimension
   capacity  Decimal           @db.Decimal(14, 3)
 
-  tenant   Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  trip     Trip                   @relation(fields: [tenantId, tripId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
-  segments TripPoolSegmentUsage[]
+  tenant      Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  trip        Trip                   @relation(fields: [tenantId, tripId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  segments    TripPoolSegmentUsage[]
+  allocations PoolAllocation[]
 
   @@unique([tenantId, id])
   @@index([tenantId, tripId])
@@ -2121,4 +2129,111 @@ model Schedule {
   @@index([tenantId, defaultVehicleId])
   @@index([tenantId, defaultLayoutVersionId])
   @@map("schedules")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 7.4 · Motor de inventario por tramo y bloqueos operativos (capacity-and-inventory §3–6; ADR-007, ADR-026; F7-Q5)
+// ---------------------------------------------------------------------------------------------------------------
+
+enum AllocationStatus {
+  HELD
+  CONFIRMED
+  RELEASED
+
+  @@map("allocation_status")
+}
+
+/// Quién ocupa el inventario: una venta (Fase 8), un traslado de encomiendas (9), una carga (10) o un bloqueo operativo.
+enum AllocationHolder {
+  BOOKING_ITEM
+  TRANSFER
+  CARGO_ASSIGNMENT
+  BLOCK
+
+  @@map("allocation_holder")
+}
+
+/// Recurso asignable ocupado en `[a, b)` (paradas). EXCLUDE gist (recurso, rango) entre asignaciones no liberadas: no
+/// hay doble venta. No se borra: se libera (RELEASED, definitivo).
+model ResourceAllocation {
+  id             String                   @id @default(uuid(7)) @db.Uuid
+  tenantId       String                   @map("tenant_id") @db.Uuid
+  tripId         String                   @map("trip_id") @db.Uuid
+  tripResourceId String                   @map("trip_resource_id") @db.Uuid
+  stopRange      Unsupported("int4range") @map("stop_range")
+  status         AllocationStatus
+  holdExpiresAt  DateTime?                @map("hold_expires_at") @db.Timestamptz(6)
+  holderType     AllocationHolder         @map("holder_type")
+  holderId       String                   @map("holder_id") @db.Uuid
+  createdAt      DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  releasedAt     DateTime?                @map("released_at") @db.Timestamptz(6)
+
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  trip     Trip         @relation(fields: [tenantId, tripId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  resource TripResource @relation(fields: [tripId, tripResourceId], references: [tripId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, tripId])
+  @@index([tenantId, holderId])
+  @@index([tripId, tripResourceId])
+  @@map("resource_allocations")
+}
+
+/// Cantidad de un pool ocupada en `[a, b)`. Su suma por tramo es `trip_pool_segment_usage.used` (reconciliación).
+model PoolAllocation {
+  id            String                   @id @default(uuid(7)) @db.Uuid
+  tenantId      String                   @map("tenant_id") @db.Uuid
+  poolId        String                   @map("pool_id") @db.Uuid
+  stopRange     Unsupported("int4range") @map("stop_range")
+  quantity      Decimal                  @db.Decimal(14, 3)
+  status        AllocationStatus
+  holdExpiresAt DateTime?                @map("hold_expires_at") @db.Timestamptz(6)
+  holderType    AllocationHolder         @map("holder_type")
+  holderId      String                   @map("holder_id") @db.Uuid
+  createdAt     DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  releasedAt    DateTime?                @map("released_at") @db.Timestamptz(6)
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  pool   TripCapacityPool @relation(fields: [tenantId, poolId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, poolId])
+  @@index([tenantId, holderId])
+  @@map("pool_allocations")
+}
+
+enum BlockReason {
+  CREW
+  MAINTENANCE
+  COURTESY
+  OTHER
+
+  @@map("block_reason")
+}
+
+/// Bloqueo operativo (F7-Q5): tripulación, mantenimiento, cortesía u otro, sobre recursos y cupos de un viaje en
+/// `[from_seq, to_seq)`. Es el titular (`holder_type = BLOCK`) de sus asignaciones. Guarda quién lo crea y quién lo
+/// libera. Con `expires_at`, sus asignaciones son retenciones (HELD) que vencen.
+model TripBlock {
+  id             String                 @id @default(uuid(7)) @db.Uuid
+  tenantId       String                 @map("tenant_id") @db.Uuid
+  tripId         String                 @map("trip_id") @db.Uuid
+  reason         BlockReason
+  note           String?
+  fromSeq        Int                    @map("from_seq")
+  toSeq          Int                    @map("to_seq")
+  expiresAt      DateTime?              @map("expires_at") @db.Timestamptz(6)
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdByKind  MembershipChangeActor  @map("created_by_kind")
+  createdById    String                 @map("created_by_id") @db.Uuid
+  releasedAt     DateTime?              @map("released_at") @db.Timestamptz(6)
+  releasedByKind MembershipChangeActor? @map("released_by_kind")
+  releasedById   String?                @map("released_by_id") @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  trip   Trip   @relation(fields: [tenantId, tripId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, tripId])
+  @@map("trip_blocks")
 }

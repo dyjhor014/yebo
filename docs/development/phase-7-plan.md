@@ -1,6 +1,6 @@
 # Fase 7 · Rutas, programación y viajes (plan)
 
-- **Estado:** ✅ Decisiones F7-Q1 a F7-Q8 **aprobadas** por el responsable el 2026-11-18, tal como se recomendaron; F7-Q9 (trazas y mapa con **teselas propias**) decidida por el responsable el mismo día. Etapa 7.1 autorizada el 2026-11-18 y aprobada el 2026-11-19 (migración aplicada a `yebo_dev`); 7.2 autorizada y aprobada el 2026-11-19 (migración aplicada a `yebo_dev`); 7.3 autorizada el 2026-11-19 y dividida en 7.3a (viajes) y 7.3b (programaciones); 7.3a aprobada el mismo día (migración aplicada a `yebo_dev`); 7.3b aprobada el mismo día (migración aplicada a `yebo_dev`); 7.4 autorizada.
+- **Estado:** ✅ Decisiones F7-Q1 a F7-Q8 **aprobadas** por el responsable el 2026-11-18, tal como se recomendaron; F7-Q9 (trazas y mapa con **teselas propias**) decidida por el responsable el mismo día. Etapa 7.1 autorizada el 2026-11-18 y aprobada el 2026-11-19 (migración aplicada a `yebo_dev`); 7.2 autorizada y aprobada el 2026-11-19 (migración aplicada a `yebo_dev`); 7.3 autorizada el 2026-11-19 y dividida en 7.3a (viajes) y 7.3b (programaciones); 7.3a aprobada el mismo día (migración aplicada a `yebo_dev`); 7.3b aprobada el mismo día (migración aplicada a `yebo_dev`); 7.4 aprobada el mismo día (migración aplicada a `yebo_dev`; el cambio de candado quedó anotado en ADR-026). 7.5 autorizada; antes, la etapa 7.E1 del [plan de equipamiento e inspecciones](plan-equipamiento-inspecciones.md).
 - **Rama:** `fase-7/plan`, desde el cierre de la Fase 6 (`3fce518`).
 - **Criterio de aceptación** ([roadmap](roadmap.md)): «Ruta multiparada con capacidad correcta por tramo».
 
@@ -302,3 +302,54 @@ La 7.3 se divide, como la 4.3 y la 6.5: **7.3a**, viajes puntuales (`ON_DEMAND`)
 - **Mutaciones detectadas (12):** sin idempotencia (3 fallas), sin excluidas (2), sin recurrencia (1), sin choque de ruta (3), la unidad ocupada aborta la generación (2), hora pasada (1, con la salida de las 00:00), sin fin de vigencia (2), empresas no operativas en el job (1), horizonte más largo (2) y, en la base, sin el CHECK de viaje programado (1) y sin el de la RRULE (1).
 - **Inventario actualizado:** matriz de privilegios (+2 de tabla y +11 de columna), registro de modelos y de tablas de tenant (`Schedule`) y limpieza de datos de las pruebas.
 - **Resultado (2026-11-19):** integración completa 461/461; unitarias: API 157, contratos 60, web 25 y panel de plataforma 18; lint, tipos y formato sin errores. Una vez falló una unitaria de la API, solo al correr todo en paralelo con turbo, y no se repitió en siete corridas más; la sospechosa es la prueba de la 7.1 que exige leer un archivo hostil de 5 MB en menos de 3 s (sin confirmar).
+
+## Etapa 7.4 · Motor de inventario por tramo y bloqueos operativos (aprobada el 2026-11-19)
+
+### Decisiones de implementación
+
+| Tema | Decisión |
+|---|---|
+| Módulo | `inventory` (capa L1): `InventoryService` (el motor, exportado para la venta de la Fase 8, las encomiendas y la carga), `BlocksService` y `InventoryController`. Contrato `inventory.ts`. Producción de la prueba de concepto de la Fase 2 (`test/poc/inventory/allocator.ts`), ahora sobre las tablas reales con RLS y `yebo_app`, en READ COMMITTED |
+| Rango | Paradas `[a, b)`: ocupa los tramos `a … b-1` (`int4range`). Dentro de los tramos del viaje |
+| Recursos (§3) | Por código; **un camarote con camas se ocupa por todas sus camas** y pedir el camarote y una de sus camas no la duplica. Aviso previo con los códigos ocupados y el tramo (`RESOURCE_UNAVAILABLE`, 409); la exclusión `resource_no_overlap` es la garantía final |
+| ADR-026 | Antes de insertar, las asignaciones que compiten por un recurso esperan en orden de id. **Cambio respecto de la letra de ADR-026:** se usan candados consultivos de transacción (`pg_advisory_xact_lock`) por recurso en vez de `SELECT … FOR NO KEY UPDATE` sobre `trip_resources`, porque el candado de fila exige dar a `yebo_app` UPDATE sobre esa tabla (que hoy no tiene: el inventario materializado no cambia desde la apertura). Mismo efecto: espera ordenada, sin interbloqueos; la exclusión sigue siendo la garantía. Aprobado y anotado en ADR-026 |
+| Cupos (§4) | Bloqueo de todos los contadores con `FOR UPDATE` en el orden global `(pool_id, segment_seq)`, comprobación con lo confirmado (`CAPACITY_EXCEEDED`, 409, con la zona y el tramo), incremento (el CHECK `pool_within_capacity` es la red final) y registro de cada asignación. Un pool pedido dos veces se suma |
+| Atomicidad | Recursos y cupos en una sola transacción: si algo falla, no se asigna nada (ejemplo H: con el aforo lleno no se ocupa ni el asiento) |
+| Retenciones (§3 ej. C) | Con vencimiento, la asignación es HELD. Las vencidas que estorban se liberan **enteras** (todas las asignaciones de su titular, recursos y cupos) en una transacción previa a la nueva asignación; la disponibilidad ya no las cuenta. El job de expiración llega con la venta (Fase 8) |
+| Bloqueos operativos (F7-Q5) | Tripulación, mantenimiento, cortesía u otro, sobre recursos y cupos en `[fromSeq, toSeq)`, con nota y vencimiento opcionales. Son el titular `BLOCK` de sus asignaciones; guardan quién los crea y quién los libera. Liberar devuelve exactamente lo ocupado. Con la empresa suspendida siguen (FULFILL) |
+| Disponibilidad | Por tramo: cada recurso vendible (y el camarote que se vende completo: libre si todas sus camas lo están) y cada pool (capacidad, ocupado y libre). Las retenciones vencidas no ocupan |
+| Viajes (7.3a) | Volver a planificado o cancelar exige que no haya asignaciones sin liberar (además de contadores en 0). Un viaje que **ya tuvo ocupación** (aunque liberada) no cambia su unidad ni su plano: es el flujo `trip_vehicle_changes` de la Fase 8 (F7-Q3) |
+| Errores | Códigos nuevos `RESOURCE_UNAVAILABLE` y `CAPACITY_EXCEEDED` (409), como dice capacity-and-inventory §3 |
+| Reconciliación (§6.8) | `InventoryService.reconciliation()`: en cada pool y tramo, `used` = Σ asignaciones no liberadas. Se ejecuta tras cada prueba de la suite; el job de monitoreo en producción llega con la Fase 8 |
+
+### API de la empresa
+
+| Ruta | Permiso y categoría |
+|---|---|
+| `GET /api/v1/trips/{tripId}/availability` | `trips.manage`, READ |
+| `GET /api/v1/trips/{tripId}/blocks` | `trips.block`, READ |
+| `POST /api/v1/trips/{tripId}/blocks`, `POST /…/blocks/{blockId}/release` | `trips.block`, FULFILL |
+
+### Base de datos (migración `20261122010000_fase7_4_inventory`, reversión en su cabecera)
+
+- **Tablas:** `resource_allocations`, `pool_allocations` y `trip_blocks`, de tenant, con RLS forzado.
+- **EXCLUDE** `resource_no_overlap`; **CHECK:** rango no vacío desde 0, HELD con vencimiento, RELEASED con fecha, cantidad > 0, tramo y nota del bloqueo, autor coherente.
+- **Trigger** `allocations_guard`: nace HELD o CONFIRMED; solo en un viaje a la venta y dentro de sus tramos; nunca un camarote que se vende por sus camas; transiciones permitidas; liberada definitiva.
+- **`trip_consistency_check`** (7.3a) suma: un viaje planificado no tiene ocupación (diferido).
+- **Privilegios:** `yebo_app` SELECT e INSERT de las tres tablas; UPDATE solo de `status` y `released_at` en las asignaciones y del autor de la liberación en los bloqueos (sin DELETE); **UPDATE de `trip_pool_segment_usage.used`** (el motor); `yebo_backoffice` SELECT.
+- **Permiso `trips.block`:** módulo `TRIPS`, en la plantilla Administrador y en los roles Administrador existentes.
+- **`yebo_dev`:** migración aplicada el 2026-11-19, con copia previa.
+
+### Pruebas
+
+- **`inventory.int-spec` (17), con la reconciliación tras cada prueba:**
+  - **suite §6 completa** contra el motor y PostgreSQL real, con concurrencia real: §6.1 (50 simultáneas por un asiento, cinco veces: 1 éxito y 49 ocupados), ADR-026 (40 rondas de dos simultáneas: 1 y 1), §6.2 (contiguos: los dos), §6.3 (superpuestos: 1 de 2, veinte rondas), §6.4 (camarote de 4 camas frente a sus camas: o el camarote o las camas, diez rondas; dos camas a la vez; no se vende un camarote incompleto), §6.5 (zona de 10 con 25 al azar: ningún tramo pasa de 10 y `used` igual a lo calculado), §6.6 (bodega peso + volumen, la mitad en orden inverso: sin interbloqueos), §6.7 (retención vencida liberada entera y revendida; una vigente bloquea), ejemplo H (aforo lleno, nada asignado) y liberar exacto;
+  - bloqueos por la API: recursos, camarote por sus camas y cupos; disponibilidad tramo por tramo; ocupado y sin capacidad con el mensaje exacto (tramo y códigos); nada a medias; autor; liberar y no liberar dos veces;
+  - validación: tramo, sin recursos ni cupos, repetidos, motivo, tramo fuera del viaje, recurso inexistente, cupo de otro viaje, vencimiento pasado, retención con vencimiento, viaje no abierto;
+  - viajes con ocupación: no vuelven a planificado ni se cancelan; con historia, no cambian de unidad ni de plano (sí de hora);
+  - reglas de la base: exclusión (23P01), contiguos, fuera de tramos, camarote con camas, nace liberada, HELD sin vencimiento, rango vacío, liberada definitiva, privilegios (42501), planificado con ocupación (diferido) y CHECK del contador;
+  - aislamiento: 404 por la API, RLS en las tres tablas y el motor en el contexto de otra empresa;
+  - permisos: 403 sin `trips.block` (y sin `trips.manage` para la disponibilidad), 401 sin sesión, empresa suspendida bloquea y libera.
+- **Mutaciones detectadas (13, más la del candado):** en el motor, sin aviso previo de ocupado, sin comprobar capacidad, liberar sin descontar (9 fallas), retenciones vencidas sin liberar, camarote sin expandir, disponibilidad con vencidas y sin estado del viaje; en viajes, ocupación sin recursos y plano con historia; en bloqueos, liberar dos veces; en la base, la guardia de asignaciones vacía, planificado con ocupación y sin exclusión. **Sin el candado de ADR-026** la suite lo detecta de forma **probabilística** (falló en 1 de 3 corridas, por un 40P01 en §6.1): el interbloqueo en el índice GIST depende del momento; con el candado, ninguna corrida falló.
+- **Inventario actualizado:** matriz de privilegios (+6 de tabla y +8 de columna), registro de modelos y de tablas de tenant, siembra de permisos y limpieza de datos de las pruebas. La prueba de privilegios de la 7.3a ya no exige que `used` sea inmodificable (ahora lo mueve el motor; su CHECK sigue probado).
+- **Resultado (2026-11-19):** integración completa 478/478; unitarias: API 157, contratos 60, web 25 y panel de plataforma 18; lint, tipos y formato sin errores.
