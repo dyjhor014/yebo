@@ -1,6 +1,6 @@
 # Fase 7 · Rutas, programación y viajes (plan)
 
-- **Estado:** ✅ Decisiones F7-Q1 a F7-Q8 **aprobadas** por el responsable el 2026-11-18, tal como se recomendaron; F7-Q9 (trazas y mapa con **teselas propias**) decidida por el responsable el mismo día. Etapa 7.1 autorizada el 2026-11-18 y aprobada el 2026-11-19 (migración aplicada a `yebo_dev`); 7.2 autorizada y aprobada el 2026-11-19 (migración aplicada a `yebo_dev`); 7.3 autorizada el 2026-11-19.
+- **Estado:** ✅ Decisiones F7-Q1 a F7-Q8 **aprobadas** por el responsable el 2026-11-18, tal como se recomendaron; F7-Q9 (trazas y mapa con **teselas propias**) decidida por el responsable el mismo día. Etapa 7.1 autorizada el 2026-11-18 y aprobada el 2026-11-19 (migración aplicada a `yebo_dev`); 7.2 autorizada y aprobada el 2026-11-19 (migración aplicada a `yebo_dev`); 7.3 autorizada el 2026-11-19 y dividida en 7.3a (viajes) y 7.3b (programaciones); 7.3a aprobada el mismo día (migración aplicada a `yebo_dev`); 7.3b autorizada.
 - **Rama:** `fase-7/plan`, desde el cierre de la Fase 6 (`3fce518`).
 - **Criterio de aceptación** ([roadmap](roadmap.md)): «Ruta multiparada con capacidad correcta por tramo».
 
@@ -69,7 +69,7 @@
 
 ## Fuera del alcance de la Fase 7
 
-- Venta, reservas de clientes, boletos, embarque y manifiestos (Fase 8).
+- Venta, reservas de clientes, boletos, embarque y manifiestos (Fase 8). **Requisito del responsable (2026-11-19):** cada venta registra la información del pasajero (como mínimo nombre, tipo y número de documento, nacionalidad y si es menor de edad, según `booking_items.passenger_snapshot` y `customers` del diccionario de datos, con los datos personales cifrados), que alimenta el manifiesto de pasajeros.
 - Cambio de unidad con ocupación (`trip_vehicle_changes`, Fase 8).
 - Lógica de mínimo de pasajeros y viajes privados (F7-Q6, Fase 8).
 - Incidencias del viaje (F7-Q8).
@@ -192,3 +192,64 @@ No bloquean esta fase: tildes del ubigeo, limpieza de archivos subidos sin usar,
 - **Mutaciones detectadas (12):** sin cambio de precio (5 fallas), inicio en el pasado (2), par fuera de la ruta (2), anular una que ya empezó (3), cotizar fuera de la ruta (2), reabrir una terminada (2), ruta archivada (1), servicio no operado (2), clases sin los planos (1) y, en la base, el trigger de anulada (1), la exclusión sin el filtro de activas (3) y sin exclusión (2).
 - **Inventario actualizado:** matriz de privilegios (+2 de tabla y +4 de columna), registro de modelos y de tablas de tenant (`Fare`), siembra de permisos de `access.int-spec` y limpieza de datos de las pruebas.
 - **Resultado (2026-11-19):** integración completa 447/447; unitarias: API 154, contratos 57, web 25 y panel de plataforma 18; lint y tipos sin errores; formato sin cambios en lo versionado.
+
+## Etapa 7.3a · Viajes, paradas e inventario materializado (aprobada el 2026-11-19)
+
+La 7.3 se divide, como la 4.3 y la 6.5: **7.3a**, viajes puntuales (`ON_DEMAND`) con sus paradas, la unidad y el plano, el inventario y los estados; **7.3b**, programaciones (F7-Q2), generación idempotente hasta el horizonte y el job diario del worker.
+
+### Decisiones de implementación
+
+| Tema | Decisión |
+|---|---|
+| Módulo | `trips` (capa L1): `TripsService`, `TripsController` y la conversión de hora local (`local-time.ts`). Contrato en `@yebo/contracts` (`trips.ts`) |
+| Hora local | La API recibe y devuelve horas **locales de la empresa** (`AAAA-MM-DDTHH:mm`, zona del tenant, `America/Lima` por defecto) y guarda instantes (`timestamptz`). La conversión sirve para cualquier zona IANA, con o sin horario de verano |
+| Crear | Ruta activa de la empresa (bloqueada `FOR SHARE`), salida en el futuro y a no más de 400 días. Copia las paradas: llegada = salida + minutos desde el origen; salida de la parada = llegada + minutos de parada. El origen no tiene llegada ni el destino salida. Editar la ruta después no cambia el viaje |
+| Código | `RUTA-AAMMDD-HHMM` (`PCL-IQT-261201-0800`), único por empresa. Si un viaje cancelado ya lo usa, `-2`, `-3`… Cambia si se mueve la salida de un viaje planificado |
+| Unidad y plano (F7-Q3) | Vehículo de la empresa, no retirado, de la **modalidad de la ruta** y **libre en ese horario**. El plano: una versión **publicada** elegida (no archivada, de la modalidad y del tipo de vehículo) o, si no se elige, **la asignada al vehículo el día de la salida** (6.3). Sin plano, el viaje existe pero no se abre a la venta |
+| Un vehículo, un viaje a la vez | **Nuevo respecto del plan:** un vehículo no está en dos viajes no cancelados cuyos horarios `[salida, llegada)` se solapan (409 que nombra el otro viaje; EXCLUDE en la base). Una lancha de 3 días y medio no puede salir todos los días: lo verá la generación de la 7.3b |
+| Una ruta, una salida por hora | Una ruta no tiene dos viajes no cancelados a la misma hora (409; UNIQUE parcial) |
+| Inventario | Al fijar la unidad y el plano: `trip_resources` (con su elemento del plano y la cama con su camarote) y `trip_capacity_pools` desde `deriveInventory`. Cambiar el plano o quitar la unidad lo reemplaza (solo con el viaje planificado) |
+| Editar | Solo con el viaje planificado: la salida (las horas de las paradas se corren lo mismo), la unidad, el plano, el mínimo de pasajeros y su plazo |
+| Abrir a la venta | Con unidad **activa** (no en mantenimiento ni fuera de servicio), plano, ruta activa y antes de la salida. Crea un contador por pool y tramo (`trip_pool_segment_usage`, con la capacidad del pool). Guarda quién y cuándo |
+| Volver a planificar | Sin ocupación (contadores en 0; la 7.4 sumará asignaciones y bloqueos): borra los contadores |
+| Cancelar | Planificado o a la venta, sin ocupación, con motivo (3 a 300 caracteres). Definitivo. Guarda quién y cuándo. Libera la hora de la ruta y la unidad |
+| F7-Q6 | `service_mode` solo `SHARED` (CHECK); `min_passengers` y `confirmation_deadline` se guardan sin lógica (Fase 8) |
+| Fuera de la 7.3a | `departure_date` y `schedule_id` (llegan con las programaciones, 7.3b); horas reales (`actual_*`) y estados operativos (Fase 8) |
+
+### API de la empresa
+
+| Ruta | Permiso y categoría |
+|---|---|
+| `GET /api/v1/trips?from&to&routeId&status` (hasta 62 días), `GET /{id}`, `GET /{id}/inventory` | `trips.manage`, READ |
+| `POST /api/v1/trips`, `PUT /{id}`, `POST /{id}/open`, `POST /{id}/back-to-planned`, `POST /{id}/cancel` | `trips.manage`, NEW_COMMERCIAL (TRIAL, ACTIVE y PAST_DUE) |
+
+### Base de datos (migración `20261120010000_fase7_3a_trips`, reversión en su cabecera)
+
+- **Tablas:** `trips`, `trip_stops`, `trip_resources`, `trip_capacity_pools` y `trip_pool_segment_usage`, de tenant, con RLS forzado y FK compuestas `(tenant_id, …)`.
+- **CHECK:** código, llegada posterior a la salida, mínimo de 1 a 1000, plazo anterior a la salida, solo `SHARED`, plano con unidad, autor de abrir y cancelar coherente, motivo; parada con alguna hora y salida ≥ llegada; recurso de un tipo asignable, capacidad y clase; pool con capacidad > 0 y alcance coherente; contador `0 ≤ used ≤ capacity` (`pool_within_capacity`).
+- **EXCLUDE** `trips_vehicle_no_overlap`; **UNIQUE parcial** de ruta y hora; unicidad de pools en dos índices parciales.
+- **Triggers:**
+  - `trips_guard`: nace planificado; transiciones PLANNED ⇄ OPEN_FOR_SALE y → CANCELLED; cancelado no cambia; desde la apertura, unidad, plano, horas, código y mínimo fijos;
+  - `trip_children_guard`: paradas, recursos y pools solo cambian con el viaje planificado;
+  - `trip_segments_guard`: contadores solo se crean con el viaje a la venta y solo se borran vacíos con el viaje planificado;
+  - `trip_consistency_check` (**diferido**): paradas 0..n-1 y al menos dos; a la venta, un contador por pool y tramo con la capacidad del pool; planificado, ninguno. Es una sola función de trigger: `yebo_app` no tiene EXECUTE sobre funciones (ADR-034).
+- **Privilegios:**
+  - `yebo_app`: `trips` SELECT, INSERT y UPDATE de sus columnas de estado, unidad, plano y horas (sin la ruta, el tipo ni el modo; sin DELETE); `trip_stops` SELECT, INSERT y UPDATE de sus horas; `trip_resources` y `trip_capacity_pools` SELECT, INSERT y DELETE; `trip_pool_segment_usage` SELECT, INSERT y DELETE (el UPDATE de `used` llega con el motor, 7.4);
+  - `yebo_backoffice`: SELECT de las cinco.
+- **Permiso `trips.manage`:** módulo `TRIPS`, en la plantilla Administrador y en los roles Administrador existentes.
+- **`yebo_dev`:** migración aplicada el 2026-11-19, con copia previa.
+
+### Pruebas
+
+- **`trips.int-spec` (7):**
+  - crear: paradas y horas locales calculadas a mano (Pucallpa 08:00 → Iquitos a los 3 días y medio), instante UTC, unidad y plano asignado; recursos y pools **iguales a `deriveInventory`**, con su elemento del plano y la cama con su camarote; editar la ruta no cambia el viaje; consulta por fechas, ruta y estado;
+  - unidad y plano: salida pasada o lejana, otra modalidad, unidad ocupada en ese horario, ruta a la misma hora, versión en borrador, plano de otra modalidad, plano sin unidad, plazo después de la salida, ruta ajena o archivada, unidad retirada; sin plano, sin inventario; con plano elegido, su inventario; sin unidad;
+  - editar: mover la salida corre las cuatro paradas y el código; cambiar el plano reemplaza el inventario; quitar la unidad lo borra;
+  - abrir: contadores = pools × 3 tramos con su capacidad; queda fijo; autor; volver a planificar; sin plano (400); unidad en mantenimiento (409); cancelar con motivo, definitivo; un viaje nuevo a la misma hora lleva `-2`;
+  - reglas de la base: nace planificado, CHECK, coherencia diferida sin paradas, EXCLUDE de la unidad (23P01), ruta a la misma hora (23505), transición no permitida, lo fijo desde la apertura, paradas, recursos y contadores protegidos, planificado con contadores, contadores en un viaje planificado, cancelado definitivo, privilegios (42501) y el CHECK del contador;
+  - aislamiento entre empresas (404 y 400) y RLS en las cinco tablas;
+  - permisos: 403 sin `trips.manage`, 401 sin sesión; NEW_COMMERCIAL permitido en PAST_DUE y bloqueado en SUSPENDED (consulta sí).
+- **Unitarias:** `local-time.spec` (3: Lima, zona con horario de verano y una hora que no existe, días del calendario).
+- **Mutaciones detectadas (17):** en el servicio, sin pools (3 fallas), sin control de modalidad (3), sin horario libre (3), sin plano asignado (4), un tramo menos al abrir (2), unidad en mantenimiento (2), paradas sin correr (2), volver sin borrar contadores (2), salida en el pasado (3), plano no publicado (3), ruta archivada (1) e inventario sin reemplazar (2); en la base, transiciones libres, paradas e inventario sin guardia, sin coherencia diferida y sin EXCLUDE de la unidad (1 cada una).
+- **Inventario actualizado:** matriz de privilegios (+10 de tabla y +18 de columna), registro de modelos y tablas de tenant, siembra de permisos de `access.int-spec` y limpieza de datos de las pruebas. La prueba de deriva de migraciones detectó el índice `NULLS NOT DISTINCT` (Prisma no lo representa): se reemplazó por dos índices parciales.
+- **Resultado (2026-11-19):** integración completa 454/454; unitarias: API 157, contratos 57, web 25 y panel de plataforma 18; lint, tipos y formato sin errores.

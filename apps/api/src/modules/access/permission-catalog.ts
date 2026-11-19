@@ -78,6 +78,12 @@ export const PERMISSION_CATALOG = {
   },
   // Fase 7.2: tarifas por par, servicio y clase de precio, con vigencia (F7-Q1).
   'fares.manage': { module: 'FARES', sensitive: false, description: 'Gestionar las tarifas de las rutas' },
+  // Fase 7.3: viajes (crear, fijar unidad y plano, abrir a la venta y cancelar son NEW_COMMERCIAL).
+  'trips.manage': {
+    module: 'TRIPS',
+    sensitive: false,
+    description: 'Gestionar los viajes y abrirlos a la venta',
+  },
 } as const satisfies Record<string, { module: string; sensitive: boolean; description: string }>;
 
 export type PermissionCode = keyof typeof PERMISSION_CATALOG;

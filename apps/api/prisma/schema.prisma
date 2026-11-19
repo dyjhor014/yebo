@@ -94,6 +94,11 @@ model Tenant {
   routes             Route[]
   routeStops         RouteStop[]
   fares              Fare[]
+  trips              Trip[]
+  tripStops          TripStop[]
+  tripResources      TripResource[]
+  tripPools          TripCapacityPool[]
+  tripPoolSegments   TripPoolSegmentUsage[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -1349,8 +1354,9 @@ model Location {
   kind       LocationKind @relation(fields: [kindCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
   branches   Branch[]
   routeStops RouteStop[]
-  faresFrom  Fare[]      @relation("FareOrigin")
-  faresTo    Fare[]      @relation("FareDestination")
+  faresFrom  Fare[]       @relation("FareOrigin")
+  faresTo    Fare[]       @relation("FareDestination")
+  tripStops  TripStop[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, name])
@@ -1534,6 +1540,7 @@ model Vehicle {
   type        VehicleType               @relation(fields: [tenantId, vehicleTypeId, modality], references: [tenantId, id, modality], onDelete: Restrict, onUpdate: Restrict)
   documents   VehicleDocument[]
   assignments VehicleLayoutAssignment[]
+  trips       Trip[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -1643,6 +1650,7 @@ model LayoutVersion {
   zones       LayoutZone[]
   elements    LayoutElement[]
   assignments VehicleLayoutAssignment[]
+  trips       Trip[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, layoutId, version])
@@ -1737,10 +1745,11 @@ model LayoutElement {
   attributes      Json              @default("{}")
   createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  version  LayoutVersion   @relation(fields: [tenantId, layoutVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
-  zone     LayoutZone?     @relation(fields: [tenantId, zoneId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
-  parent   LayoutElement?  @relation("ElementParent", fields: [tenantId, parentElementId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
-  children LayoutElement[] @relation("ElementParent")
+  version       LayoutVersion   @relation(fields: [tenantId, layoutVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  zone          LayoutZone?     @relation(fields: [tenantId, zoneId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  parent        LayoutElement?  @relation("ElementParent", fields: [tenantId, parentElementId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  children      LayoutElement[] @relation("ElementParent")
+  tripResources TripResource[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, layoutVersionId, code])
@@ -1808,6 +1817,7 @@ model Route {
   tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   stops  RouteStop[]
   fares  Fare[]
+  trips  Trip[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -1884,4 +1894,179 @@ model Fare {
   @@index([tenantId, originLocationId])
   @@index([tenantId, destinationLocationId])
   @@map("fares")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 7.3a · Viajes, paradas copiadas e inventario materializado (data-dictionary §5; F7-Q3, F7-Q4 y F7-Q6)
+// ---------------------------------------------------------------------------------------------------------------
+
+/// Estados del viaje. En la Fase 7 solo se usan PLANNED, OPEN_FOR_SALE y CANCELLED (F7-Q4); el resto llega con el
+/// embarque (Fase 8), que ampliará el trigger de transiciones.
+enum TripStatus {
+  PLANNED
+  OPEN_FOR_SALE
+  CONFIRMED
+  BOARDING
+  DEPARTED
+  ARRIVED
+  CLOSED
+  CANCELLED
+
+  @@map("trip_status")
+}
+
+enum DepartureKind {
+  SCHEDULED
+  ON_DEMAND
+
+  @@map("departure_kind")
+}
+
+/// Viaje compartido (asientos sueltos) o privado (fletamento, Fase 8; F7-Q6).
+enum ServiceMode {
+  SHARED
+  PRIVATE
+
+  @@map("service_mode")
+}
+
+enum PoolScope {
+  ZONE
+  VEHICLE
+
+  @@map("pool_scope")
+}
+
+/// Viaje de una ruta en una fecha y hora. Copia las paradas de la ruta al crearse (editar la ruta no lo cambia). La
+/// unidad y el plano se fijan mientras está PLANNED; desde OPEN_FOR_SALE quedan fijos (F7-Q3). Un vehículo no está en
+/// dos viajes no cancelados a la vez (EXCLUDE). Abrir y cancelar guardan su autor.
+model Trip {
+  id                   String                 @id @default(uuid(7)) @db.Uuid
+  tenantId             String                 @map("tenant_id") @db.Uuid
+  code                 String
+  routeId              String                 @map("route_id") @db.Uuid
+  departureKind        DepartureKind          @default(ON_DEMAND) @map("departure_kind")
+  serviceMode          ServiceMode            @default(SHARED) @map("service_mode")
+  vehicleId            String?                @map("vehicle_id") @db.Uuid
+  layoutVersionId      String?                @map("layout_version_id") @db.Uuid
+  status               TripStatus             @default(PLANNED)
+  minPassengers        Int?                   @map("min_passengers")
+  confirmationDeadline DateTime?              @map("confirmation_deadline") @db.Timestamptz(6)
+  plannedDepartureAt   DateTime               @map("planned_departure_at") @db.Timestamptz(6)
+  plannedArrivalAt     DateTime               @map("planned_arrival_at") @db.Timestamptz(6)
+  openedAt             DateTime?              @map("opened_at") @db.Timestamptz(6)
+  openedByKind         MembershipChangeActor? @map("opened_by_kind")
+  openedById           String?                @map("opened_by_id") @db.Uuid
+  cancelledAt          DateTime?              @map("cancelled_at") @db.Timestamptz(6)
+  cancelledByKind      MembershipChangeActor? @map("cancelled_by_kind")
+  cancelledById        String?                @map("cancelled_by_id") @db.Uuid
+  cancelReason         String?                @map("cancel_reason")
+  createdAt            DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  route     Route              @relation(fields: [tenantId, routeId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  vehicle   Vehicle?           @relation(fields: [tenantId, vehicleId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  version   LayoutVersion?     @relation(fields: [tenantId, layoutVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  stops     TripStop[]
+  resources TripResource[]
+  pools     TripCapacityPool[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, plannedDepartureAt])
+  @@index([tenantId, routeId])
+  @@index([tenantId, vehicleId])
+  @@index([tenantId, layoutVersionId])
+  @@map("trips")
+}
+
+/// Parada del viaje, copiada de la ruta al crearlo, con sus horas planificadas. Solo cambian sus horas, y solo mientras
+/// el viaje está PLANNED (trigger).
+model TripStop {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  tripId             String    @map("trip_id") @db.Uuid
+  seq                Int
+  locationId         String    @map("location_id") @db.Uuid
+  plannedArrivalAt   DateTime? @map("planned_arrival_at") @db.Timestamptz(6)
+  plannedDepartureAt DateTime? @map("planned_departure_at") @db.Timestamptz(6)
+  allowsBoarding     Boolean   @map("allows_boarding")
+  allowsAlighting    Boolean   @map("allows_alighting")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  trip     Trip     @relation(fields: [tenantId, tripId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  location Location @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tripId, seq])
+  @@index([tenantId, tripId])
+  @@index([tenantId, locationId])
+  @@map("trip_stops")
+}
+
+/// Recurso asignable del viaje (asiento, cama, camarote, espacio de vehículo), materializado de la versión del plano
+/// con `deriveInventory` al fijar la unidad y el plano (F7-Q3). Se reemplaza mientras el viaje está PLANNED.
+model TripResource {
+  id                   String            @id @default(uuid(7)) @db.Uuid
+  tenantId             String            @map("tenant_id") @db.Uuid
+  tripId               String            @map("trip_id") @db.Uuid
+  layoutElementId      String            @map("layout_element_id") @db.Uuid
+  parentTripResourceId String?           @map("parent_trip_resource_id") @db.Uuid
+  code                 String
+  kind                 LayoutElementKind
+  zoneCode             String            @map("zone_code")
+  priceClassCode       String            @map("price_class_code")
+  capacity             Int
+  isSellable           Boolean           @map("is_sellable")
+  sellableAsUnit       Boolean           @map("sellable_as_unit")
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  trip     Trip           @relation(fields: [tenantId, tripId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  element  LayoutElement  @relation(fields: [tenantId, layoutElementId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  parent   TripResource?  @relation("TripResourceParent", fields: [tenantId, parentTripResourceId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  children TripResource[] @relation("TripResourceParent")
+
+  @@unique([tenantId, id])
+  @@unique([tripId, code])
+  @@index([tenantId, tripId])
+  @@index([tenantId, layoutElementId])
+  @@index([tenantId, parentTripResourceId])
+  @@map("trip_resources")
+}
+
+/// Capacidad agregada del viaje: una regla de capacidad de una zona (ZONE) o el aforo total de la unidad (VEHICLE).
+model TripCapacityPool {
+  id        String            @id @default(uuid(7)) @db.Uuid
+  tenantId  String            @map("tenant_id") @db.Uuid
+  tripId    String            @map("trip_id") @db.Uuid
+  scope     PoolScope
+  zoneCode  String?           @map("zone_code")
+  dimension CapacityDimension
+  capacity  Decimal           @db.Decimal(14, 3)
+
+  tenant   Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  trip     Trip                   @relation(fields: [tenantId, tripId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  segments TripPoolSegmentUsage[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, tripId])
+  @@map("trip_capacity_pools")
+}
+
+/// Contador de un pool en un tramo (capacity-and-inventory §4). Se materializa al abrir la venta: una fila por pool y
+/// tramo. `used` lo mueve solo el motor de inventario (7.4); el CHECK es la garantía final.
+model TripPoolSegmentUsage {
+  tenantId   String  @map("tenant_id") @db.Uuid
+  poolId     String  @map("pool_id") @db.Uuid
+  segmentSeq Int     @map("segment_seq")
+  capacity   Decimal @db.Decimal(14, 3)
+  used       Decimal @default(0) @db.Decimal(14, 3)
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  pool   TripCapacityPool @relation(fields: [tenantId, poolId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([poolId, segmentSeq])
+  @@index([tenantId, poolId])
+  @@map("trip_pool_segment_usage")
 }

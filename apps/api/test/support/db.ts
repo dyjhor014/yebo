@@ -11,7 +11,7 @@ export const RESET_TENANT_DATA =
   'role_permissions, roles, tenant_memberships, tenant_module_overrides, subscriptions, tenant_settings, ' +
   'tenant_services, tenant_status_history, tenant_operation_overrides, membership_invitations, membership_status_history, ' +
   'support_access_logs, support_sessions, support_handoffs, support_access_grants, site_versions, file_assets, ' +
-  'fares, route_stops, routes, vehicle_layout_assignments, capacity_rules, layout_elements, layout_zones, layout_versions, vehicle_layouts, ' +
+  'trip_pool_segment_usage, trip_capacity_pools, trip_resources, trip_stops, trips, fares, route_stops, routes, vehicle_layout_assignments, capacity_rules, layout_elements, layout_zones, layout_versions, vehicle_layouts, ' +
   'vehicle_documents, vehicles, vehicle_types, membership_branch_scopes, sales_channels, agencies, branches, locations, ' +
   'subscription_payments, platform_invoice_lines, platform_invoices, usage_period_calculations, billing_periods, ' +
   'usage_daily_snapshots, users, ' +
