@@ -353,3 +353,27 @@ La 7.3 se divide, como la 4.3 y la 6.5: **7.3a**, viajes puntuales (`ON_DEMAND`)
 - **Mutaciones detectadas (13, más la del candado):** en el motor, sin aviso previo de ocupado, sin comprobar capacidad, liberar sin descontar (9 fallas), retenciones vencidas sin liberar, camarote sin expandir, disponibilidad con vencidas y sin estado del viaje; en viajes, ocupación sin recursos y plano con historia; en bloqueos, liberar dos veces; en la base, la guardia de asignaciones vacía, planificado con ocupación y sin exclusión. **Sin el candado de ADR-026** la suite lo detecta de forma **probabilística** (falló en 1 de 3 corridas, por un 40P01 en §6.1): el interbloqueo en el índice GIST depende del momento; con el candado, ninguna corrida falló.
 - **Inventario actualizado:** matriz de privilegios (+6 de tabla y +8 de columna), registro de modelos y de tablas de tenant, siembra de permisos y limpieza de datos de las pruebas. La prueba de privilegios de la 7.3a ya no exige que `used` sea inmodificable (ahora lo mueve el motor; su CHECK sigue probado).
 - **Resultado (2026-11-19):** integración completa 478/478; unitarias: API 157, contratos 60, web 25 y panel de plataforma 18; lint, tipos y formato sin errores.
+
+## Etapa 7.5 · Pantallas (con la 7.E2): maqueta aprobada (2026-11-19)
+
+[Rutas, viajes e inspecciones · maqueta 7.5](https://claude.ai/artifact/M9KUCDqKirchiFHpUs13C5) (privada), un lienzo con siete pantallas en el estilo de la maqueta aprobada de la 6.4 (marca YEBO: Manrope e Inter, azul medianoche, turquesa de acción):
+
+1. **Rutas:** lista y editor de paradas en orden (tiempo desde la salida, tiempo detenido, sube y baja, traza o línea recta, reordenar con botones o Alt + flechas), aviso fluvial que no impide guardar y esquema de tramos con km (el mapa llega con la 7.6).
+2. **Tarifas:** matriz tramo × clase en una fecha, con «Sin precio» visible; historial de la celda (vigente, programada, anular, cambiar el fin) y cambio de precio con el error exacto de solapamiento.
+3. **Programaciones:** días de la semana, hora, vigencia, fechas sin salida, unidad y plano por defecto; resultado de generar (creados, sin unidad con su motivo, omitidos).
+4. **Viajes:** agenda semanal por día con hora, tramo, unidad (o «Sin unidad»), estado y ocupación.
+5. **Ficha del viaje** (interactiva): itinerario con horas locales, unidad y plano, **disponibilidad por tramo** (selector de tramo, plano de asientos y camarotes, cupos por cantidad), bloqueos con autor y liberar, acciones de estado con su explicación y **control preoperacional** opcional (última inspección de la unidad).
+6. **Flota · equipamiento de la unidad:** tabla de equipamiento con estado y vencimiento, catálogo de sugerencias con referencia orientativa y el aviso de control interno; historial de inspecciones con conteos y rectificaciones.
+7. **Inspección en el celular** (interactiva, 390 × 844): progreso, cuatro resultados por elemento con color, ícono y texto (conforme verde, observado ámbar, no operativo rojo, no disponible gris), cantidad encontrada, observación y fotos, y completar solo con todo marcado.
+
+**Revisión con Impeccable:**
+- **Ejecución:** solo el detector (`detect`, telemetría apagada), como en la 6.4: del paquete solo está instalado el ejecutable, sin las habilidades de crítica.
+- **Detector:** 12 avisos y 1 nota.
+  - 7 de «fuente demasiado usada» por Inter: falso positivo, es la tipografía de la marca.
+  - 5 de «texto pegado al borde»: son los contenedores de las cinco tablas; sus celdas tienen 10 a 12 px de margen interno.
+  - 1 nota real (rayas con degradado repetido en la línea recta del recorrido): **corregida** con un borde punteado.
+- **Contraste:** 20 pares medidos y todos cumplen AA. El texto secundario está entre 5,70 y 6,20:1; los resultados de inspección, entre 5,00 y 10,06:1; el borde de los campos, en 3,09:1 (mínimo 3:1).
+- **Revisión propia:** completar una inspección no se puede deshacer, así que la pantalla avisa que habrá un resumen para confirmar (corregido).
+- **Para el código:** en el celular, las filas de la agenda y de las tablas se apilan; el plano de asientos de la ficha será una lista navegable con teclado, no una imagen.
+
+**Maqueta aprobada por el responsable el 2026-11-19.** El código se divide, como la 6.4b y la 6.4c: **7.5a** Rutas y Tarifas; **7.5b** Programaciones, Viajes y la ficha del viaje (disponibilidad, bloqueos y control preoperacional); **7.5c** equipamiento de la unidad e inspección en el celular (la 7.E2). Cada parte con sus E2E (axe, modo oscuro, celular y teclado) y su revisión.
