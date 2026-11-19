@@ -55,6 +55,7 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set<string>([
   'TripResource',
   'TripCapacityPool',
   'TripPoolSegmentUsage',
+  'Schedule',
 ]);
 
 /**
@@ -114,6 +115,7 @@ export const TENANT_SCOPED_TABLES: readonly string[] = [
   'trip_resources',
   'trip_capacity_pools',
   'trip_pool_segment_usage',
+  'schedules',
 ];
 
 /**

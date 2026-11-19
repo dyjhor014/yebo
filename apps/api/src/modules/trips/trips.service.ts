@@ -24,7 +24,6 @@ const UUID = z.uuid();
 const NOT_FOUND = () => new AppError('NOT_FOUND', 'Recurso no encontrado', 404);
 const invalid = (message: string) => new AppError('VALIDATION_FAILED', message, 400);
 const conflict = (message: string) => new AppError('CONFLICT', message, 409);
-type Tx = Parameters<Parameters<TenantDbService['transaction']>[0]>[0];
 
 const DEFAULT_TIMEZONE = 'America/Lima';
 const VEHICLE_STATUS_NAME: Record<string, string> = {
@@ -46,7 +45,7 @@ const TRIP_INCLUDE = {
 } as const satisfies Prisma.TripInclude;
 type TripRow = Prisma.TripGetPayload<{ include: typeof TRIP_INCLUDE }>;
 
-type Unit = { vehicleId: string | null; layoutVersionId: string | null };
+export type Unit = { vehicleId: string | null; layoutVersionId: string | null };
 
 /**
  * Viajes de la empresa del host (Fase 7.3a; F7-Q3, F7-Q4 y F7-Q6). Todo con `yebo_app` y el tenant del contexto (RLS
@@ -143,7 +142,6 @@ export class TripsService {
   /** Viaje puntual (ON_DEMAND): copia las paradas de la ruta y, si hay unidad con plano, materializa su inventario. */
   async create(input: CreateTripRequest): Promise<Trip> {
     const tz = this.tz();
-    const tenantId = this.ctx.tenantId();
     try {
       return await this.db.transaction(async (tx) => {
         const route = await this.lockRoute(tx, input.routeId);
@@ -158,38 +156,17 @@ export class TripsService {
           arrival,
           null,
         );
-        const code = await this.freeCode(tx, tripCode(route.code, input.departureLocal), null);
         await this.assertRouteSlot(tx, input.routeId, departure, null);
-        const trip = await tx.trip.create({
-          data: {
-            tenantId,
-            code,
-            routeId: input.routeId,
-            departureKind: 'ON_DEMAND',
-            vehicleId: unit.vehicleId,
-            layoutVersionId: unit.layoutVersionId,
-            minPassengers: input.minPassengers,
-            confirmationDeadline: deadline(input.confirmationDeadlineLocal, tz),
-            plannedDepartureAt: departure,
-            plannedArrivalAt: arrival,
-          },
-          select: { id: true },
+        const tripId = await this.insertTrip(tx, input.routeId, route, {
+          departureLocal: input.departureLocal,
+          departure,
+          arrival,
+          unit,
+          minPassengers: input.minPassengers,
+          confirmationDeadline: deadline(input.confirmationDeadlineLocal, tz),
+          schedule: null,
         });
-        await tx.tripStop.createMany({
-          data: route.stops.map((s, i) => ({
-            tenantId,
-            tripId: trip.id,
-            seq: s.seq,
-            locationId: s.locationId,
-            plannedArrivalAt: i === 0 ? null : addMinutes(departure, s.offsetMinutes),
-            plannedDepartureAt:
-              i === route.stops.length - 1 ? null : addMinutes(departure, s.offsetMinutes + s.dwellMinutes),
-            allowsBoarding: s.allowsBoarding,
-            allowsAlighting: s.allowsAlighting,
-          })),
-        });
-        if (unit.layoutVersionId) await this.materialize(tx, trip.id, unit.layoutVersionId);
-        return this.detail(tx, trip.id);
+        return this.detail(tx, tripId);
       });
     } catch (e) {
       throw dbConflict(e) ?? e;
@@ -357,7 +334,7 @@ export class TripsService {
    * Unidad y plano del viaje. Sin vehículo, ninguno. Con vehículo: no retirado, de la modalidad de la ruta y libre en
    * ese horario; el plano elegido (versión publicada, del mismo tipo de vehículo) o el asignado el día de la salida.
    */
-  private async resolveUnit(
+  async resolveUnit(
     tx: Tx,
     modality: 'LAND' | 'RIVER',
     input: Pick<CreateTripRequest, 'vehicleId' | 'layout'>,
@@ -412,6 +389,60 @@ export class TripsService {
       select: { layoutVersionId: true },
     });
     return { vehicleId: vehicle.id, layoutVersionId: assigned?.layoutVersionId ?? null };
+  }
+
+  /**
+   * Inserta el viaje con sus paradas copiadas de la ruta (horas desde la salida) y, si hay plano, su inventario. Lo usan
+   * el viaje puntual y la generación de las programaciones (7.3b): las comprobaciones van antes.
+   */
+  async insertTrip(
+    tx: Tx,
+    routeId: string,
+    route: LockedRoute,
+    t: {
+      departureLocal: string;
+      departure: Date;
+      arrival: Date;
+      unit: Unit;
+      minPassengers: number | null;
+      confirmationDeadline: Date | null;
+      schedule: { id: string; date: string } | null;
+    },
+  ): Promise<string> {
+    const tenantId = this.ctx.tenantId();
+    const code = await this.freeCode(tx, tripCode(route.code, t.departureLocal), null);
+    const trip = await tx.trip.create({
+      data: {
+        tenantId,
+        code,
+        routeId,
+        departureKind: t.schedule ? 'SCHEDULED' : 'ON_DEMAND',
+        scheduleId: t.schedule?.id ?? null,
+        departureDate: t.schedule ? new Date(`${t.schedule.date}T00:00:00Z`) : null,
+        vehicleId: t.unit.vehicleId,
+        layoutVersionId: t.unit.layoutVersionId,
+        minPassengers: t.minPassengers,
+        confirmationDeadline: t.confirmationDeadline,
+        plannedDepartureAt: t.departure,
+        plannedArrivalAt: t.arrival,
+      },
+      select: { id: true },
+    });
+    await tx.tripStop.createMany({
+      data: route.stops.map((s, i) => ({
+        tenantId,
+        tripId: trip.id,
+        seq: s.seq,
+        locationId: s.locationId,
+        plannedArrivalAt: i === 0 ? null : addMinutes(t.departure, s.offsetMinutes),
+        plannedDepartureAt:
+          i === route.stops.length - 1 ? null : addMinutes(t.departure, s.offsetMinutes + s.dwellMinutes),
+        allowsBoarding: s.allowsBoarding,
+        allowsAlighting: s.allowsAlighting,
+      })),
+    });
+    if (t.unit.layoutVersionId) await this.materialize(tx, trip.id, t.unit.layoutVersionId);
+    return trip.id;
   }
 
   /** Recursos y pools del viaje desde la versión del plano (deriveInventory), con los ids de sus elementos. */
@@ -469,12 +500,7 @@ export class TripsService {
   }
 
   /** Una ruta no sale dos veces a la misma hora (salvo viajes cancelados). */
-  private async assertRouteSlot(
-    tx: Tx,
-    routeId: string,
-    departure: Date,
-    tripId: string | null,
-  ): Promise<void> {
+  async assertRouteSlot(tx: Tx, routeId: string, departure: Date, tripId: string | null): Promise<void> {
     const clash = await tx.trip.findFirst({
       where: {
         routeId,
@@ -501,10 +527,7 @@ export class TripsService {
     for (let n = 2; ; n++) if (!taken.has(`${base}-${n}`)) return `${base}-${n}`;
   }
 
-  private async lockRoute(
-    tx: Tx,
-    id: string,
-  ): Promise<{ code: string; modality: 'LAND' | 'RIVER'; archived: boolean; stops: RouteStopRow[] }> {
+  async lockRoute(tx: Tx, id: string): Promise<LockedRoute> {
     if (!UUID.safeParse(id).success) throw invalid('La ruta no es de la empresa');
     const [locked] = await tx.$queryRaw<
       { id: string }[]
@@ -580,6 +603,14 @@ export class TripsService {
     return this.cls.get('tenant')?.timezone ?? DEFAULT_TIMEZONE;
   }
 }
+
+export type LockedRoute = {
+  code: string;
+  modality: 'LAND' | 'RIVER';
+  archived: boolean;
+  stops: RouteStopRow[];
+};
+export type Tx = Parameters<Parameters<TenantDbService['transaction']>[0]>[0];
 
 type RouteStopRow = {
   seq: number;

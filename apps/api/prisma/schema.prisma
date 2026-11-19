@@ -99,6 +99,7 @@ model Tenant {
   tripResources      TripResource[]
   tripPools          TripCapacityPool[]
   tripPoolSegments   TripPoolSegmentUsage[]
+  schedules          Schedule[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -1541,6 +1542,7 @@ model Vehicle {
   documents   VehicleDocument[]
   assignments VehicleLayoutAssignment[]
   trips       Trip[]
+  schedules   Schedule[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -1651,6 +1653,7 @@ model LayoutVersion {
   elements    LayoutElement[]
   assignments VehicleLayoutAssignment[]
   trips       Trip[]
+  schedules   Schedule[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, layoutId, version])
@@ -1814,10 +1817,11 @@ model Route {
   createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt  DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  stops  RouteStop[]
-  fares  Fare[]
-  trips  Trip[]
+  tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  stops     RouteStop[]
+  fares     Fare[]
+  trips     Trip[]
+  schedules Schedule[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -1946,6 +1950,9 @@ model Trip {
   code                 String
   routeId              String                 @map("route_id") @db.Uuid
   departureKind        DepartureKind          @default(ON_DEMAND) @map("departure_kind")
+  /// Programación que lo generó (SCHEDULED) y su fecha local de salida: UNIQUE (schedule_id, departure_date).
+  scheduleId           String?                @map("schedule_id") @db.Uuid
+  departureDate        DateTime?              @map("departure_date") @db.Date
   serviceMode          ServiceMode            @default(SHARED) @map("service_mode")
   vehicleId            String?                @map("vehicle_id") @db.Uuid
   layoutVersionId      String?                @map("layout_version_id") @db.Uuid
@@ -1968,16 +1975,19 @@ model Trip {
   route     Route              @relation(fields: [tenantId, routeId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
   vehicle   Vehicle?           @relation(fields: [tenantId, vehicleId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
   version   LayoutVersion?     @relation(fields: [tenantId, layoutVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  schedule  Schedule?          @relation(fields: [tenantId, scheduleId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
   stops     TripStop[]
   resources TripResource[]
   pools     TripCapacityPool[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
+  @@unique([scheduleId, departureDate])
   @@index([tenantId, plannedDepartureAt])
   @@index([tenantId, routeId])
   @@index([tenantId, vehicleId])
   @@index([tenantId, layoutVersionId])
+  @@index([tenantId, scheduleId])
   @@map("trips")
 }
 
@@ -2069,4 +2079,46 @@ model TripPoolSegmentUsage {
   @@id([poolId, segmentSeq])
   @@index([tenantId, poolId])
   @@map("trip_pool_segment_usage")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 7.3b · Programaciones (data-dictionary §5; F7-Q2)
+// ---------------------------------------------------------------------------------------------------------------
+
+/// Programación de salidas de una ruta: un subconjunto de RRULE (`FREQ=DAILY` o `FREQ=WEEKLY;BYDAY=…`), una hora local
+/// en la zona de la empresa, vigencia `[valid_from, valid_to)` y fechas excluidas. Genera viajes SCHEDULED hasta el
+/// horizonte (60 días), de forma idempotente: UNIQUE (schedule_id, departure_date) en `trips`. Editarla no cambia los
+/// viajes ya generados. Se archiva; no se borra.
+model Schedule {
+  id                     String      @id @default(uuid(7)) @db.Uuid
+  tenantId               String      @map("tenant_id") @db.Uuid
+  code                   String
+  routeId                String      @map("route_id") @db.Uuid
+  recurrence             String
+  departureLocalTime     String      @map("departure_local_time")
+  timezone               String
+  defaultVehicleId       String?     @map("default_vehicle_id") @db.Uuid
+  defaultLayoutVersionId String?     @map("default_layout_version_id") @db.Uuid
+  serviceMode            ServiceMode @default(SHARED) @map("service_mode")
+  validFrom              DateTime    @map("valid_from") @db.Date
+  validTo                DateTime?   @map("valid_to") @db.Date
+  excludedDates          DateTime[]  @default([]) @map("excluded_dates") @db.Date
+  generatedUntil         DateTime?   @map("generated_until") @db.Date
+  lastGeneratedAt        DateTime?   @map("last_generated_at") @db.Timestamptz(6)
+  archivedAt             DateTime?   @map("archived_at") @db.Timestamptz(6)
+  createdAt              DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  route   Route          @relation(fields: [tenantId, routeId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  vehicle Vehicle?       @relation(fields: [tenantId, defaultVehicleId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  version LayoutVersion? @relation(fields: [tenantId, defaultLayoutVersionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  trips   Trip[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@index([tenantId, routeId])
+  @@index([tenantId, defaultVehicleId])
+  @@index([tenantId, defaultLayoutVersionId])
+  @@map("schedules")
 }

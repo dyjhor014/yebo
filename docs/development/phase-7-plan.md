@@ -1,6 +1,6 @@
 # Fase 7 · Rutas, programación y viajes (plan)
 
-- **Estado:** ✅ Decisiones F7-Q1 a F7-Q8 **aprobadas** por el responsable el 2026-11-18, tal como se recomendaron; F7-Q9 (trazas y mapa con **teselas propias**) decidida por el responsable el mismo día. Etapa 7.1 autorizada el 2026-11-18 y aprobada el 2026-11-19 (migración aplicada a `yebo_dev`); 7.2 autorizada y aprobada el 2026-11-19 (migración aplicada a `yebo_dev`); 7.3 autorizada el 2026-11-19 y dividida en 7.3a (viajes) y 7.3b (programaciones); 7.3a aprobada el mismo día (migración aplicada a `yebo_dev`); 7.3b autorizada.
+- **Estado:** ✅ Decisiones F7-Q1 a F7-Q8 **aprobadas** por el responsable el 2026-11-18, tal como se recomendaron; F7-Q9 (trazas y mapa con **teselas propias**) decidida por el responsable el mismo día. Etapa 7.1 autorizada el 2026-11-18 y aprobada el 2026-11-19 (migración aplicada a `yebo_dev`); 7.2 autorizada y aprobada el 2026-11-19 (migración aplicada a `yebo_dev`); 7.3 autorizada el 2026-11-19 y dividida en 7.3a (viajes) y 7.3b (programaciones); 7.3a aprobada el mismo día (migración aplicada a `yebo_dev`); 7.3b aprobada el mismo día (migración aplicada a `yebo_dev`); 7.4 autorizada.
 - **Rama:** `fase-7/plan`, desde el cierre de la Fase 6 (`3fce518`).
 - **Criterio de aceptación** ([roadmap](roadmap.md)): «Ruta multiparada con capacidad correcta por tramo».
 
@@ -253,3 +253,52 @@ La 7.3 se divide, como la 4.3 y la 6.5: **7.3a**, viajes puntuales (`ON_DEMAND`)
 - **Mutaciones detectadas (17):** en el servicio, sin pools (3 fallas), sin control de modalidad (3), sin horario libre (3), sin plano asignado (4), un tramo menos al abrir (2), unidad en mantenimiento (2), paradas sin correr (2), volver sin borrar contadores (2), salida en el pasado (3), plano no publicado (3), ruta archivada (1) e inventario sin reemplazar (2); en la base, transiciones libres, paradas e inventario sin guardia, sin coherencia diferida y sin EXCLUDE de la unidad (1 cada una).
 - **Inventario actualizado:** matriz de privilegios (+10 de tabla y +18 de columna), registro de modelos y tablas de tenant, siembra de permisos de `access.int-spec` y limpieza de datos de las pruebas. La prueba de deriva de migraciones detectó el índice `NULLS NOT DISTINCT` (Prisma no lo representa): se reemplazó por dos índices parciales.
 - **Resultado (2026-11-19):** integración completa 454/454; unitarias: API 157, contratos 57, web 25 y panel de plataforma 18; lint, tipos y formato sin errores.
+
+## Etapa 7.3b · Programaciones y generación de viajes (aprobada el 2026-11-19)
+
+### Decisiones de implementación
+
+| Tema | Decisión |
+|---|---|
+| Módulo | `SchedulesService` y `SchedulesController` en el módulo `trips`; `ScheduleRunnerService` (todas las empresas) y el job `TripSchedulesProcessor` del worker. Contrato `schedules.ts` con las reglas puras (`toRRule`, `fromRRule`, `occursOn`) |
+| Recurrencia (F7-Q2) | Diaria o semanal por días. La API recibe `{ frequency, weekdays }` y guarda la RRULE normalizada (`FREQ=WEEKLY;BYDAY=MO,TH`, días en orden); la base solo admite ese subconjunto |
+| Hora y zona | Hora de salida `HH:mm` local. La zona de la empresa se copia a la programación al crearla y es la que se usa para generar |
+| Vigencia | `[desde, hasta)`, desde hoy en adelante (al editar, se puede conservar el inicio ya pasado). Hasta 100 fechas excluidas |
+| Unidad y plano por defecto | Se validan como en un viaje (modalidad, versión publicada, tipo de vehículo). Si la unidad está libre en ese horario, cada viaje generado la lleva con su plano (el elegido o el asignado ese día) y su inventario; si no, **el viaje se crea sin unidad** y el resultado dice por qué (p. ej., la lancha de 3 días y medio que no vuelve a tiempo para la salida siguiente) |
+| Generar | Fechas de la recurrencia en `[máx(hoy, desde), mín(hoy + 60, hasta))`, sin las excluidas. Se **omite** (con motivo) la fecha cuya hora ya pasó o en la que la ruta ya tiene otro viaje a esa hora. Cada viaje se crea por el mismo camino que un viaje puntual (`TripsService.insertTrip`). Bloquea la programación (`FOR UPDATE`) y la ruta (`FOR SHARE`) |
+| Idempotencia | UNIQUE (programación, fecha local): una segunda generación no crea nada. **Un viaje generado y cancelado no se regenera** |
+| Editar | Recurrencia, hora, vigencia, excluidas, unidad y plano. **Los viajes ya generados no cambian**: lo nuevo vale para las fechas que se generen después. Archivada: no se edita ni genera |
+| Job diario | Todos los días a las 00:30 de Lima (`upsertJobScheduler`, un único planificador). Recorre las empresas **operativas** (TRIAL, ACTIVE y PAST_DUE, las que pueden hacer NEW_COMMERCIAL) y sus programaciones activas de rutas activas; cada empresa corre con su tenant y su zona en el contexto, con `yebo_app` y RLS. Un error en una programación se registra y no detiene las demás |
+| Lista de empresas | `TenantDirectoryService` en el módulo `tenancy` (autorizado a usar `yebo_platform`, que solo lee `tenants`): no cambia ninguna frontera de seguridad |
+| Sin permiso nuevo | Las programaciones son de `trips.manage`. Crear, editar, archivar, restaurar y generar son NEW_COMMERCIAL |
+
+### API de la empresa
+
+| Ruta | Permiso y categoría |
+|---|---|
+| `GET /api/v1/schedules`, `GET /{id}` | `trips.manage`, READ |
+| `POST /api/v1/schedules`, `PUT /{id}`, `POST /{id}/archive`, `POST /{id}/restore`, `POST /{id}/generate` | `trips.manage`, NEW_COMMERCIAL |
+
+### Base de datos (migración `20261121010000_fase7_3b_schedules`, reversión en su cabecera)
+
+- **Tabla:** `schedules`, de tenant, con RLS forzado y FK compuestas a la ruta, el vehículo y la versión del plano.
+- **`trips`:** `schedule_id` y `departure_date`, con CHECK (un viaje SCHEDULED tiene las dos; uno ON_DEMAND, ninguna) y UNIQUE (schedule_id, departure_date). Sin privilegio de UPDATE: no cambian.
+- **CHECK de `schedules`:** código, RRULE del subconjunto, hora `HH:MM`, zona, solo `SHARED`, plano con unidad, fechas y hasta 100 excluidas.
+- **Privilegios:** `yebo_app` SELECT, INSERT y UPDATE de recurrencia, hora, unidad, plano, vigencia, excluidas, generación y archivado (sin código, ruta, zona ni modo; sin DELETE); `yebo_backoffice` SELECT.
+- **Requisito:** no hay viajes SCHEDULED previos (la 7.3a solo crea ON_DEMAND). Prisma no envuelve la migración en una transacción: si el CHECK fallara, quedaría a medias.
+- **`yebo_dev`:** migración aplicada el 2026-11-19, con copia previa.
+
+### Pruebas
+
+- **`schedules.int-spec` (7):**
+  - generar lunes y jueves a las 07:00 hasta 60 días sin la fecha excluida: lo esperado se calcula aparte (fechas, la de hoy si ya pasó la hora, y la lancha que toma una salida solo si ya volvió de la anterior). Comprueba los viajes SCHEDULED con su código, su hora local, su unidad, su plano y su inventario, y la idempotencia;
+  - reglas: vigencia, la ruta ocupada por un viaje puntual a esa hora (omitida con motivo), un generado y cancelado no vuelve, editar la hora no cambia lo generado (lista de viajes día a día), archivar y restaurar;
+  - validación: código repetido, vigencia pasada, recurrencias fuera del subconjunto, hora, fechas, unidad de otra modalidad, plano en borrador, ruta ajena, plano elegido, programación fuera del horizonte y la salida de hoy a las 00:00 (ya pasó);
+  - job del worker: una empresa suspendida no genera; al reactivarse, sí; una tercera ejecución no crea nada; el worker registra un único planificador `30 0 * * *` en `America/Lima`;
+  - reglas de la base: CHECK de viaje SCHEDULED y ON_DEMAND, UNIQUE por fecha (23505), CHECK de la RRULE, la hora y el modo, y privilegios (42501);
+  - aislamiento (404 y 400) y RLS;
+  - permisos: 403 sin `trips.manage`, 401 sin sesión, suspendida consulta pero no crea ni genera.
+- **Unitarias:** `schedules.spec` en contratos (3: RRULE normalizada y de vuelta, día de la semana, reglas del esquema).
+- **Mutaciones detectadas (12):** sin idempotencia (3 fallas), sin excluidas (2), sin recurrencia (1), sin choque de ruta (3), la unidad ocupada aborta la generación (2), hora pasada (1, con la salida de las 00:00), sin fin de vigencia (2), empresas no operativas en el job (1), horizonte más largo (2) y, en la base, sin el CHECK de viaje programado (1) y sin el de la RRULE (1).
+- **Inventario actualizado:** matriz de privilegios (+2 de tabla y +11 de columna), registro de modelos y de tablas de tenant (`Schedule`) y limpieza de datos de las pruebas.
+- **Resultado (2026-11-19):** integración completa 461/461; unitarias: API 157, contratos 60, web 25 y panel de plataforma 18; lint, tipos y formato sin errores. Una vez falló una unitaria de la API, solo al correr todo en paralelo con turbo, y no se repitió en siete corridas más; la sospechosa es la prueba de la 7.1 que exige leer un archivo hostil de 5 MB en menos de 3 s (sin confirmar).
