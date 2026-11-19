@@ -184,6 +184,16 @@ Fase 6.5 (registro mínimo, F6-Q2): `name`, `tax_id` (RUC de 11 dígitos; único
 ### vehicle_layout_assignments
 `vehicle_id`, `layout_version_id` (PUBLISHED), `valid_from`, `valid_to?`. Exclusión de solapamiento por vehículo. Fase 6.3: rango `[valid_from, valid_to)` de fechas (`EXCLUDE USING gist` con `daterange`); solo de una versión publicada (trigger); se termina con `valid_to`, no se borra.
 
+### 🌐 equipment_catalog / tenant_equipment_items / vehicle_equipment (Fase 7.E1)
+- **equipment_catalog 🌐:** `code` (PK), `name`, `modality?` (`LAND`, `RIVER` o NULL = general), `category enum SAFETY|EMERGENCY|OPERATION`, `tracks_expiry`, `tracks_serial`, `reference?` (referencia normativa **orientativa**), `sort_order`. Sugerencias de YEBO; no son obligatorias.
+- **tenant_equipment_items:** catálogo propio de la empresa (`name` único activo por empresa sin distinguir mayúsculas, `modality?`, `category`, `tracks_expiry`, `tracks_serial`, `description?`, `archived_at?`).
+- **vehicle_equipment:** lo declarado por una unidad, con sus propios datos: `vehicle_id`, `catalog_code?` o `tenant_item_id?` (origen, no ambos), `name`, `category`, `quantity` (1 a 100 000), `description?`, `status enum OPERATIVE|DETERIORATED|INOPERATIVE|UNVERIFIED`, `expires_on?`, `serial_number?`, `archived_at?` («eliminar» = archivar). Sin DELETE. Herramienta **opcional**: una unidad sin equipamiento es válida.
+
+### vehicle_inspections / vehicle_inspection_items / vehicle_inspection_evidence (Fase 7.E1)
+- **vehicle_inspections:** `vehicle_id`, `trip_id?` (de la misma unidad, trigger), `rectifies_id?` y `rectification_reason?` (rectificación de una completada de la misma unidad), `status enum DRAFT|COMPLETED|COMPLETED_WITH_OBSERVATIONS`, copia de la unidad (`vehicle_code`, `vehicle_name`, `vehicle_registration`), `general_notes?`, `started_at` y `started_by_kind/id`, `completed_at?` y `completed_by_kind/id?`, conteos (`conforming_count`, `observed_count`, `not_operational_count`, `not_available_count`) al completar. Completar exige todos los resultados y conteos exactos (trigger); completada no cambia ni se borra; un borrador se puede descartar.
+- **vehicle_inspection_items:** copia histórica de cada elemento (`vehicle_equipment_id?`, `seq`, `name`, `category`, `declared_quantity`, `declared_status`, `serial_number?`, `expires_on?`) y su `result enum CONFORMING|OBSERVED|NOT_OPERATIONAL|NOT_AVAILABLE`, `found_quantity?`, `observation?`. No cambia al editar el equipamiento de la unidad.
+- **vehicle_inspection_evidence:** foto de un elemento o general (`item_id?`, `file_asset_id` único), solo en borrador. `file_assets.kind = INSPECTION_EVIDENCE`: privada, JPEG recodificado sin metadatos, hasta 5 MB.
+
 ### vehicle_owners / settlement_schemes / vehicle_ownership_agreements (módulo `OWNER_SETTLEMENTS`, D6 — por validar)
 - **vehicle_owners:** `party_kind enum PERSON|COMPANY`, `name`, `doc_type`, `doc_number enc` + `bidx`, `contact jsonb enc`, `bank_info jsonb enc?`.
 - **settlement_schemes:** `code` (`PERCENT_OF_REVENUE`, `FIXED_PER_TRIP`, `HYBRID`…), `params_schema jsonb`, `is_active`. Nuevos esquemas = datos + validador de código.

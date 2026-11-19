@@ -90,6 +90,22 @@ export const PERMISSION_CATALOG = {
     sensitive: false,
     description: 'Bloquear y liberar asientos y cupos de un viaje',
   },
+  // Fase 7.E1: equipamiento de las unidades e inspecciones preoperacionales (opcionales; EQ-Q9).
+  'equipment.manage': {
+    module: 'FLEET',
+    sensitive: false,
+    description: 'Declarar el equipamiento de las unidades y su catálogo propio',
+  },
+  'inspections.perform': {
+    module: 'FLEET',
+    sensitive: false,
+    description: 'Realizar, completar y rectificar inspecciones preoperacionales',
+  },
+  'inspections.read': {
+    module: 'FLEET',
+    sensitive: false,
+    description: 'Ver el equipamiento y las inspecciones de las unidades',
+  },
 } as const satisfies Record<string, { module: string; sensitive: boolean; description: string }>;
 
 export type PermissionCode = keyof typeof PERMISSION_CATALOG;

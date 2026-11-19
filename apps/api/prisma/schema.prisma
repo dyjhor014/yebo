@@ -103,6 +103,11 @@ model Tenant {
   resourceAllocations ResourceAllocation[]
   poolAllocations     PoolAllocation[]
   tripBlocks          TripBlock[]
+  tenantEquipment     TenantEquipmentItem[]
+  vehicleEquipment    VehicleEquipment[]
+  inspections         VehicleInspection[]
+  inspectionItems     VehicleInspectionItem[]
+  inspectionEvidence  VehicleInspectionEvidence[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -1275,6 +1280,8 @@ enum FileAssetKind {
   SITE_HERO
   /// Fase 6.2: documento de un vehículo (PDF, JPEG o PNG), siempre PRIVATE.
   VEHICLE_DOCUMENT
+  /// Fase 7.E1: foto de evidencia de una inspección (JPEG recodificado, sin metadatos), siempre PRIVATE.
+  INSPECTION_EVIDENCE
 
   @@map("file_asset_kind")
 }
@@ -1315,8 +1322,9 @@ model FileAsset {
   uploadedById   String                @map("uploaded_by_id") @db.Uuid
   createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  vehicleDocuments VehicleDocument[]
+  tenant             Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  vehicleDocuments   VehicleDocument[]
+  inspectionEvidence VehicleInspectionEvidence?
 
   @@unique([tenantId, id])
   @@index([tenantId, kind])
@@ -1546,6 +1554,8 @@ model Vehicle {
   assignments VehicleLayoutAssignment[]
   trips       Trip[]
   schedules   Schedule[]
+  equipment   VehicleEquipment[]
+  inspections VehicleInspection[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -1984,6 +1994,7 @@ model Trip {
   pools       TripCapacityPool[]
   allocations ResourceAllocation[]
   blocks      TripBlock[]
+  inspections VehicleInspection[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -2236,4 +2247,205 @@ model TripBlock {
   @@unique([tenantId, id])
   @@index([tenantId, tripId])
   @@map("trip_blocks")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 7.E1 · Equipamiento de unidades e inspecciones preoperacionales (plan-equipamiento-inspecciones; EQ-Q1–Q10)
+// Herramienta OPCIONAL de control interno: ningún flujo de viajes, venta ni salida depende de estas tablas.
+// ---------------------------------------------------------------------------------------------------------------
+
+enum EquipmentCategory {
+  SAFETY
+  EMERGENCY
+  OPERATION
+
+  @@map("equipment_category")
+}
+
+enum EquipmentStatus {
+  OPERATIVE
+  DETERIORATED
+  INOPERATIVE
+  UNVERIFIED
+
+  @@map("equipment_status")
+}
+
+enum InspectionStatus {
+  DRAFT
+  COMPLETED
+  COMPLETED_WITH_OBSERVATIONS
+
+  @@map("inspection_status")
+}
+
+enum InspectionResult {
+  CONFORMING
+  OBSERVED
+  NOT_OPERATIONAL
+  NOT_AVAILABLE
+
+  @@map("inspection_result")
+}
+
+/// 🌐 Catálogo global de YEBO: sugerencias de equipamiento (terrestre, fluvial o general si `modality` es NULL), con
+/// una referencia normativa orientativa. No es una lista de obligatorios.
+model EquipmentCatalogItem {
+  code         String            @id
+  name         String
+  modality     ServiceModality?
+  category     EquipmentCategory
+  tracksExpiry Boolean           @map("tracks_expiry")
+  tracksSerial Boolean           @map("tracks_serial")
+  reference    String?
+  sortOrder    Int               @map("sort_order")
+
+  vehicleEquipment VehicleEquipment[]
+
+  @@map("equipment_catalog")
+}
+
+/// Elemento personalizado del catálogo de la empresa. Se archiva, no se borra.
+model TenantEquipmentItem {
+  id           String            @id @default(uuid(7)) @db.Uuid
+  tenantId     String            @map("tenant_id") @db.Uuid
+  name         String
+  modality     ServiceModality?
+  category     EquipmentCategory
+  tracksExpiry Boolean           @map("tracks_expiry")
+  tracksSerial Boolean           @map("tracks_serial")
+  description  String?
+  archivedAt   DateTime?         @map("archived_at") @db.Timestamptz(6)
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant           Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  vehicleEquipment VehicleEquipment[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId])
+  @@map("tenant_equipment_items")
+}
+
+/// Equipamiento declarado por una unidad: sus propios datos (nombre, cantidad, estado, vencimiento, serie), aunque venga
+/// de un elemento del catálogo. «Eliminar» = archivar: las inspecciones anteriores conservan su copia.
+model VehicleEquipment {
+  id           String            @id @default(uuid(7)) @db.Uuid
+  tenantId     String            @map("tenant_id") @db.Uuid
+  vehicleId    String            @map("vehicle_id") @db.Uuid
+  catalogCode  String?           @map("catalog_code")
+  tenantItemId String?           @map("tenant_item_id") @db.Uuid
+  name         String
+  category     EquipmentCategory
+  quantity     Int
+  description  String?
+  status       EquipmentStatus
+  expiresOn    DateTime?         @map("expires_on") @db.Date
+  serialNumber String?           @map("serial_number")
+  archivedAt   DateTime?         @map("archived_at") @db.Timestamptz(6)
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant          Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  vehicle         Vehicle                 @relation(fields: [tenantId, vehicleId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  catalog         EquipmentCatalogItem?   @relation(fields: [catalogCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  tenantItem      TenantEquipmentItem?    @relation(fields: [tenantId, tenantItemId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  inspectionItems VehicleInspectionItem[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, vehicleId])
+  @@index([tenantId, tenantItemId])
+  @@map("vehicle_equipment")
+}
+
+/// Inspección preoperacional de una unidad, con viaje opcional. Borrador editable; completada, inmutable (trigger), con
+/// la copia de la unidad y de cada elemento verificado. Una corrección es otra inspección que rectifica a la original.
+model VehicleInspection {
+  id                  String                 @id @default(uuid(7)) @db.Uuid
+  tenantId            String                 @map("tenant_id") @db.Uuid
+  vehicleId           String                 @map("vehicle_id") @db.Uuid
+  tripId              String?                @map("trip_id") @db.Uuid
+  rectifiesId         String?                @map("rectifies_id") @db.Uuid
+  rectificationReason String?                @map("rectification_reason")
+  status              InspectionStatus       @default(DRAFT)
+  vehicleCode         String                 @map("vehicle_code")
+  vehicleName         String                 @map("vehicle_name")
+  vehicleRegistration String                 @map("vehicle_registration")
+  generalNotes        String?                @map("general_notes")
+  startedAt           DateTime               @default(now()) @map("started_at") @db.Timestamptz(6)
+  startedByKind       MembershipChangeActor  @map("started_by_kind")
+  startedById         String                 @map("started_by_id") @db.Uuid
+  completedAt         DateTime?              @map("completed_at") @db.Timestamptz(6)
+  completedByKind     MembershipChangeActor? @map("completed_by_kind")
+  completedById       String?                @map("completed_by_id") @db.Uuid
+  conformingCount     Int?                   @map("conforming_count")
+  observedCount       Int?                   @map("observed_count")
+  notOperationalCount Int?                   @map("not_operational_count")
+  notAvailableCount   Int?                   @map("not_available_count")
+  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant      Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  vehicle     Vehicle                     @relation(fields: [tenantId, vehicleId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  trip        Trip?                       @relation(fields: [tenantId, tripId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  rectifies   VehicleInspection?          @relation("InspectionRectification", fields: [tenantId, rectifiesId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  rectifiedBy VehicleInspection[]         @relation("InspectionRectification")
+  items       VehicleInspectionItem[]
+  evidence    VehicleInspectionEvidence[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, vehicleId, startedAt])
+  @@index([tenantId, tripId])
+  @@index([tenantId, rectifiesId])
+  @@map("vehicle_inspections")
+}
+
+/// Copia histórica de un elemento verificado y su resultado. No cambia aunque cambie el equipamiento de la unidad.
+model VehicleInspectionItem {
+  id                 String            @id @default(uuid(7)) @db.Uuid
+  tenantId           String            @map("tenant_id") @db.Uuid
+  inspectionId       String            @map("inspection_id") @db.Uuid
+  vehicleEquipmentId String?           @map("vehicle_equipment_id") @db.Uuid
+  seq                Int
+  name               String
+  category           EquipmentCategory
+  declaredQuantity   Int               @map("declared_quantity")
+  declaredStatus     EquipmentStatus   @map("declared_status")
+  serialNumber       String?           @map("serial_number")
+  expiresOn          DateTime?         @map("expires_on") @db.Date
+  result             InspectionResult?
+  foundQuantity      Int?              @map("found_quantity")
+  observation        String?
+
+  tenant     Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  inspection VehicleInspection           @relation(fields: [tenantId, inspectionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  equipment  VehicleEquipment?           @relation(fields: [tenantId, vehicleEquipmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  evidence   VehicleInspectionEvidence[]
+
+  @@unique([tenantId, id])
+  @@unique([inspectionId, seq])
+  @@index([tenantId, inspectionId])
+  @@index([tenantId, vehicleEquipmentId])
+  @@map("vehicle_inspection_items")
+}
+
+/// Foto de evidencia (archivo privado) de un elemento o de la inspección en general. Solo con la inspección en borrador.
+model VehicleInspectionEvidence {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  inspectionId String   @map("inspection_id") @db.Uuid
+  itemId       String?  @map("item_id") @db.Uuid
+  fileAssetId  String   @map("file_asset_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant     Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  inspection VehicleInspection      @relation(fields: [tenantId, inspectionId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  item       VehicleInspectionItem? @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  file       FileAsset              @relation(fields: [tenantId, fileAssetId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, fileAssetId])
+  @@index([tenantId, inspectionId])
+  @@index([tenantId, itemId])
+  @@map("vehicle_inspection_evidence")
 }
