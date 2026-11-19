@@ -6,6 +6,7 @@ import { FleetModule } from './modules/fleet/fleet.module';
 import { LocationsModule } from './modules/locations/locations.module';
 import { AgenciesModule } from './modules/agencies/agencies.module';
 import { RoutesModule } from './modules/routes/routes.module';
+import { FaresModule } from './modules/fares/fares.module';
 import { SiteModule } from './modules/site/site.module';
 import { SupportModule } from './modules/support/support.module';
 import { HealthModule } from './modules/health/health.module';
@@ -29,6 +30,7 @@ import { TenancyModule } from './modules/tenancy/tenancy.module';
     AgenciesModule,
     FleetModule,
     RoutesModule,
+    FaresModule,
   ],
 })
 export class AppModule {}

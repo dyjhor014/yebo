@@ -49,6 +49,7 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set<string>([
   'VehicleLayoutAssignment',
   'Route',
   'RouteStop',
+  'Fare',
 ]);
 
 /**
@@ -102,6 +103,7 @@ export const TENANT_SCOPED_TABLES: readonly string[] = [
   'vehicle_layout_assignments',
   'routes',
   'route_stops',
+  'fares',
 ];
 
 /**

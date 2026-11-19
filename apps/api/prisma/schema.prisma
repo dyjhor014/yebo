@@ -93,6 +93,7 @@ model Tenant {
   vehicleLayouts     VehicleLayout[]
   routes             Route[]
   routeStops         RouteStop[]
+  fares              Fare[]
 
   @@unique([taxIdType, taxId])
   @@map("tenants")
@@ -1348,6 +1349,8 @@ model Location {
   kind       LocationKind @relation(fields: [kindCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
   branches   Branch[]
   routeStops RouteStop[]
+  faresFrom  Fare[]      @relation("FareOrigin")
+  faresTo    Fare[]      @relation("FareDestination")
 
   @@unique([tenantId, id])
   @@unique([tenantId, name])
@@ -1804,6 +1807,7 @@ model Route {
 
   tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   stops  RouteStop[]
+  fares  Fare[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, code])
@@ -1836,4 +1840,48 @@ model RouteStop {
   @@index([tenantId, routeId])
   @@index([tenantId, locationId])
   @@map("route_stops")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fase 7.2 · Tarifas (data-dictionary §5; F7-Q1; ADR-010)
+// ---------------------------------------------------------------------------------------------------------------
+
+enum FareStatus {
+  ACTIVE
+  CANCELLED
+
+  @@map("fare_status")
+}
+
+/// Precio de un par origen → destino de una ruta, por servicio y clase de precio, en soles, con vigencia
+/// `[valid_from, valid_to)` en fechas de la empresa. El monto no cambia: un cambio de precio es otra tarifa, y la
+/// anterior termina ese día. Sin solapamientos para la misma clave entre tarifas activas (EXCLUDE con btree_gist).
+/// Sin precio por canal (`channel_kind`): llega con la venta (Fase 8).
+model Fare {
+  id                    String           @id @default(uuid(7)) @db.Uuid
+  tenantId              String           @map("tenant_id") @db.Uuid
+  routeId               String           @map("route_id") @db.Uuid
+  originLocationId      String           @map("origin_location_id") @db.Uuid
+  destinationLocationId String           @map("destination_location_id") @db.Uuid
+  service               TransportService
+  priceClassCode        String           @map("price_class_code")
+  currency              String           @default("PEN")
+  amount                Decimal          @db.Decimal(7, 2)
+  validFrom             DateTime         @map("valid_from") @db.Date
+  validTo               DateTime?        @map("valid_to") @db.Date
+  status                FareStatus       @default(ACTIVE)
+  cancelledAt           DateTime?        @map("cancelled_at") @db.Timestamptz(6)
+  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  route       Route    @relation(fields: [tenantId, routeId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  origin      Location @relation("FareOrigin", fields: [tenantId, originLocationId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  destination Location @relation("FareDestination", fields: [tenantId, destinationLocationId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, routeId, originLocationId, destinationLocationId, priceClassCode, validFrom])
+  @@index([tenantId, originLocationId])
+  @@index([tenantId, destinationLocationId])
+  @@map("fares")
 }

@@ -76,6 +76,8 @@ export const PERMISSION_CATALOG = {
     sensitive: false,
     description: 'Gestionar las rutas, sus paradas y sus trazas',
   },
+  // Fase 7.2: tarifas por par, servicio y clase de precio, con vigencia (F7-Q1).
+  'fares.manage': { module: 'FARES', sensitive: false, description: 'Gestionar las tarifas de las rutas' },
 } as const satisfies Record<string, { module: string; sensitive: boolean; description: string }>;
 
 export type PermissionCode = keyof typeof PERMISSION_CATALOG;

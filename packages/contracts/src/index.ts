@@ -16,3 +16,4 @@ export * from './layouts';
 export * from './layout-templates';
 export * from './agencies';
 export * from './routes';
+export * from './fares';

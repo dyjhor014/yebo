@@ -1,6 +1,6 @@
 # Fase 7 · Rutas, programación y viajes (plan)
 
-- **Estado:** ✅ Decisiones F7-Q1 a F7-Q8 **aprobadas** por el responsable el 2026-11-18, tal como se recomendaron; F7-Q9 (trazas y mapa con **teselas propias**) decidida por el responsable el mismo día. Etapa 7.1 autorizada el 2026-11-18 y aprobada el 2026-11-19 (migración aplicada a `yebo_dev`); 7.2 autorizada el 2026-11-19.
+- **Estado:** ✅ Decisiones F7-Q1 a F7-Q8 **aprobadas** por el responsable el 2026-11-18, tal como se recomendaron; F7-Q9 (trazas y mapa con **teselas propias**) decidida por el responsable el mismo día. Etapa 7.1 autorizada el 2026-11-18 y aprobada el 2026-11-19 (migración aplicada a `yebo_dev`); 7.2 autorizada y aprobada el 2026-11-19 (migración aplicada a `yebo_dev`); 7.3 autorizada el 2026-11-19.
 - **Rama:** `fase-7/plan`, desde el cierre de la Fase 6 (`3fce518`).
 - **Criterio de aceptación** ([roadmap](roadmap.md)): «Ruta multiparada con capacidad correcta por tramo».
 
@@ -74,7 +74,7 @@
 - Lógica de mínimo de pasajeros y viajes privados (F7-Q6, Fase 8).
 - Incidencias del viaje (F7-Q8).
 - Descuentos, promociones y precios por canal (Fase 8).
-- Encomiendas y carga en viaje (fases 9 y 10).
+- Encomiendas y carga en viaje (fases 9 y 10), con su tarifario: por peso, por volumen o por ambos, según decida cada empresa.
 - Publicación de horarios en el portal público (Fase 13); el mapa público de rutas llega con ella.
 - Cálculo automático de trazas por carretera y búsquedas geográficas con PostGIS (F7-Q9).
 
@@ -137,3 +137,58 @@ No bloquean esta fase: tildes del ubigeo, limpieza de archivos subidos sin usar,
 - **Mutaciones detectadas:** tolerancia de los extremos (1 falla), archivar una ubicación con rutas activas (1), km sin la traza (1), editar una ruta archivada (1), paradas en ubicaciones archivadas (2), aviso fluvial (1) y, en la base, quitar la regla de paradas seguidas repetidas del trigger (1).
 - **Inventario actualizado:** matriz de privilegios (+4 de tabla y +3 de columna), registro de modelos y de tablas de tenant (`Route`, `RouteStop`; lo exigen las pruebas de RLS de la 3.1 y de rutas de migración), siembra de permisos de `access.int-spec` y limpieza de datos de las pruebas.
 - **Resultado (2026-11-18):** integración completa 439/439; unitarias: API 154, contratos 45, web 25 y panel de plataforma 18; lint, tipos y formato sin errores.
+
+## Etapa 7.2 · Tarifas (aprobada el 2026-11-19)
+
+### Decisiones de implementación
+
+| Tema | Decisión |
+|---|---|
+| Módulo | `fares` (capa L1): `FaresService` y `FaresController`. Contrato en `@yebo/contracts` (`fares.ts`): esquemas y reglas puras (`routePairs`, `layoutPriceClasses`, `farePhase`) que la pantalla de tarifas (7.5) reutilizará |
+| Clave | Ruta + par **de ubicaciones** (origen → destino) + servicio + clase de precio. El par es de la ruta si se sube en el origen y se baja **después** en el destino; en una ida y vuelta (A → B → A) no hay A → A |
+| Servicios | `PASSENGER` y `VEHICLE_TRANSPORT`, con tarifa por unidad, si la empresa los opera en la modalidad de la ruta. Encomiendas y carga tienen su propio tarifario en las fases 9 y 10: **por peso, por volumen o por ambos, según decida cada empresa** (indicación del responsable, 2026-11-19): 400 por el esquema y CHECK en la base |
+| Clase de precio | Texto en mayúsculas, como en los planos (`GENERAL`, `VIP`, `CAMA`, `CAMAROTE`, `HAMACA`, `CABINA`, `TOLVA`, `VEHICULO`…); se normaliza a mayúsculas |
+| Monto | Soles (`PEN`), mayor que 0, hasta S/ 99 999,99, con hasta 2 decimales (`numeric(7,2)`). Viaja como texto (`"45.50"`), sin coma flotante |
+| Vigencia | Fechas del calendario de la empresa, `[desde, hasta)`: el día `validTo` ya no vale, como las asignaciones de planos de la 6.3. Sin `validTo`, sin fin. **Nada empieza ni termina antes de hoy**: el pasado no cambia |
+| No se edita (ADR-010) | El monto, la clave y el inicio no cambian (privilegios por columna). **Cambio de precio:** al crear una tarifa, la activa de la misma clave que empezó antes y sigue vigente ese día **termina ese día** (la respuesta la devuelve en `ended`). Cualquier otro solapamiento (una tarifa que empieza ese día o después) es un 409 que nombra la tarifa, y no cambia nada. Una tarifa con fin (promoción) cabe antes de una programada; al terminar, no se restaura la anterior: se crea la siguiente |
+| Terminar y anular | `end` mueve el fin (no antes de hoy ni del inicio; una tarifa terminada no se reabre). `cancel` anula una tarifa que **aún no empieza** (una que ya empezó se termina). Anulada es definitiva (trigger) |
+| Creación por lotes | Hasta 500 tarifas por envío, todas o ninguna, con un servicio y una vigencia comunes: lo que llenará la matriz de la pantalla |
+| Paradas editadas | Las tarifas de pares que dejan de existir se conservan con `onRoute: false`; la consulta de precio y la matriz no las usan. Si el par vuelve, valen otra vez |
+| Matriz | Pares × clases en una fecha, con lo que falta. Clases: las de los **planos asignados** hoy o más adelante a vehículos no retirados de la modalidad de la ruta (recursos vendibles y zonas por cantidad de personas; el equipaje y la bodega no) y las que tienen tarifa vigente en la fecha |
+| Concurrencia | Se crea con la ruta bloqueada `FOR SHARE` (sus paradas no cambian a mitad). Terminar o anular bloquea la tarifa. La exclusión de la base es la garantía final (409) |
+| Sin `channel_kind` | El precio por canal llega con la venta (Fase 8; F7-Q1). Se agregará entonces a la clave y a la exclusión, en vez de tener ahora una columna siempre nula |
+
+### API de la empresa
+
+| Ruta | Permiso y categoría |
+|---|---|
+| `GET /api/v1/routes/{routeId}/fares` (historia), `GET …/fares/matrix?service&date`, `GET …/fares/quote?origin&destination&priceClass&service&date` | `fares.manage`, READ |
+| `POST /api/v1/routes/{routeId}/fares`, `POST /api/v1/fares/{id}/end`, `POST /api/v1/fares/{id}/cancel` | `fares.manage`, CONFIGURE |
+
+### Base de datos (migración `20261119010000_fase7_2_fares`, reversión en su cabecera)
+
+- **Tabla:** `fares`, de tenant, con RLS forzado y FK compuestas `(tenant_id, …)` a la ruta y a las dos ubicaciones.
+- **CHECK:** servicio, clase, moneda `PEN`, monto > 0, origen ≠ destino, fin posterior al inicio, y `cancelled_at` solo si está anulada.
+- **EXCLUDE** `fares_no_overlap`: tarifas activas de la misma clave sin días en común (btree_gist y `daterange`).
+- **Trigger** `fares_guard`: una tarifa anulada no cambia (`P0001`).
+- **Privilegios:**
+  - `yebo_app`: SELECT, INSERT y UPDATE solo de `valid_to`, `status`, `cancelled_at` y `updated_at` (sin DELETE);
+  - `yebo_backoffice`: SELECT.
+- **Permiso `fares.manage`:** módulo `FARES`, en la plantilla Administrador y en los roles Administrador existentes (sube su `permissions_version`).
+- **`yebo_dev`:** migración aplicada el 2026-11-19, con copia previa.
+
+### Pruebas
+
+- **`fares.int-spec` (8):**
+  - crear y consultar: montos normalizados, precio de A a B en una fecha (sin fecha, hoy), 404 con el mensaje exacto antes de la vigencia, 400 en sentido contrario, lista en el orden de los pares;
+  - cambio de precio: la anterior termina el día que empieza la nueva; un solapamiento con una programada es 409 y no cambia nada; una promoción con fin cabe antes de la programada (precios día a día);
+  - validación: inicio en el pasado, par en sentido contrario, ubicación que no es parada, servicio que la empresa no opera, CARGO, monto 0, fechas al revés, repetidos, lista vacía, ruta inexistente y ruta archivada (409); nada se guarda;
+  - terminar y anular: fin en el pasado o antes del inicio (400), alargar hasta solaparse (409), no anular una que empezó, anulada definitiva, una terminada no se reabre;
+  - matriz: la lancha de la 6.6 asignada da CAMA, CAMAROTE y GENERAL; 6 pares × 3 clases con 14 faltantes (contados a mano); una clase con tarifa que no está en los planos (VIP); al quitar Contamana de la ruta sus tarifas quedan fuera y vuelven con ella;
+  - reglas de la base: EXCLUDE (23P01; contiguas, de otra clase o anuladas sí), cada CHECK por su nombre (23514), monto fuera de rango (22003), monto, inicio, clase y ruta fijos y sin DELETE (42501), trigger de anulada (P0001);
+  - aislamiento: 404 entre empresas y RLS con el contexto de otra empresa y sin contexto;
+  - permisos (403 sin `fares.manage`, 401 sin sesión) y empresa suspendida (consulta y cotiza, pero no configura).
+- **Unitarias:** `fares.spec` en contratos (12: pares con subir y bajar e ida y vuelta, clases de los planos, normalización y reglas del esquema, estado de una tarifa).
+- **Mutaciones detectadas (12):** sin cambio de precio (5 fallas), inicio en el pasado (2), par fuera de la ruta (2), anular una que ya empezó (3), cotizar fuera de la ruta (2), reabrir una terminada (2), ruta archivada (1), servicio no operado (2), clases sin los planos (1) y, en la base, el trigger de anulada (1), la exclusión sin el filtro de activas (3) y sin exclusión (2).
+- **Inventario actualizado:** matriz de privilegios (+2 de tabla y +4 de columna), registro de modelos y de tablas de tenant (`Fare`), siembra de permisos de `access.int-spec` y limpieza de datos de las pruebas.
+- **Resultado (2026-11-19):** integración completa 447/447; unitarias: API 154, contratos 57, web 25 y panel de plataforma 18; lint y tipos sin errores; formato sin cambios en lo versionado.
