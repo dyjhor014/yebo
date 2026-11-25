@@ -9,6 +9,9 @@ import { LayoutDetail } from '@/components/layouts/layout-detail';
 import { LayoutsView } from '@/components/layouts/layouts-view';
 import { LocationsView } from '@/components/locations/locations-view';
 import { RoutesView } from '@/components/routes/routes-view';
+import { SchedulesView } from '@/components/trips/schedules-view';
+import { TripDetail } from '@/components/trips/trip-detail';
+import { TripsView } from '@/components/trips/trips-view';
 import { usePanel } from './panel-session';
 
 /** Sin el permiso de la sección: lo explica (la API también lo rechaza). */
@@ -91,6 +94,34 @@ export function FaresSection() {
   return (
     <Guard permission="fares.manage">
       <FaresView />
+    </Guard>
+  );
+}
+
+/** Viajes (Fase 7.5b): agenda semanal por día. */
+export function TripsSection() {
+  return (
+    <Guard permission="trips.manage">
+      <TripsView />
+    </Guard>
+  );
+}
+
+/** Ficha del viaje (Fase 7.5b): itinerario, disponibilidad por tramo, bloqueos y control preoperacional. */
+export function TripDetailSection() {
+  const { id } = useParams<{ id: string }>();
+  return (
+    <Guard permission="trips.manage">
+      <TripDetail id={id} />
+    </Guard>
+  );
+}
+
+/** Programaciones (Fase 7.5b): generan los viajes hasta 60 días. */
+export function SchedulesSection() {
+  return (
+    <Guard permission="trips.manage">
+      <SchedulesView />
     </Guard>
   );
 }

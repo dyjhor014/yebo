@@ -382,7 +382,7 @@ La 7.3 se divide, como la 4.3 y la 6.5: **7.3a**, viajes puntuales (`ON_DEMAND`)
 
 | Tema | Decisión |
 |---|---|
-| Carril | Dos grupos, como la maqueta: **Operación** (Rutas y Tarifas; Viajes y Programaciones llegan con la 7.5b) y **Configuración** (Mi sitio, Ubicaciones, Agencias, Flota y Planos). El orden de `SECTIONS` sigue decidiendo la sección de inicio del panel (Mi sitio), así que no cambia el aterrizaje |
+| Carril | Dos grupos, como la maqueta: **Operación** (Rutas y Tarifas; Viajes y Programaciones llegaron con la 7.5b) y **Configuración** (Mi sitio, Ubicaciones, Agencias, Flota y Planos). El orden de `SECTIONS` sigue decidiendo la sección de inicio del panel (Mi sitio), así que no cambia el aterrizaje |
 | Rutas | Lista y editor de paradas. Los tiempos se escriben como se dicen («12 h», «1 d 12 h», «90 min», «12:30»; `lib/durations.ts`, con pruebas) y se muestran como «día 3 · +2 d 12 h». Sube y baja (fijos en el origen y el destino), traza del tramo importada de un **GPX o KML** (la API la lee y la devuelve; se guarda con la ruta), quitar traza, km por la traza o en línea recta (o «sin km» si una parada no está en el mapa). Mover con ↑ y ↓ o **Alt + flechas** en la fila, con aviso por lector de pantalla. Errores del contrato junto a cada fila. Aviso fluvial que no impide guardar. Archivada = solo lectura. Esquema de tramos con km (el mapa, en la 7.6) |
 | Tarifas | Ruta, servicio (los que la empresa opera en la modalidad) y fecha. Matriz tramo × clase con **«Sin precio»** y «cambia a S/ … el …» cuando hay un precio programado. **Agregar clase** a mano (p. ej., GENERAL) cuando aún no hay planos que la tengan. Celda: historial (vigente, programada, terminada, anulada), anular una programada, **cambiar el fin** (diálogo) y poner o cambiar el precio (la vigente termina ese día). **Poner precios** en lote: los que faltan, todos o ninguno |
 | Formato | Montos y km con la configuración regional `es-PE` (punto decimal: «S/ 120.00», «126.57 km»), como Flota; el campo de precio acepta punto o coma |
@@ -399,3 +399,28 @@ La 7.3 se divide, como la 4.3 y la 6.5: **7.3a**, viajes puntuales (`ON_DEMAND`)
 - **Regresión:** E2E de Flota, Agencias, criterio de la Fase 6, oscuro y móvil (37) en verde con el carril nuevo.
 - **Detector de Impeccable sobre las capturas renderizadas:** se corrigió «tarjeta dentro de tarjeta» (las tablas ya no llevan borde propio dentro de su tarjeta). Lo que queda (fuente de la marca, animación de carga del acceso y rellenos de bordes) también aparece en las capturas de Agencias, ya aprobada.
 - **Resultado (2026-11-19):** lint, tipos y formato sin errores; unitarias: web 28, API 157, contratos 63 y plataforma 18.
+
+### Etapa 7.5b · Programaciones, Viajes y ficha del viaje en el panel: aprobada (2026-11-25)
+
+| Tema | Decisión |
+|---|---|
+| Carril | **Viajes** y **Programaciones** se suman a «Operación», antes de Rutas, con el permiso `trips.manage`. Mi sitio sigue siendo la sección de inicio |
+| Programaciones | Lista y editor: código y ruta (fijos después de crear), «Todos los días» o días sueltos (L a D, con nombre completo para el lector de pantalla), hora, vigencia «desde / hasta» (ese día ya no sale), **fechas sin salida** y unidad y plano por defecto. Archivar y restaurar (archivada = solo lectura). **Generar viajes** muestra el resultado: creados, creados sin unidad (con su motivo y su fecha), ya existían y omitidos. Avisa que editar no cambia los viajes ya generados |
+| Viajes | Agenda semanal por día (sin días vacíos), semana anterior y siguiente, filtros por ruta y estado. Cada fila: hora, origen → destino, código, programado o puntual, llegada, unidad («Sin unidad» destacada) y estado. **Nuevo viaje** puntual: ruta, fecha, hora y unidad opcional; al crearlo abre su ficha |
+| Ficha del viaje | Itinerario con horas locales de cada parada; unidad y plano con lugares y cupos; **Editar** (fecha, hora, unidad y plano) y **Abrir a la venta** si está planificado; **Volver a planificado** si está a la venta (con aviso si hay bloqueos activos); **Cancelar viaje** con motivo, definitivo |
+| Disponibilidad | Selector de tramo (botones con `aria-pressed`); lugares por zona con «libre / ocupado» también en texto para el lector de pantalla y en **orden natural** (1A antes que 10A); tabla de **cupos por tramo** en una región desplazable con nombre |
+| Bloqueos | Solo con el viaje a la venta y el permiso `trips.block`. Motivo, desde y hasta (paradas), lugares por código y cantidades en cupos. Si algo ya está ocupado, el error de la API dice qué y entre qué paradas, y no se bloquea nada. Liberar desde la fila, con nombre completo del bloqueo |
+| Control preoperacional | Solo lectura y **opcional**: última inspección de la unidad (resultado, fecha, quién, conteos, si fue para este viaje) con el aviso de control interno. No bloquea la venta ni la salida. Se muestra solo con `inspections.read` |
+| Permisos | Sin `fleet.manage` o `layouts.manage`, el selector de unidad lo explica y el viaje queda sin unidad; sin `trips.block` no aparece la tarjeta de bloqueos |
+
+**Pruebas:**
+- **E2E `12-viajes` (proyecto `viajes`, 6 pruebas)** con una empresa terrestre, una ruta de tres paradas y un bus con plano:
+  - programación diaria con el bus y una fecha excluida; «Generar viajes» crea 58 y una segunda vez no crea ninguno;
+  - agenda de la semana; viaje puntual sin unidad (la ficha lo dice), cancelado con motivo;
+  - ficha: abrir a la venta, elegir tramo **con el teclado**, bloqueo de dos asientos y de un cupo (aforo 38 de 40), el mismo asiento otra vez da «Ocupado entre Pucallpa y Tingo María: 1B», volver a planificado rechazado por la ocupación, liberar y volver;
+  - modo oscuro y 390 px sin desplazamiento horizontal;
+  - axe (WCAG 2.1 AA) en cada pantalla y diálogo.
+- **Prueba de mutación:** sin el orden natural, la aserción «el primer lugar es 1A» falla («10A libre»); con él, pasa.
+- **Regresión:** suite E2E completa, 61 pruebas en verde (3 saltos esperados: capturas sin `YEBO_E2E_CAPTURAS` y una prueba solo de pantallas estrechas).
+- **Detector de Impeccable sobre las capturas renderizadas:** corrigió el orden de los lugares (se vio en la captura). Lo que queda (fuente de la marca, animación de carga y rellenos de tarjetas y casilleros) es el mismo patrón que en las capturas de la 7.5a, ya aprobada: el detector no lee el relleno en la captura estática (las tarjetas tienen 20 px y los casilleros se ven holgados en la imagen).
+- **Resultado (2026-11-19):** lint, tipos y formato sin errores; unitarias del web en verde.

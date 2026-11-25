@@ -2,6 +2,16 @@
 
 import {
   AgenciesResponseSchema,
+  GenerateScheduleResponseSchema,
+  ScheduleSchema,
+  SchedulesResponseSchema,
+  TripAvailabilitySchema,
+  TripBlockSchema,
+  TripBlocksResponseSchema,
+  TripInspectionsResponseSchema,
+  TripInventorySchema,
+  TripSchema,
+  TripsResponseSchema,
   CreateFaresResponseSchema,
   FareMatrixSchema,
   FareSchema,
@@ -29,6 +39,12 @@ import {
   VehicleTypesResponseSchema,
   VehiclesResponseSchema,
   type CreateAgencyRequest,
+  type CreateBlockRequest,
+  type CreateScheduleRequest,
+  type CreateTripRequest,
+  type TripStatus,
+  type UpdateScheduleRequest,
+  type UpdateTripRequest,
   type CreateFaresRequest,
   type CreateRouteRequest,
   type FareService,
@@ -207,4 +223,39 @@ export const faresApi = {
     send(CreateFaresResponseSchema, `/api/v1/routes/${routeId}/fares`, input),
   end: (id: string, validTo: string) => send(FareSchema, `/api/v1/fares/${id}/end`, { validTo }),
   cancel: (id: string) => send(FareSchema, `/api/v1/fares/${id}/cancel`),
+};
+
+// Programaciones (7.3b)
+export const schedulesApi = {
+  list: () => get(SchedulesResponseSchema, '/api/v1/schedules'),
+  create: (input: CreateScheduleRequest) => send(ScheduleSchema, '/api/v1/schedules', input),
+  update: (id: string, input: UpdateScheduleRequest) =>
+    send(ScheduleSchema, `/api/v1/schedules/${id}`, input, 'PUT'),
+  archive: (id: string) => send(ScheduleSchema, `/api/v1/schedules/${id}/archive`),
+  restore: (id: string) => send(ScheduleSchema, `/api/v1/schedules/${id}/restore`),
+  generate: (id: string) => send(GenerateScheduleResponseSchema, `/api/v1/schedules/${id}/generate`),
+};
+
+// Viajes (7.3a), inventario y bloqueos (7.4) y control preoperacional (7.E1)
+export const tripsApi = {
+  list: (q: { from: string; to: string; routeId?: string; status?: TripStatus }) => {
+    const params = new URLSearchParams({ from: q.from, to: q.to });
+    if (q.routeId) params.set('routeId', q.routeId);
+    if (q.status) params.set('status', q.status);
+    return get(TripsResponseSchema, `/api/v1/trips?${params.toString()}`);
+  },
+  get: (id: string) => get(TripSchema, `/api/v1/trips/${id}`),
+  inventory: (id: string) => get(TripInventorySchema, `/api/v1/trips/${id}/inventory`),
+  create: (input: CreateTripRequest) => send(TripSchema, '/api/v1/trips', input),
+  update: (id: string, input: UpdateTripRequest) => send(TripSchema, `/api/v1/trips/${id}`, input, 'PUT'),
+  open: (id: string) => send(TripSchema, `/api/v1/trips/${id}/open`),
+  backToPlanned: (id: string) => send(TripSchema, `/api/v1/trips/${id}/back-to-planned`),
+  cancel: (id: string, reason: string) => send(TripSchema, `/api/v1/trips/${id}/cancel`, { reason }),
+  availability: (id: string) => get(TripAvailabilitySchema, `/api/v1/trips/${id}/availability`),
+  blocks: (id: string) => get(TripBlocksResponseSchema, `/api/v1/trips/${id}/blocks`),
+  block: (id: string, input: CreateBlockRequest) =>
+    send(TripBlockSchema, `/api/v1/trips/${id}/blocks`, input),
+  release: (id: string, blockId: string) =>
+    send(TripBlockSchema, `/api/v1/trips/${id}/blocks/${blockId}/release`),
+  inspections: (id: string) => get(TripInspectionsResponseSchema, `/api/v1/trips/${id}/inspections`),
 };

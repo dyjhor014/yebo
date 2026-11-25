@@ -12,7 +12,7 @@ type Section = {
   permission: string;
   /** Módulo que la empresa necesita además del permiso (sin él, la sección no aparece). */
   module?: string;
-  icon: 'site' | 'pin' | 'agency' | 'fleet' | 'plan' | 'route' | 'fare';
+  icon: 'site' | 'pin' | 'agency' | 'fleet' | 'plan' | 'route' | 'fare' | 'trip' | 'schedule';
   /** Grupo del carril (maqueta 7.5): la operación diaria y la configuración de la empresa. */
   group: 'ops' | 'config';
 };
@@ -46,6 +46,14 @@ export const SECTIONS: readonly Section[] = [
   },
   { href: '/panel/flota', label: 'Flota', permission: 'fleet.manage', icon: 'fleet', group: 'config' },
   { href: '/panel/planos', label: 'Planos', permission: 'layouts.manage', icon: 'plan', group: 'config' },
+  { href: '/panel/viajes', label: 'Viajes', permission: 'trips.manage', icon: 'trip', group: 'ops' },
+  {
+    href: '/panel/programaciones',
+    label: 'Programaciones',
+    permission: 'trips.manage',
+    icon: 'schedule',
+    group: 'ops',
+  },
   { href: '/panel/rutas', label: 'Rutas', permission: 'routes.manage', icon: 'route', group: 'ops' },
   { href: '/panel/tarifas', label: 'Tarifas', permission: 'fares.manage', icon: 'fare', group: 'ops' },
 ];
@@ -96,6 +104,18 @@ const ICON_PATHS: Record<Section['icon'], ReactNode> = {
       <circle cx="6" cy="18" r="2" />
       <circle cx="18" cy="6" r="2" />
       <path d="M8 18h5a3 3 0 0 0 0-6h-2a3 3 0 0 1 0-6h5" />
+    </>
+  ),
+  trip: (
+    <>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+    </>
+  ),
+  schedule: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
     </>
   ),
   fare: (

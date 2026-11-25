@@ -94,6 +94,12 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
     },
     {
+      name: 'viajes',
+      testMatch: /12-.*\.spec\.ts/,
+      dependencies: ['recorrido'],
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
+    {
       name: 'capturas',
       testMatch: /0[45]-.*\.spec\.ts/,
       dependencies: ['recorrido'],
