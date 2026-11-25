@@ -3,6 +3,7 @@
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { AgenciesView } from '@/components/agencies/agencies-view';
+import { InspectionView } from '@/components/equipment/inspection-view';
 import { FaresView } from '@/components/fares/fares-view';
 import { FleetView } from '@/components/fleet/fleet-view';
 import { LayoutDetail } from '@/components/layouts/layout-detail';
@@ -122,6 +123,16 @@ export function SchedulesSection() {
   return (
     <Guard permission="trips.manage">
       <SchedulesView />
+    </Guard>
+  );
+}
+
+/** Inspección preoperacional (Fase 7.5c): opcional, pensada para el celular. */
+export function InspectionSection() {
+  const { id } = useParams<{ id: string }>();
+  return (
+    <Guard permission="inspections.read">
+      <InspectionView id={id} />
     </Guard>
   );
 }

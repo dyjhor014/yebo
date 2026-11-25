@@ -11,6 +11,7 @@ import { ADMIN_URL, API_ENV, E2E, ROOT } from './support/env';
  *  - flota: Ubicaciones, Flota, Planos y el editor del plano (Fase 6.4d).
  *  - agencias: Agencias externas detrás del módulo AGENCIES y su canal de venta (Fase 6.5b).
  *  - criterio: el criterio de la Fase 6 con el editor: lancha y bus en blanco, publicados y asignados (6.6).
+ *  - equipamiento: equipamiento de la unidad en Flota e inspección en el celular (7.5c).
  */
 export default defineConfig({
   testDir: './specs',
@@ -96,6 +97,12 @@ export default defineConfig({
     {
       name: 'viajes',
       testMatch: /12-.*\.spec\.ts/,
+      dependencies: ['recorrido'],
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
+    {
+      name: 'equipamiento',
+      testMatch: /13-.*\.spec\.ts/,
       dependencies: ['recorrido'],
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
     },

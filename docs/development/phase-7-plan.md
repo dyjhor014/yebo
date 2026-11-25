@@ -424,3 +424,28 @@ La 7.3 se divide, como la 4.3 y la 6.5: **7.3a**, viajes puntuales (`ON_DEMAND`)
 - **Regresión:** suite E2E completa, 61 pruebas en verde (3 saltos esperados: capturas sin `YEBO_E2E_CAPTURAS` y una prueba solo de pantallas estrechas).
 - **Detector de Impeccable sobre las capturas renderizadas:** corrigió el orden de los lugares (se vio en la captura). Lo que queda (fuente de la marca, animación de carga y rellenos de tarjetas y casilleros) es el mismo patrón que en las capturas de la 7.5a, ya aprobada: el detector no lee el relleno en la captura estática (las tarjetas tienen 20 px y los casilleros se ven holgados en la imagen).
 - **Resultado (2026-11-19):** lint, tipos y formato sin errores; unitarias del web en verde.
+
+### Etapa 7.5c · Equipamiento de la unidad e inspección en el celular (la 7.E2): aprobada (2026-11-25)
+
+| Tema | Decisión |
+|---|---|
+| Dónde | En **Flota**, en la ficha de cada unidad, dos tarjetas nuevas después de Documentos y Plano: «Equipamiento de la unidad» e «Inspecciones». Se muestran con `inspections.read`; sin él, Flota queda como antes. La inspección tiene su propia página, `/panel/inspecciones/{id}`, y al salir vuelve a la unidad (`/panel/flota?vehiculo=…`) |
+| Equipamiento | Lista que se apila en el celular: nombre, categoría, cantidad, serie y fecha de vencimiento, con el estado (Operativo, Deteriorado, No operativo o Sin verificar) y el vencimiento («Vence el…», «Venció el…») en texto y con color. **Agregar desde el catálogo**: solo lo de la modalidad de la unidad más lo general, con la referencia orientativa como descripción accesible de cada casilla, cantidad por elemento y lo ya declarado deshabilitado. Lo agregado queda «sin verificar». **Elemento propio** con la opción de guardarlo en el catálogo de la empresa. **Catálogo de la empresa**: archivar y restaurar. Editar (estado, cantidad, vencimiento, serie y descripción) y Eliminar (archiva), con `equipment.manage` |
+| Inspecciones | Historial: fecha, responsable, viaje o «Sin viaje», resultado, conteos y si rectifica o fue rectificada; «Ver» o «Continuar» si es un borrador. **Nueva inspección** con `inspections.perform`: viaje opcional (los de la unidad entre ayer y los próximos 7 días; sin `trips.manage`, sin viaje). Deshabilitada sin equipamiento, y lo explica |
+| Inspección en el celular | Cabecera navy con progreso (`progressbar`). Por elemento, los **cuatro resultados** como botones grandes (`aria-pressed`, 48 px) con color, ícono y texto: conforme (verde), observado (ámbar), no operativo (rojo) y no disponible (gris). Tocar el marcado lo desmarca. Cantidad encontrada con el **resultado sugerido** (`suggestedResult`: «Sugerido: Observado (se encontró menos de lo declarado). Tú decides.»), observación y fotos (de la cámara; hasta 5 por elemento y 10 generales). Cada cambio se guarda al momento y **en cola**, para que un guardado lento no pise al siguiente; salir no pierde nada |
+| Completar | Barra fija al pie, deshabilitada con «Falta marcar N elementos». Pide confirmar un **resumen** (conteos por resultado y lo observado con su nota). Completada: solo lectura con conteos, cantidades, observaciones y fotos. **Rectificar** pide el motivo y abre la rectificación; la original queda visible y enlazada a la corrección. **Descartar borrador** pide confirmar |
+| Ficha del viaje | El control preoperacional enlaza la última inspección («Ver») y suma **Inspeccionar para este viaje** con `inspections.perform` y la unidad asignada. Sigue sin bloquear la venta ni la salida |
+| Colores | Nuevo rol `--state-success` (verde «conforme»), en claro y en oscuro, junto a los de aviso y error (`semantic.css`, `theme.css`). Contraste medido: 7,13:1 sobre blanco y 5,68:1 sobre su superficie en claro; 9,3:1 sobre navy y 6,7:1 sobre slate en oscuro. Marcados, los cuatro resultados llevan texto claro sobre el relleno (de 5,4:1 a 7,4:1) |
+
+**Pruebas:**
+
+- **E2E `13-equipamiento` (proyecto `equipamiento`, 6 pruebas)** con una empresa fluvial, una lancha con plano y un viaje:
+  - Flota sin equipamiento: la inspección se deshabilita y lo explica;
+  - catálogo: solo lo fluvial y lo general (sin «Neumático de repuesto»), la referencia orientativa como descripción accesible, tres elementos con su cantidad, un elemento propio guardado en el catálogo de la empresa (luego «ya declarado»), editar con vencimiento cercano («Vence el…») y eliminar;
+  - inspección para el viaje en 390 px: «0 de 3», 38 de 40 chalecos con «Sugerido: Observado», observación y foto, un resultado **con el teclado** (Mayús + Tab y la barra espaciadora), resumen con lo observado, completar y solo lectura con los conteos;
+  - rectificación con motivo, enlazada en los dos sentidos; historial en Flota («Rectifica la del…» y «Rectificada»); control preoperacional de la ficha con la última inspección, hecha para el viaje (la rectificación lo hereda);
+  - modo oscuro y 390 px, con un borrador nuevo descartado: axe y nada se desplaza en horizontal;
+  - axe (WCAG 2.1 AA) en cada pantalla y en cada diálogo.
+- **Prueba de mutación:** con «Completar inspección» siempre habilitado, la prueba falla en `toBeDisabled` («enabled»); revertida, pasa.
+- **Regresión:** suite E2E completa, 67 pruebas en verde (3 saltos esperados).
+- **Resultado (2026-11-25):** lint, tipos y formato sin errores; unitarias del web 28 en verde. Sin cambios en la API ni en la base.

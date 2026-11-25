@@ -1,6 +1,17 @@
 'use client';
 
 import {
+  EquipmentCatalogResponseSchema,
+  EQUIPMENT_LIMITS,
+  InspectionDetailSchema,
+  InspectionsResponseSchema,
+  VehicleEquipmentResponseSchema,
+  VehicleEquipmentSchema,
+  type AddVehicleEquipmentRequest,
+  type CreateInspectionRequest,
+  type TenantEquipmentItemRequest,
+  type UpdateInspectionItemRequest,
+  type UpdateVehicleEquipmentRequest,
   AgenciesResponseSchema,
   GenerateScheduleResponseSchema,
   ScheduleSchema,
@@ -80,7 +91,7 @@ async function send<T>(
   schema: Schema<T>,
   path: string,
   body?: unknown,
-  method: 'POST' | 'PUT' = 'POST',
+  method: 'POST' | 'PUT' | 'DELETE' = 'POST',
 ): Promise<T> {
   const res = await apiFetch(path, {
     method,
@@ -259,3 +270,62 @@ export const tripsApi = {
     send(TripBlockSchema, `/api/v1/trips/${id}/blocks/${blockId}/release`),
   inspections: (id: string) => get(TripInspectionsResponseSchema, `/api/v1/trips/${id}/inspections`),
 };
+
+// Equipamiento de unidades e inspecciones preoperacionales (7.E1): opcionales, nunca condicionan viajes ni ventas
+export const equipmentApi = {
+  catalog: () => get(EquipmentCatalogResponseSchema, '/api/v1/equipment-catalog'),
+  createItem: (input: TenantEquipmentItemRequest) =>
+    send(EquipmentCatalogResponseSchema, '/api/v1/equipment-catalog', input),
+  updateItem: (id: string, input: TenantEquipmentItemRequest) =>
+    send(EquipmentCatalogResponseSchema, `/api/v1/equipment-catalog/${id}`, input, 'PUT'),
+  archiveItem: (id: string) =>
+    send(EquipmentCatalogResponseSchema, `/api/v1/equipment-catalog/${id}/archive`),
+  restoreItem: (id: string) =>
+    send(EquipmentCatalogResponseSchema, `/api/v1/equipment-catalog/${id}/restore`),
+  forVehicle: (vehicleId: string) =>
+    get(VehicleEquipmentResponseSchema, `/api/v1/vehicles/${vehicleId}/equipment`),
+  add: (vehicleId: string, input: AddVehicleEquipmentRequest) =>
+    send(VehicleEquipmentResponseSchema, `/api/v1/vehicles/${vehicleId}/equipment`, input),
+  update: (vehicleId: string, id: string, input: UpdateVehicleEquipmentRequest) =>
+    send(VehicleEquipmentSchema, `/api/v1/vehicles/${vehicleId}/equipment/${id}`, input, 'PUT'),
+  remove: (vehicleId: string, id: string) =>
+    send(VehicleEquipmentSchema, `/api/v1/vehicles/${vehicleId}/equipment/${id}/remove`),
+};
+
+export const inspectionsApi = {
+  forVehicle: (vehicleId: string) =>
+    get(InspectionsResponseSchema, `/api/v1/vehicles/${vehicleId}/inspections`),
+  get: (id: string) => get(InspectionDetailSchema, `/api/v1/inspections/${id}`),
+  create: (input: CreateInspectionRequest) => send(InspectionDetailSchema, '/api/v1/inspections', input),
+  updateNotes: (id: string, generalNotes: string | null) =>
+    send(InspectionDetailSchema, `/api/v1/inspections/${id}`, { generalNotes }, 'PUT'),
+  updateItem: (id: string, itemId: string, input: UpdateInspectionItemRequest) =>
+    send(InspectionDetailSchema, `/api/v1/inspections/${id}/items/${itemId}`, input, 'PUT'),
+  complete: (id: string) => send(InspectionDetailSchema, `/api/v1/inspections/${id}/complete`),
+  discard: async (id: string) => {
+    await apiFetch(`/api/v1/inspections/${id}`, { method: 'DELETE', csrf: readCsrfCookie() });
+  },
+  removePhoto: (id: string, photoId: string) =>
+    send(InspectionDetailSchema, `/api/v1/inspections/${id}/photos/${photoId}`, undefined, 'DELETE'),
+  photoUrl: (id: string, photoId: string) => `/api/v1/inspections/${id}/photos/${photoId}`,
+};
+
+export const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+
+/** Sube una foto de evidencia (de un elemento o general); la API la recodifica a JPEG sin metadatos. */
+export async function uploadInspectionPhoto(id: string, itemId: string | null, file: File) {
+  if (!(PHOTO_TYPES as readonly string[]).includes(file.type)) {
+    throw new AuthRequestError(400, 'VALIDATION_FAILED', 'Usa una foto JPEG, PNG o WebP.');
+  }
+  if (file.size > EQUIPMENT_LIMITS.photoMaxBytes) {
+    throw new AuthRequestError(413, 'PAYLOAD_TOO_LARGE', 'La foto pesa más de 5 MB.');
+  }
+  const q = itemId ? `?itemId=${itemId}` : '';
+  const res = await apiFetch(`/api/v1/inspections/${id}/photos${q}`, {
+    method: 'POST',
+    csrf: readCsrfCookie(),
+    body: file,
+    headers: { 'Content-Type': file.type },
+  });
+  return InspectionDetailSchema.parse(await res.json());
+}

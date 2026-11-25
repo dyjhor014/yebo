@@ -1,6 +1,6 @@
 # Equipamiento de unidades e inspecciones preoperacionales (plan)
 
-- **Estado:** ✅ Propuesto y **aprobado** por el responsable el 2026-11-19, con EQ-Q1 a EQ-Q10 tal como se recomendaron. La etapa 7.E1 (modelo y API) está aprobada; la 7.E2 (pantallas) va junto con la 7.5.
+- **Estado:** ✅ Propuesto y **aprobado** por el responsable el 2026-11-19, con EQ-Q1 a EQ-Q10 tal como se recomendaron. La etapa 7.E1 (modelo y API) está aprobada; la 7.E2 (pantallas) se hizo como la 7.5c, aprobada el 2026-11-25.
 - **Rama prevista:** `fase-7/plan`, después del commit de la 7.4 (hoy en revisión), para no mezclar diffs.
 - **Principio rector:** es una **herramienta opcional de control interno**. Ninguna regla de viajes, venta, asignación ni salida depende de ella. No sustituye ni equivale a una certificación o autorización del MTC ni de la DICAPI.
 

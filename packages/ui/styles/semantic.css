@@ -49,6 +49,9 @@
   /* Aviso (Fase 4.7, aprobado el 2026-11-10): pago vencido, riesgos. 6,64:1 sobre su superficie. */
   --state-warning: #7a4b00;
   --state-warning-surface: #fff1d6;
+  /* Conforme (Fase 7.5c, maqueta 7.5 aprobada): resultado de inspección. 7,13:1 sobre blanco; 5,68:1 sobre su superficie. */
+  --state-success: #166534;
+  --state-success-surface: color-mix(in srgb, #166534 10%, var(--yebo-cloud-white));
 
   /* Ritmo */
   --radius-control: var(--yebo-radius-sm);
@@ -92,6 +95,8 @@
     --state-danger-surface: color-mix(in srgb, #ff8b7e 14%, var(--yebo-midnight-navy)); /* texto 6,0:1 */
     --state-warning: #f5c46b; /* 10,4:1 sobre navy */
     --state-warning-surface: color-mix(in srgb, #f5c46b 14%, var(--yebo-midnight-navy));
+    --state-success: #6fd39d; /* 9,3:1 sobre navy; 6,7:1 sobre slate */
+    --state-success-surface: color-mix(in srgb, #6fd39d 14%, var(--yebo-midnight-navy)); /* texto 7,0:1 */
   }
 }
 
@@ -129,4 +134,6 @@
   --state-danger-surface: color-mix(in srgb, #ff8b7e 14%, var(--yebo-midnight-navy)); /* texto 6,0:1 */
   --state-warning: #f5c46b; /* 10,4:1 sobre navy */
   --state-warning-surface: color-mix(in srgb, #f5c46b 14%, var(--yebo-midnight-navy));
+  --state-success: #6fd39d; /* 9,3:1 sobre navy; 6,7:1 sobre slate */
+  --state-success-surface: color-mix(in srgb, #6fd39d 14%, var(--yebo-midnight-navy)); /* texto 7,0:1 */
 }

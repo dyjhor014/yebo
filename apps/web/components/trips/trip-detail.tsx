@@ -11,6 +11,7 @@ import {
 import { Dialog } from '@yebo/ui/dialog';
 import { Alert, Input, PRIMARY, SECONDARY, ScrollRegion, Select, Textarea, Warning } from '@yebo/ui/form';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import {
   CARD,
@@ -25,8 +26,9 @@ import {
   fmtNumber,
   useLoad,
 } from '@/components/panel/kit';
+import { isoToLocal } from '@/components/equipment/equipment-kit';
 import { usePanel } from '@/components/panel/panel-session';
-import { tripsApi } from '@/lib/panel-api';
+import { inspectionsApi, tripsApi } from '@/lib/panel-api';
 import { errorMessage } from '@/lib/site-api';
 import { TRIP_STATUS, UnitFields, fmtLocal, loadFleet, type LayoutRef } from './trip-kit';
 
@@ -71,6 +73,7 @@ type Data = {
  */
 export function TripDetail({ id }: { id: string }) {
   const { can } = usePanel();
+  const router = useRouter();
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -278,10 +281,17 @@ export function TripDetail({ id }: { id: string }) {
                         no operativos o no disponibles
                       </span>
                     )}
-                    <span className="text-[0.8125rem] text-ink-muted">
+                    <span className="flex flex-wrap items-center justify-between gap-2 text-[0.8125rem] text-ink-muted">
                       {inspections.latestForVehicle.trip?.id === trip.id
                         ? 'Hecha para este viaje'
                         : 'Sin relación con este viaje'}
+                      <Link
+                        href={`/panel/inspecciones/${inspections.latestForVehicle.id}`}
+                        className={ROW_ACTION}
+                        aria-label={`Ver la última inspección de ${inspections.latestForVehicle.vehicleCode}`}
+                      >
+                        Ver
+                      </Link>
                     </span>
                   </div>
                 ) : (
@@ -290,6 +300,34 @@ export function TripDetail({ id }: { id: string }) {
                       ? 'La unidad aún no tiene inspecciones en el sistema.'
                       : 'Asigna una unidad para ver sus inspecciones.'}
                   </p>
+                )}
+                {trip.vehicle && trip.status !== 'CANCELLED' && can('inspections.perform') && (
+                  <div>
+                    <button
+                      type="button"
+                      className={SECONDARY}
+                      disabled={busy}
+                      onClick={() => {
+                        const vehicleId = trip.vehicle!.id;
+                        setBusy(true);
+                        setActionError(null);
+                        inspectionsApi
+                          .create({
+                            vehicleId,
+                            tripId: trip.id,
+                            rectifiesId: null,
+                            rectificationReason: null,
+                          })
+                          .then((i) => router.push(`/panel/inspecciones/${i.id}`))
+                          .catch((e: unknown) => {
+                            setActionError(errorMessage(e));
+                            setBusy(false);
+                          });
+                      }}
+                    >
+                      Inspeccionar para este viaje
+                    </button>
+                  </div>
                 )}
                 <p className="text-[0.8125rem] leading-[1.125rem] text-ink-muted">
                   No bloquea la venta ni la salida. {INSPECTION_DISCLAIMER}
@@ -515,24 +553,6 @@ export function TripDetail({ id }: { id: string }) {
       )}
     </>
   );
-}
-
-/** Instante ISO → «AAAA-MM-DDTHH:mm» en Lima (las fechas de inspección llegan como instantes). */
-function isoToLocal(iso: string): string {
-  const p = Object.fromEntries(
-    new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Lima',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
-    })
-      .formatToParts(new Date(iso))
-      .map((x) => [x.type, x.value]),
-  );
-  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
 }
 
 function CancelDialog({
