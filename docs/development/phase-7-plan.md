@@ -449,3 +449,57 @@ La 7.3 se divide, como la 4.3 y la 6.5: **7.3a**, viajes puntuales (`ON_DEMAND`)
 - **Prueba de mutación:** con «Completar inspección» siempre habilitado, la prueba falla en `toBeDisabled` («enabled»); revertida, pasa.
 - **Regresión:** suite E2E completa, 67 pruebas en verde (3 saltos esperados).
 - **Resultado (2026-11-25):** lint, tipos y formato sin errores; unitarias del web 28 en verde. Sin cambios en la API ni en la base.
+
+## Etapa 7.6 · Mapa (F7-Q9): decisiones aprobadas (2026-11-25)
+
+Autorizada el 2026-11-25 («aprobada la 7.5c, haz el commit, continúa»). F7-Q9 decidió **qué** se hace (MapLibre con teselas propias del Perú en el mismo origen, sin servicios externos, y la lista de paradas como control principal). Faltan decisiones de **cómo**, y la etapa instala herramientas de terceros, así que primero va esta propuesta. Después, la maqueta con revisión de Impeccable y, por último, el código. **M-Q1 a M-Q7 aprobadas por el responsable el 2026-11-25, tal como se recomendaron.**
+
+### Dependencias de terceros (inspeccionadas el 2026-11-25, sin instalar)
+
+| Pieza | Versión propuesta | Licencia | Qué hace | Revisión |
+|---|---|---|---|---|
+| `maplibre-gl` | 6.16.0 (25 oct. 2026; la última, 6.19.0, es del 17 nov.) | BSD-3-Clause | Dibuja el mapa (WebGL) en el navegador | Sin `postinstall` (su `prepare` solo corre al instalar desde git). 19 dependencias, todas de dibujo de mapas (`pbf`, `earcut`, `@mapbox/vector-tile`, `@maplibre/*`…). Pesa unos 30 MB sin comprimir en `node_modules`; al navegador solo llega con `import()` dinámico en las pantallas con mapa |
+| `pmtiles` | 4.5.0 (10 ago. 2026) | BSD-3-Clause | Lee el archivo PMTiles por rangos (protocolo `pmtiles://` de MapLibre) | Sin scripts de instalación. Una dependencia: `fflate` |
+| `@protomaps/basemaps` | 5.7.2 (10 mar. 2026) | BSD-3-Clause | Estilo del mapa base (claro y oscuro; etiquetas en español) | Sin scripts de instalación ni dependencias |
+| `pmtiles` (CLI en Go) | v1.31.2 | BSD-3-Clause | Solo en el script: recorta el Perú de un build fijo de Protomaps | Binario de GitHub Releases, verificado con su SHA-256 en el script. No va en git ni en las apps |
+| Fuentes y sprites | Commit fijo de `protomaps/basemaps-assets` | Fuentes OFL / CC0 | Letras y símbolos del mapa, servidos por el mismo origen | Se descargan con el script; no van en git |
+| Datos | Build de Protomaps con fecha fija (hoy hay 61 builds publicados; los de 2023 siguen disponibles) | **ODbL** (OpenStreetMap) | Teselas vectoriales del planeta, de las que se recorta el Perú | Atribución «© OpenStreetMap» visible en todo mapa |
+
+Ninguna se agrega a `onlyBuiltDependencies`: no necesitan scripts de instalación.
+
+### Decisiones (aprobadas)
+
+| Id | Pregunta | Recomendación | Alternativas |
+|---|---|---|---|
+| **M-Q1** | ¿De dónde salen las teselas? | **Recorte del Perú** (caja del país, zoom 0–15) de un **build fijo** de Protomaps con `pmtiles extract`: rápido, sin servidores propios para generarlas y reproducible por fecha. El script guarda la fecha y el SHA-256 del resultado. El tamaño se mide al generarlo (se estiman cientos de MB) | Generarlas con Planetiler desde el extracto de Geofabrik (Java, horas de cálculo y varios GB de RAM; independiente de Protomaps) |
+| **M-Q2** | ¿Cómo se sirven? | **En producción, Nginx** (`location /mapa/`, rangos nativos y caché larga). **En desarrollo y en el E2E, una ruta de Next** (`/mapa/[...archivo]`) que lee de `YEBO_MAP_DIR` con soporte de `Range`, porque ahí no hay Nginx. El mismo camino en los dos casos: el código del mapa no cambia | Subirlo al almacenamiento de archivos (Garage/S3) y servirlo por la API con rangos (otra copia y otra vía para algo estático) |
+| **M-Q3** | ¿Qué extracto usa el E2E? | Uno **pequeño** (alrededor de Pucallpa, zoom 0–11, se espera menos de 2 MB), **versionado** en `tests/e2e/fixtures/` con su archivo de atribución ODbL, para que el E2E no dependa de la red. El del Perú sigue fuera de git | Descargarlo en el `global-setup` del E2E (depende de la red en cada corrida) |
+| **M-Q4** | Estilo | El de `@protomaps/basemaps` en sus variantes **clara y oscura**, según el tema del panel, con las etiquetas en español. Encima, las capas de YEBO: paradas numeradas, trazas en navy (claro) o teal (oscuro) y la línea recta punteada, como la maqueta 7.5 | Un estilo propio desde cero (más trabajo y mantenimiento) |
+| **M-Q5** | Ubicaciones | En el diálogo de la ubicación, un mapa para **elegir la posición con un clic o arrastrando el marcador**. Latitud y longitud siguen como campos (son el control accesible y se actualizan con el mapa) | Solo ver la posición, sin elegirla en el mapa |
+| **M-Q6** | Rutas | En el editor, un mapa con las paradas y los tramos (traza o línea recta). **Dibujar o corregir la traza de un tramo**: los extremos fijos en sus paradas, clic para agregar un punto, arrastrar para moverlo, «Quitar el último punto», «Terminar» y «Cancelar», con los km al momento. La importación GPX o KML se mantiene. Todo lo demás sigue en la lista, que funciona con teclado sin el mapa | Solo ver el mapa; las trazas solo por importación |
+| **M-Q7** | Sin el archivo del mapa | Las pantallas lo dicen en una línea («El mapa no está instalado en este servidor») y todo sigue funcionando con la lista y los campos. El diagnóstico de la API no falla por eso | Exigir el mapa para arrancar |
+
+### Maqueta 7.6: aprobada (2026-11-25)
+
+En el lienzo de la [maqueta 7.5](https://claude.ai/artifact/M9KUCDqKirchiFHpUs13C5) (privada), una fila nueva «7.6 · Mapa con teselas propias» con tres pantallas:
+
+1. **Rutas con mapa** (interactiva): el «Recorrido» pasa a ser un mapa con las paradas numeradas, la traza en navy y la línea recta punteada, con «Acercar», «Alejar», «Ver toda la ruta» y la atribución «© OpenStreetMap». Debajo, «Tramos», con «Dibujar en el mapa» o «Corregir en el mapa», «Importar GPX o KML» y «Quitar traza». El modo de dibujo muestra un aviso con el tramo, los puntos y los km al momento, y los botones «Quitar el último punto», «Cancelar» y «Terminar»; en la maqueta, «Simular un clic en el mapa» hace las veces del clic. El mapa tiene una descripción en texto de lo que muestra, y la lista sigue siendo el control principal.
+2. **Ubicación en el mapa**: el diálogo de la ubicación con el mapa para elegir la posición (clic o arrastrar el marcador) y los campos de latitud y longitud debajo, que el mapa sigue.
+3. **Celular sin el mapa instalado** (M-Q7): una línea lo explica, y los tramos y la posición se editan con la lista y los campos.
+
+**Revisión con Impeccable** (solo `detect`, telemetría apagada):
+- **Detector:** 3 avisos, todos de «fuente demasiado usada» por Inter. Es un falso positivo: Inter es la tipografía de la marca.
+- **Contraste:**
+  - texto sobre el mapa: ríos 4,70:1, carreteras y regiones 5,34:1, nombres de parada 14,68:1 y atribución 10,06:1;
+  - líneas (mínimo 3:1): traza 14,68:1 y línea recta 5,34:1;
+  - **corregido:** la traza en dibujo era teal `#0E8F80` y daba 2,19:1 sobre el agua; pasó a `#0B6B61` (3,50:1 sobre el agua y 5,50:1 sobre la tierra).
+- **Revisión propia:** el diálogo deja inerte el fondo, carril incluido, y los controles del mapa tienen 44 px y nombre accesible.
+
+### Pruebas previstas
+
+- **Unitarias:** la ruta de Next con `Range` (rango válido, abierto, fuera del archivo → 416, sin rango → 200 completo, nombres con `..` → 404) y el cálculo de km de la traza dibujada.
+- **E2E** con el extracto pequeño: el mapa carga **sin peticiones a otros dominios** (se registran todas las peticiones de la página); elegir una posición en Ubicaciones; dibujar un tramo con clics, guardarlo y ver sus km; axe; la lista de paradas sigue usable con teclado; modo oscuro y 390 px.
+
+### Fuera de esta etapa
+
+Cálculo de trazas por carretera (OSRM u otro), búsqueda de lugares (geocodificación) y el mapa en el portal de pasajeros.
