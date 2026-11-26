@@ -1,0 +1,9 @@
+{
+  "build": "20261124",
+  "bbox": "-74.75,-8.55,-74.35,-8.25",
+  "maxzoom": 11,
+  "pmtiles": "1.31.2",
+  "assets": "028c18f713baecad011301ff7a69acc39bcc2ae7",
+  "sha256": "5b2bb4d8264b016a58260a543fdf1515c3bc67e33879a0377e84a110ea05c537",
+  "bytes": 611710
+}

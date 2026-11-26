@@ -17,6 +17,10 @@ export const ErrorCode = z.enum([
   'MODULE_NOT_ENABLED',
   'NOT_FOUND',
   'CONFLICT',
+  /** Fase 7.4: el recurso (asiento, cama, camarote, espacio) ya está ocupado en el tramo pedido (capacity-and-inventory §3). */
+  'RESOURCE_UNAVAILABLE',
+  /** Fase 7.4: un cupo por cantidad (zona, bodega, aforo) no alcanza en algún tramo (capacity-and-inventory §4). */
+  'CAPACITY_EXCEEDED',
   'PAYLOAD_TOO_LARGE',
   'RATE_LIMITED',
   'SERVICE_UNAVAILABLE',

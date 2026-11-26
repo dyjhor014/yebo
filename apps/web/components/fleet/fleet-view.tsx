@@ -33,6 +33,8 @@ import {
   useLoad,
   type ChipTone,
 } from '@/components/panel/kit';
+import { VehicleEquipmentSection } from '@/components/equipment/vehicle-equipment';
+import { usePanel } from '@/components/panel/panel-session';
 import { DOCUMENT_FILE_TYPES, fleetApi, layoutsApi, uploadDocumentFile } from '@/lib/panel-api';
 import { errorMessage } from '@/lib/site-api';
 
@@ -106,6 +108,11 @@ export function FleetView({ canLayouts }: { canLayouts: boolean }) {
     return { types, vehicles: vehicles.vehicles, layouts };
   });
   const [selected, setSelected] = useState<string | null>(null);
+  // `?vehiculo=` (al volver de una inspección): abre esa unidad.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('vehiculo');
+    if (id) setSelected(id);
+  }, []);
   const [dialog, setDialog] = useState<'types' | 'vehicle-new' | 'vehicle-edit' | null>(null);
   const [status, setStatus] = useState('');
 
@@ -249,6 +256,7 @@ function VehicleDetail({
   onChanged: (msg: string) => Promise<void>;
 }) {
   const docs = useLoad<VehicleDocumentsResponse>(() => fleetApi.documents(v.id));
+  const { can } = usePanel();
   const assignments = useLoad<LayoutAssignment[] | null>(() =>
     layouts ? fleetApi.assignments(v.id).then((r) => r.assignments) : Promise.resolve(null),
   );
@@ -438,6 +446,8 @@ function VehicleDetail({
           </p>
         </div>
       )}
+
+      {can('inspections.read') && <VehicleEquipmentSection vehicle={v} onStatus={(m) => void onChanged(m)} />}
 
       {docDialog && docs.data && (
         <DocumentDialog

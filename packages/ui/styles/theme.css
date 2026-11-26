@@ -25,6 +25,8 @@
   --color-danger-surface: var(--state-danger-surface);
   --color-warning: var(--state-warning);
   --color-warning-surface: var(--state-warning-surface);
+  --color-success: var(--state-success);
+  --color-success-surface: var(--state-success-surface);
   --font-display: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }

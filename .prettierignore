@@ -19,3 +19,7 @@ tests/e2e/report/
 
 # Catálogo de ubigeo del INEI, minificado a propósito (6.4b)
 apps/web/public/datos/ubigeo-inei.json
+
+# Fase 7.6: worker de MapLibre copiado al compilar y extracto binario del mapa
+apps/web/public/vendor/
+tests/e2e/fixtures/mapa/

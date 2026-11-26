@@ -104,6 +104,21 @@ export class LocationsService {
           409,
         );
       }
+      // Fase 7.1: tampoco con rutas activas que paran en ella (las rutas la bloquean en modo compartido al guardar).
+      const routes = archived
+        ? await tx.route.findMany({
+            where: { archivedAt: null, stops: { some: { locationId: id } } },
+            select: { code: true },
+            orderBy: { code: 'asc' },
+          })
+        : [];
+      if (routes.length > 0) {
+        throw new AppError(
+          'CONFLICT',
+          `La ubicación es parada de ${routes.length === 1 ? 'la ruta activa' : 'las rutas activas'} ${routes.map((r) => r.code).join(', ')}: archívalas o cámbialas antes`,
+          409,
+        );
+      }
       const row = await tx.location.update({
         where: { id },
         data: { archivedAt: archived ? this.clock.now() : null },

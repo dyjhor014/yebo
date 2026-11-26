@@ -22,3 +22,62 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
 }
+
+/*
+ * Mapa propio (Fase 7.6): controles y atribución de MapLibre con los roles de la interfaz (contraste AA en claro y
+ * oscuro, 44 px de área táctil) y el marcador de la ubicación.
+ */
+.yebo-map .maplibregl-ctrl-group {
+  background: var(--surface-raised);
+  border: 1px solid var(--control-border);
+  box-shadow: none;
+}
+.yebo-map .maplibregl-ctrl-group button {
+  width: 44px;
+  height: 44px;
+}
+.yebo-map .maplibregl-ctrl-group button + button {
+  border-top-color: var(--divider);
+}
+.yebo-map .maplibregl-ctrl-icon {
+  filter: var(--map-icon-filter, none);
+}
+.yebo-map .maplibregl-ctrl-attrib {
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.yebo-map .maplibregl-ctrl-attrib a {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+.yebo-map :focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .yebo-map {
+    --map-icon-filter: invert(1);
+  }
+}
+:root[data-theme='dark'] .yebo-map {
+  --map-icon-filter: invert(1);
+}
+.yebo-pin {
+  width: 32px;
+  height: 40px;
+  cursor: grab;
+  background: var(--pin);
+  clip-path: path('M16 40C6 27 0 21 0 15a16 16 0 0 1 32 0c0 6-6 12-16 25z');
+  filter: drop-shadow(0 0 1px var(--pin-halo)) drop-shadow(0 0 1px var(--pin-halo));
+}
+.yebo-pin::after {
+  content: '';
+  position: absolute;
+  top: 9px;
+  left: 10px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--pin-halo);
+}

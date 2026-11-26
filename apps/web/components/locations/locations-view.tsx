@@ -30,6 +30,7 @@ import { usePanel } from '@/components/panel/panel-session';
 import { agenciesApi, locationsApi } from '@/lib/panel-api';
 import { errorMessage } from '@/lib/site-api';
 import { loadUbigeo, ubigeoLabel, type UbigeoCatalog } from '@/lib/ubigeo';
+import { LocationPicker } from '@/components/map/location-picker';
 
 type Tab = 'locations' | 'branches' | 'channels';
 const TABS = [
@@ -600,6 +601,14 @@ function LocationDialog({
               : 'Al elegir el distrito, YEBO completa su ubigeo del INEI y sus coordenadas.'}
           </p>
         </fieldset>
+        <LocationPicker
+          lat={num(lat)}
+          lng={num(lng)}
+          onPick={(la, ln) => {
+            setLat(String(la));
+            setLng(String(ln));
+          }}
+        />
         <div className="grid gap-4 sm:grid-cols-2">
           <Input
             label="Latitud (opcional)"

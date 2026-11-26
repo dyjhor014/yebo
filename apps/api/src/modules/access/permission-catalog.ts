@@ -70,6 +70,42 @@ export const PERMISSION_CATALOG = {
     sensitive: false,
     description: 'Gestionar las agencias externas y sus canales de venta',
   },
+  // Fase 7.1: rutas, sus paradas y sus trazas (F7-Q9).
+  'routes.manage': {
+    module: 'ROUTES',
+    sensitive: false,
+    description: 'Gestionar las rutas, sus paradas y sus trazas',
+  },
+  // Fase 7.2: tarifas por par, servicio y clase de precio, con vigencia (F7-Q1).
+  'fares.manage': { module: 'FARES', sensitive: false, description: 'Gestionar las tarifas de las rutas' },
+  // Fase 7.3: viajes (crear, fijar unidad y plano, abrir a la venta y cancelar son NEW_COMMERCIAL).
+  'trips.manage': {
+    module: 'TRIPS',
+    sensitive: false,
+    description: 'Gestionar los viajes y abrirlos a la venta',
+  },
+  // Fase 7.4: bloqueos operativos de recursos y cupos (F7-Q5).
+  'trips.block': {
+    module: 'TRIPS',
+    sensitive: false,
+    description: 'Bloquear y liberar asientos y cupos de un viaje',
+  },
+  // Fase 7.E1: equipamiento de las unidades e inspecciones preoperacionales (opcionales; EQ-Q9).
+  'equipment.manage': {
+    module: 'FLEET',
+    sensitive: false,
+    description: 'Declarar el equipamiento de las unidades y su catálogo propio',
+  },
+  'inspections.perform': {
+    module: 'FLEET',
+    sensitive: false,
+    description: 'Realizar, completar y rectificar inspecciones preoperacionales',
+  },
+  'inspections.read': {
+    module: 'FLEET',
+    sensitive: false,
+    description: 'Ver el equipamiento y las inspecciones de las unidades',
+  },
 } as const satisfies Record<string, { module: string; sensitive: boolean; description: string }>;
 
 export type PermissionCode = keyof typeof PERMISSION_CATALOG;

@@ -208,6 +208,8 @@ Surgen de las pruebas de concepto. Evidencia en [phase-2-results.md](../developm
 
 **Alternativas:** reintentar ante `40P01` (más latencia y más código); `SERIALIZABLE` (descartado en ADR-007).
 
+**Precisión de la Fase 7.4 (aprobada por el responsable el 2026-11-19):** en producción, el bloqueo previo de los recursos se hace con **candados consultivos de transacción** (`pg_advisory_xact_lock(hashtextextended(id, 0))`), uno por recurso hoja y en orden de `id`, en lugar de `SELECT … FOR NO KEY UPDATE` sobre `trip_resources`. El candado de fila exigiría dar a `yebo_app` el privilegio UPDATE sobre `trip_resources` (ADR-034), que el inventario materializado no necesita porque no cambia desde la apertura. El efecto es el mismo: las asignaciones en competencia esperan en orden, sin interbloqueos dentro del índice GIST. Una colisión de hash solo añade una espera. La exclusión sigue siendo la garantía. Los pools mantienen `FOR UPDATE` en el orden `(pool_id, segment_seq)`. Los errores de dominio se exponen como `409 RESOURCE_UNAVAILABLE` y `409 CAPACITY_EXCEEDED`. Detalle y pruebas en [phase-7-plan](../development/phase-7-plan.md#etapa-74--motor-de-inventario-por-tramo-y-bloqueos-operativos-aprobada-el-2026-11-19).
+
 **Afecta:** ADR-007, capacity-and-inventory §3.
 
 ---

@@ -11,6 +11,9 @@ import { ADMIN_URL, API_ENV, E2E, ROOT } from './support/env';
  *  - flota: Ubicaciones, Flota, Planos y el editor del plano (Fase 6.4d).
  *  - agencias: Agencias externas detrás del módulo AGENCIES y su canal de venta (Fase 6.5b).
  *  - criterio: el criterio de la Fase 6 con el editor: lancha y bus en blanco, publicados y asignados (6.6).
+ *  - equipamiento: equipamiento de la unidad en Flota e inspección en el celular (7.5c).
+ *  - mapa: el mapa propio en Ubicaciones y Rutas, sin peticiones a otros dominios (7.6).
+ *  - criterio7: el criterio de la Fase 7 con la ficha del viaje: capacidad por tramo de la lancha y el bus (7.7).
  */
 export default defineConfig({
   testDir: './specs',
@@ -88,6 +91,36 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
     },
     {
+      name: 'rutas',
+      testMatch: /11-.*\.spec\.ts/,
+      dependencies: ['recorrido'],
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
+    {
+      name: 'viajes',
+      testMatch: /12-.*\.spec\.ts/,
+      dependencies: ['recorrido'],
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
+    {
+      name: 'equipamiento',
+      testMatch: /13-.*\.spec\.ts/,
+      dependencies: ['recorrido'],
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
+    {
+      name: 'mapa',
+      testMatch: /14-.*\.spec\.ts/,
+      dependencies: ['recorrido'],
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
+    {
+      name: 'criterio7',
+      testMatch: /15-.*\.spec\.ts/,
+      dependencies: ['recorrido'],
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
+    {
       name: 'capturas',
       testMatch: /0[45]-.*\.spec\.ts/,
       dependencies: ['recorrido'],
@@ -123,6 +156,8 @@ export default defineConfig({
       env: {
         ...(process.env as Record<string, string>),
         API_INTERNAL_URL: `http://127.0.0.1:${E2E.apiPort}`,
+        // Mapa propio (7.6, M-Q3): el extracto pequeño de Pucallpa, versionado para no depender de la red.
+        YEBO_MAP_DIR: resolve(ROOT, 'tests/e2e/fixtures/mapa'),
         NODE_ENV: 'production',
       },
       url: `http://127.0.0.1:${E2E.webPort}/estado`,

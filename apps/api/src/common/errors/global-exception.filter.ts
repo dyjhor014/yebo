@@ -36,6 +36,8 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   MODULE_NOT_ENABLED: 'La empresa no tiene habilitado este módulo',
   NOT_FOUND: 'Recurso no encontrado',
   CONFLICT: 'La operación entra en conflicto con el estado actual',
+  RESOURCE_UNAVAILABLE: 'El recurso no está disponible en ese tramo',
+  CAPACITY_EXCEEDED: 'No hay capacidad en ese tramo',
   PAYLOAD_TOO_LARGE: 'El contenido enviado excede el tamaño permitido',
   RATE_LIMITED: 'Demasiadas solicitudes; intente más tarde',
   SERVICE_UNAVAILABLE: 'Servicio no disponible temporalmente',

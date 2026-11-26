@@ -42,6 +42,11 @@ const LATER_SEEDS = [
   resolve(__dirname, '../../prisma/migrations/20261113020000_fase6_2_fleet/migration.sql'),
   resolve(__dirname, '../../prisma/migrations/20261113030000_fase6_3_layouts/migration.sql'),
   resolve(__dirname, '../../prisma/migrations/20261117010000_fase6_5_agencies/migration.sql'),
+  resolve(__dirname, '../../prisma/migrations/20261118010000_fase7_1_routes/migration.sql'),
+  resolve(__dirname, '../../prisma/migrations/20261119010000_fase7_2_fares/migration.sql'),
+  resolve(__dirname, '../../prisma/migrations/20261120010000_fase7_3a_trips/migration.sql'),
+  resolve(__dirname, '../../prisma/migrations/20261122010000_fase7_4_inventory/migration.sql'),
+  resolve(__dirname, '../../prisma/migrations/20261123010000_fase7_e1_equipment_inspections/migration.sql'),
 ].map((file) => {
   const sql = readFileSync(file, 'utf8');
   // El bloque de siembra termina donde empieza el recorrido tenant a tenant (cada migración lo anuncia a su manera).

@@ -1,0 +1,4 @@
+Datos del mapa: © colaboradores de OpenStreetMap, disponibles bajo la Open Database License (ODbL)
+https://www.openstreetmap.org/copyright
+Teselas: build 20261124 de Protomaps (https://protomaps.com), recortado con go-pmtiles v1.31.2.
+Fuentes: Noto Sans (SIL Open Font License, ver fuentes/OFL.txt). Sprites: protomaps/basemaps-assets 028c18f713baecad011301ff7a69acc39bcc2ae7.

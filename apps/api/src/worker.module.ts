@@ -4,11 +4,13 @@ import { HealthModule } from './modules/health/health.module';
 import { ClockModule } from './modules/identity/clock.module';
 import { MeteringWorkerModule } from './modules/metering/metering.worker';
 import { TenantLifecycleWorkerModule } from './modules/platform-admin/tenant-lifecycle.worker';
+import { TripSchedulesWorkerModule } from './modules/trips/schedules.worker';
 
 /**
  * Proceso worker (BullMQ). Expone solo health interno.
  * Los procesadores (outbox relay, notificaciones, facturación, expiraciones) se registran en sus fases.
- * Fase 4.3a: job de estados del tenant. Fase 4.4: job de snapshots diarios de medición.
+ * Fase 4.3a: job de estados del tenant. Fase 4.4: job de snapshots diarios de medición. Fase 7.3b: job diario de
+ * programaciones (genera los viajes hasta el horizonte).
  */
 @Module({
   imports: [
@@ -17,6 +19,7 @@ import { TenantLifecycleWorkerModule } from './modules/platform-admin/tenant-lif
     HealthModule.forService('worker'),
     TenantLifecycleWorkerModule,
     MeteringWorkerModule,
+    TripSchedulesWorkerModule,
   ],
 })
 export class WorkerModule {}
