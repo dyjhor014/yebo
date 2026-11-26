@@ -13,6 +13,7 @@ import { ADMIN_URL, API_ENV, E2E, ROOT } from './support/env';
  *  - criterio: el criterio de la Fase 6 con el editor: lancha y bus en blanco, publicados y asignados (6.6).
  *  - equipamiento: equipamiento de la unidad en Flota e inspección en el celular (7.5c).
  *  - mapa: el mapa propio en Ubicaciones y Rutas, sin peticiones a otros dominios (7.6).
+ *  - criterio7: el criterio de la Fase 7 con la ficha del viaje: capacidad por tramo de la lancha y el bus (7.7).
  */
 export default defineConfig({
   testDir: './specs',
@@ -110,6 +111,12 @@ export default defineConfig({
     {
       name: 'mapa',
       testMatch: /14-.*\.spec\.ts/,
+      dependencies: ['recorrido'],
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
+    {
+      name: 'criterio7',
+      testMatch: /15-.*\.spec\.ts/,
       dependencies: ['recorrido'],
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
     },

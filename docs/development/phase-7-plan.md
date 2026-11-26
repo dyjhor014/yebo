@@ -528,3 +528,7 @@ Cálculo de trazas por carretera (OSRM u otro), búsqueda de lugares (geocodific
 - **Revisión visual:** capturas del E2E en claro, oscuro y 390 px: las teselas, las trazas, los puntos de dibujo y el marcador se ven como en la maqueta.
 - **Regresión:** suite E2E completa, 73 pruebas en verde (3 saltos esperados), con el mapa también en las pantallas de Flota, Rutas y Ubicaciones de las suites anteriores.
 - **Resultado (2026-11-25):** lint y tipos sin errores (13 tareas), formato sin cambios pendientes y unitarias del web, 34. Sin cambios en la API ni en la base.
+
+## Etapa 7.7 · Cierre: aprobada (2026-11-25)
+
+Autorizada el 2026-11-25. Prueba del criterio por la API (`phase7-criterion.int-spec.ts`, 6 pruebas) y con la ficha del viaje (E2E `15-criterio-fase7`, 5 pruebas), con la lancha y el bus de dos pisos de la 6.6 (sus planos pasan a `apps/api/test/support/criterion-layouts.ts`, compartidos). Resultados, cifras esperadas, mutación, totales, hallazgos y pendientes en [phase-7-results.md](phase-7-results.md). A pedido del responsable, el motor nombra ahora el tramo exacto donde choca cada lugar ocupado, y se revisó que ninguna otra prueba consulte tablas con RLS usando el rol del dueño.

@@ -80,9 +80,8 @@ export class InventoryService {
     if (!(req.fromSeq >= 0 && req.fromSeq < req.toSeq && req.toSeq <= segments.length)) {
       throw invalid('Ese tramo no es del viaje');
     }
-    const between = `entre ${segments[req.fromSeq]?.from} y ${segments[req.toSeq - 1]?.to}`;
     const resourceIds = req.resourceCodes?.length
-      ? await this.allocateResources(tx, req, status, between)
+      ? await this.allocateResources(tx, req, status, segments)
       : [];
     const poolAllocationIds = req.pools?.length ? await this.allocatePools(tx, req, status, segments) : [];
     return { resourceIds, poolAllocationIds };
@@ -251,7 +250,7 @@ export class InventoryService {
     tx: Tx,
     req: AllocationRequest,
     status: 'HELD' | 'CONFIRMED',
-    between: string,
+    segments: { seq: number; from: string; to: string }[],
   ): Promise<string[]> {
     const codes = [...new Set(req.resourceCodes ?? [])];
     const selected = await tx.$queryRaw<{ id: string; code: string }[]>`
@@ -271,16 +270,17 @@ export class InventoryService {
     // ADR-026: las asignaciones que compiten por un recurso esperan aquí, en orden, y no dentro del índice GIST.
     for (const id of ids)
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${id}::text, 0))`;
-    const busy = await tx.$queryRaw<{ code: string }[]>`
-      SELECT DISTINCT r.code FROM resource_allocations a JOIN trip_resources r ON r.id = a.trip_resource_id
+    // Lo ocupado, con el tramo exacto donde choca cada lugar (del primer al último tramo ocupado dentro de lo pedido).
+    const busy = await tx.$queryRaw<{ code: string; lo: number; hi: number }[]>`
+      SELECT r.code,
+             min(greatest(lower(a.stop_range), ${req.fromSeq}::int))::int AS lo,
+             max(least(upper(a.stop_range), ${req.toSeq}::int))::int AS hi
+        FROM resource_allocations a JOIN trip_resources r ON r.id = a.trip_resource_id
        WHERE a.trip_resource_id = ANY(${ids}::uuid[]) AND a.status <> 'RELEASED'
          AND a.stop_range && int4range(${req.fromSeq}::int, ${req.toSeq}::int)
-       ORDER BY r.code`;
-    if (busy.length > 0)
-      throw unavailable(
-        busy.map((b) => b.code),
-        between,
-      );
+       GROUP BY r.code
+       ORDER BY lo, hi, r.code`;
+    if (busy.length > 0) throw unavailableBySegment(busy, segments);
     try {
       await tx.$executeRaw`
         INSERT INTO resource_allocations (id, tenant_id, trip_id, trip_resource_id, stop_range, status,
@@ -292,7 +292,10 @@ export class InventoryService {
     } catch (e) {
       // La exclusión es la garantía final (p. ej., una retención que venció justo después del aviso previo).
       if (isPg(e, '23P01') || isPg(e, 'resource_no_overlap'))
-        throw unavailable([...leaves.values()].sort(), between);
+        throw unavailable(
+          [...leaves.values()].sort(),
+          `entre ${segments[req.fromSeq]?.from} y ${segments[req.toSeq - 1]?.to}`,
+        );
       throw e;
     }
     return ids;
@@ -399,6 +402,27 @@ function unavailable(codes: string[], between: string): AppError {
   return new AppError(
     'RESOURCE_UNAVAILABLE',
     `${codes.length === 1 ? 'Ocupado' : 'Ocupados'} ${between}: ${codes.join(', ')}`,
+    409,
+  );
+}
+
+/**
+ * Lugares ocupados con su tramo exacto, agrupados por tramo: «Ocupado entre Contamana y Yurimaguas: C1-B2» o
+ * «Ocupados entre Pucallpa y Contamana: 1A, 1B; entre Contamana y Iquitos: 5A».
+ */
+function unavailableBySegment(
+  busy: { code: string; lo: number; hi: number }[],
+  segments: { from: string; to: string }[],
+): AppError {
+  const groups = new Map<string, string[]>();
+  for (const b of busy) {
+    const key = `entre ${segments[b.lo]?.from} y ${segments[b.hi - 1]?.to}`;
+    groups.set(key, [...(groups.get(key) ?? []), b.code]);
+  }
+  const parts = [...groups].map(([between, codes]) => `${between}: ${codes.join(', ')}`);
+  return new AppError(
+    'RESOURCE_UNAVAILABLE',
+    `${busy.length === 1 ? 'Ocupado' : 'Ocupados'} ${parts.join('; ')}`,
     409,
   );
 }

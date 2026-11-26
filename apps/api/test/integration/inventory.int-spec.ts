@@ -643,7 +643,8 @@ describe('Fase 7.4 · inventario por tramo', () => {
       await block(apiTrip, { resourceCodes: ['1B', '1C'], fromSeq: 1, toSeq: 3 }),
       409,
       'RESOURCE_UNAVAILABLE',
-      'Ocupado entre Contamana y Iquitos: 1B',
+      // El tramo exacto donde choca (1B está ocupado de Pucallpa a Yurimaguas), no todo lo pedido.
+      'Ocupado entre Contamana y Yurimaguas: 1B',
     );
     expect((await block(apiTrip, { resourceCodes: ['C1-B1'], fromSeq: 0, toSeq: 1 })).status).toBe(201);
     expectError(
