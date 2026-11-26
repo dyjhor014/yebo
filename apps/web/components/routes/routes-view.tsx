@@ -15,6 +15,8 @@ import {
 import { Alert, Input, PRIMARY, SECONDARY, ScrollRegion, Select, Warning } from '@yebo/ui/form';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { MODALITY_NAME } from '@/components/fleet/fleet-view';
+import { RouteMap, type Drawing } from '@/components/map/route-map';
+import { mapAvailable } from '@/components/map/yebo-map';
 import {
   CARD,
   CARD_TITLE,
@@ -95,7 +97,7 @@ const loadAll = async () => {
 /**
  * Rutas (Fase 7.5a; API de la 7.1, maqueta 7.5 aprobada): lista y editor de paradas en orden. El tiempo se cuenta
  * desde la salida del origen; las paradas se mueven con sus botones o con Alt + flechas. Cada tramo puede llevar una
- * traza importada de un GPX o KML; sin ella, los km son en línea recta. El mapa llega con la 7.6.
+ * traza importada de un GPX o KML o dibujada en el mapa (7.6); sin ella, los km son en línea recta.
  */
 export function RoutesView() {
   const { company } = usePanel();
@@ -246,6 +248,11 @@ function RouteEditor({
   const [status, setStatus] = useState('');
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const table = useRef<HTMLTableSectionElement>(null);
+  const [hasMap, setHasMap] = useState(false);
+  const [drawing, setDrawing] = useState<Drawing | null>(null);
+  useEffect(() => {
+    void mapAvailable().then(setHasMap);
+  }, []);
 
   useEffect(() => {
     if (!focusKey) return;
@@ -293,13 +300,37 @@ function RouteEditor({
     if (a?.lat == null || a.lng == null || b?.lat == null || b.lng == null) return null;
     return roundKm(distanceKm([a.lng, a.lat], [b.lng, b.lat]));
   };
-  let acc: number | null = 0;
-  const fromOrigin = draft.stops.map((_, i) => {
-    const here = acc;
-    const leg = legKm(i);
-    if (i < n - 1) acc = acc === null || leg === null ? null : roundKm(acc + leg);
-    return here;
+
+  const stopName = (i: number) => byId.get(draft.stops[i]?.locationId ?? '')?.name ?? `Parada ${i + 1}`;
+  const coords = (i: number): LngLat | null => {
+    const l = byId.get(draft.stops[i]?.locationId ?? '');
+    return l?.lat == null || l.lng == null ? null : [l.lng, l.lat];
+  };
+  const located = (i: number) => coords(i) !== null;
+  const mapStops = draft.stops.map((s, i) => {
+    const c = coords(i);
+    return { name: stopName(i), lng: c?.[0] ?? null, lat: c?.[1] ?? null };
   });
+  const drawPath = (d: Drawing): LngLat[] | null => {
+    const a = coords(d.seg);
+    const b = coords(d.seg + 1);
+    return a && b ? [a, ...d.points, b] : null;
+  };
+  const drawKm = (d: Drawing) => {
+    const p = drawPath(d);
+    return p ? roundKm(pathLengthKm(p)) : 0;
+  };
+  /** Terminar: con puntos, la traza dibujada (extremos en las paradas); sin puntos, vuelve a la línea recta. */
+  const finishDrawing = (d: Drawing) => {
+    const path = d.points.length > 0 ? drawPath(d) : null;
+    update(d.seg, { pathToNext: path });
+    setDrawing(null);
+    setStatus(
+      path
+        ? `Traza del tramo ${d.seg + 1} dibujada: ${fmtNumber(drawKm(d))} km. Se guarda con la ruta.`
+        : `Tramo ${d.seg + 1} sin traza: línea recta.`,
+    );
+  };
 
   const onTrace = async (i: number, file: File | undefined) => {
     if (!file) return;
@@ -723,48 +754,132 @@ function RouteEditor({
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h3 className={CARD_TITLE}>Recorrido</h3>
           <span className="text-[0.8125rem] text-ink-muted">
-            El mapa llega en la 7.6; mientras, el esquema de tramos.
+            El mapa acompaña a la lista de paradas: todo se puede hacer también desde la lista.
           </span>
         </div>
-        <ol aria-label="Tramos de la ruta" className="grid gap-3 sm:grid-flow-col sm:auto-cols-fr">
-          {draft.stops.map((s, i) => {
-            const offset = i === 0 ? 0 : parseDuration(s.offset);
+        {drawing && (
+          <DrawBar
+            seg={drawing.seg}
+            from={stopName(drawing.seg)}
+            to={stopName(drawing.seg + 1)}
+            points={drawing.points.length}
+            km={drawKm(drawing)}
+            onUndo={() => setDrawing((d) => d && { ...d, points: d.points.slice(0, -1) })}
+            onCancel={() => {
+              setDrawing(null);
+              setStatus('Dibujo cancelado: el tramo queda como estaba');
+            }}
+            onFinish={() => finishDrawing(drawing)}
+          />
+        )}
+        <RouteMap
+          stops={mapStops}
+          paths={draft.stops.map((s) => s.pathToNext)}
+          drawing={drawing}
+          onDraw={(points) => setDrawing((d) => d && { ...d, points })}
+        />
+        <ol aria-label="Tramos de la ruta" className="flex flex-col">
+          {draft.stops.slice(0, -1).map((s, i) => {
+            const km = legKm(i);
+            const canDraw = hasMap && !readOnly && located(i) && located(i + 1);
             return (
-              <li key={s.key} className="flex flex-col gap-1.5">
-                <span className="flex items-center gap-2" aria-hidden="true">
-                  <span className="size-3.5 shrink-0 rounded-full bg-ink" />
-                  {i < n - 1 && (
-                    <span
-                      className={`h-0 flex-1 border-t-[3px] ${s.pathToNext ? 'border-action' : 'border-dashed border-control'}`}
-                    />
-                  )}
+              <li
+                key={s.key}
+                className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-divider py-3 ${
+                  drawing?.seg === i ? '-mx-2.5 rounded-[var(--radius-control)] bg-action/10 px-2.5' : ''
+                }`}
+              >
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-[0.9375rem] font-bold">
+                    {i + 1} · {stopName(i)} → {stopName(i + 1)}
+                  </span>
+                  <span className="text-[0.8125rem] text-ink-muted">
+                    {drawing?.seg === i
+                      ? 'Dibujando…'
+                      : km === null
+                        ? 'Sin km: ubica sus paradas en el mapa'
+                        : `${fmtNumber(km)} km ${s.pathToNext ? 'por la traza' : 'en línea recta · sin traza'}`}
+                  </span>
                 </span>
-                <span className="text-sm font-bold">{byId.get(s.locationId)?.name ?? `Parada ${i + 1}`}</span>
-                <span className="text-[0.8125rem] text-ink-muted">
-                  {fromOrigin[i] === null ? 'km sin calcular' : `${fmtNumber(fromOrigin[i] as number)} km`}
-                  {offset !== null && i > 0 ? ` · +${formatDuration(offset)}` : i === 0 ? ' · sale' : ''}
-                </span>
+                {canDraw && (
+                  <button
+                    type="button"
+                    className={SECONDARY}
+                    disabled={drawing !== null}
+                    onClick={() => {
+                      setDrawing({ seg: i, points: s.pathToNext ? s.pathToNext.slice(1, -1) : [] });
+                      setStatus(
+                        `Dibujando el tramo ${i + 1}: haz clic en el mapa para agregar puntos y termina con «Terminar».`,
+                      );
+                    }}
+                  >
+                    {s.pathToNext ? 'Corregir en el mapa' : 'Dibujar en el mapa'}
+                  </button>
+                )}
               </li>
             );
           })}
         </ol>
         <p className="flex flex-wrap gap-x-4 gap-y-1 text-[0.8125rem] text-ink-muted">
           <span>
-            <span
-              aria-hidden="true"
-              className="mr-1 inline-block w-6 border-t-[3px] border-action align-middle"
-            />
+            <span aria-hidden="true" className="mr-1 inline-block w-6 border-t-4 border-ink align-middle" />
             con traza
           </span>
           <span>
             <span
               aria-hidden="true"
-              className="mr-1 inline-block w-6 border-t-[3px] border-dashed border-control align-middle"
+              className="mr-1 inline-block w-6 border-t-[3px] border-dashed border-ink-muted align-middle"
             />
             línea recta (sin traza)
           </span>
         </p>
       </div>
     </section>
+  );
+}
+
+function DrawBar({
+  seg,
+  from,
+  to,
+  points,
+  km,
+  onUndo,
+  onCancel,
+  onFinish,
+}: {
+  seg: number;
+  from: string;
+  to: string;
+  points: number;
+  km: number;
+  onUndo: () => void;
+  onCancel: () => void;
+  onFinish: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 rounded-[var(--radius-control)] border border-action bg-action/10 px-3.5 py-3">
+      <p className="max-w-[36rem] text-sm leading-5">
+        <strong>
+          Dibujando el tramo {seg + 1}: {from} → {to}.
+        </strong>{' '}
+        Haz clic en el mapa para agregar un punto y arrastra uno para moverlo; los extremos quedan fijos en
+        las paradas.{' '}
+        <span aria-live="polite">
+          {points === 1 ? '1 punto intermedio' : `${points} puntos intermedios`} · {fmtNumber(km)} km
+        </span>
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={SECONDARY} disabled={points === 0} onClick={onUndo}>
+          Quitar el último punto
+        </button>
+        <button type="button" className={SECONDARY} onClick={onCancel}>
+          Cancelar
+        </button>
+        <button type="button" className={PRIMARY} onClick={onFinish}>
+          Terminar
+        </button>
+      </div>
+    </div>
   );
 }

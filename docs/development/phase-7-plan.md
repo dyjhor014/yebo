@@ -503,3 +503,28 @@ En el lienzo de la [maqueta 7.5](https://claude.ai/artifact/M9KUCDqKirchiFHpUs13
 ### Fuera de esta etapa
 
 Cálculo de trazas por carretera (OSRM u otro), búsqueda de lugares (geocodificación) y el mapa en el portal de pasajeros.
+
+### Etapa 7.6 · Código: aprobado (2026-11-25)
+
+| Tema | Decisión |
+|---|---|
+| Dependencias | `maplibre-gl` 6.16.0, `pmtiles` 4.5.0 y `@protomaps/basemaps` 5.7.2 en `apps/web`, con versión exacta. Ninguna necesita scripts de instalación. Se cargan con `import()` solo cuando una pantalla muestra un mapa |
+| Mapa | `components/map/yebo-map.tsx`: comprueba con un `HEAD` que el mapa esté instalado, carga MapLibre, registra el protocolo `pmtiles` y usa el estilo de Protomaps (claro u oscuro según el tema, en español) con fuentes y sprites de `/mapa/`. Controles en español, sin rotación, limitado al Perú y con la atribución visible. El lienzo se nombra con una descripción en texto de lo que muestra |
+| Worker | MapLibre 6 busca su *worker* junto a su propio archivo, lo que no funciona empaquetado por Next. `scripts/copy-map-worker.mjs` lo copia a `public/vendor/` al compilar (no va en git) y la app lo indica con `setWorkerUrl` |
+| Servir | Ruta `app/mapa/[...archivo]/route.ts` con `Range` y `lib/map-files.ts` (unitarias). En producción, Nginx con el mismo camino ([mapa.md](mapa.md)) |
+| Ubicaciones | `LocationPicker` en el diálogo: clic o arrastrar el marcador (con nombre accesible); los campos siguen siendo el control principal, y lo escrito mientras el mapa carga se aplica al terminar de cargar |
+| Rutas | `RouteMap` en «Recorrido»: paradas numeradas, trazas con halo, línea recta punteada y «Ver toda la ruta». Debajo, «Tramos de la ruta», con «Dibujar en el mapa» o «Corregir en el mapa». El dibujo agrega puntos con clics, los mueve arrastrándolos, muestra los km al momento y tiene «Quitar el último punto», «Cancelar» y «Terminar». Terminar sin puntos vuelve a la línea recta. Importar y quitar la traza siguen en la tabla de paradas, como en la 7.5a, para no duplicar los controles (la maqueta los repetía en «Tramos») |
+| Script | `scripts/maps/build-map.sh` ([mapa.md](mapa.md)): `go-pmtiles` v1.31.2 verificado con SHA-256, build `20261124` de Protomaps y `basemaps-assets` `028c18f`. El extracto del E2E (`tests/e2e/fixtures/mapa`, 988 KB en total) se generó con él |
+
+**Pruebas:**
+- **Unitarias del web (6 nuevas, 34 en total):** archivos del mapa (rutas permitidas, `..`, ocultos y extensiones) y rangos (cerrado, abierto, sufijo, recorte y 416).
+- **E2E `14-mapa` (proyecto `mapa`, 6 pruebas)** con el extracto de Pucallpa:
+  - el mapa carga por rangos y la página **solo pide al host de la empresa** (se registran todas las peticiones);
+  - Ubicaciones: el mapa sigue a los campos y un clic cambia la latitud y la longitud cerca de la anterior;
+  - Rutas: dibujar con clics, quitar el último punto, terminar **con el teclado**, guardar y ver la traza en la base (extremos en las paradas y los puntos dibujados), y al recargar «Corregir en el mapa»;
+  - sin el archivo del mapa, las dos pantallas lo dicen y siguen funcionando;
+  - modo oscuro y 390 px: axe y nada se desplaza en horizontal.
+- **Prueba de mutación:** con las fuentes pedidas a `protomaps.github.io`, el E2E falla («Received: protomaps.github.io»); revertida, pasa.
+- **Revisión visual:** capturas del E2E en claro, oscuro y 390 px: las teselas, las trazas, los puntos de dibujo y el marcador se ven como en la maqueta.
+- **Regresión:** suite E2E completa, 73 pruebas en verde (3 saltos esperados), con el mapa también en las pantallas de Flota, Rutas y Ubicaciones de las suites anteriores.
+- **Resultado (2026-11-25):** lint y tipos sin errores (13 tareas), formato sin cambios pendientes y unitarias del web, 34. Sin cambios en la API ni en la base.
