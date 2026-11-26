@@ -33,6 +33,20 @@ export const TENANT_SCOPED_MODELS: ReadonlySet<string> = new Set<string>([
   'SupportAccessLog',
   'SiteVersion',
   'FileAsset',
+  'Location',
+  'Branch',
+  'SalesChannel',
+  'Agency',
+  'MembershipBranchScope',
+  'VehicleType',
+  'Vehicle',
+  'VehicleDocument',
+  'VehicleLayout',
+  'LayoutVersion',
+  'LayoutZone',
+  'LayoutElement',
+  'CapacityRule',
+  'VehicleLayoutAssignment',
 ]);
 
 /**
@@ -70,6 +84,20 @@ export const TENANT_SCOPED_TABLES: readonly string[] = [
   'support_access_logs',
   'site_versions',
   'file_assets',
+  'locations',
+  'branches',
+  'sales_channels',
+  'agencies',
+  'membership_branch_scopes',
+  'vehicle_types',
+  'vehicles',
+  'vehicle_documents',
+  'vehicle_layouts',
+  'layout_versions',
+  'layout_zones',
+  'layout_elements',
+  'capacity_rules',
+  'vehicle_layout_assignments',
 ];
 
 /**

@@ -46,6 +46,30 @@ export const PERMISSION_CATALOG = {
     sensitive: true,
     description: 'Editar y publicar el sitio público de la empresa',
   },
+  // Fase 6.1: ubicaciones, sucursales y canales de venta. El ámbito de sucursal de cada persona va con roles.assign.
+  'locations.manage': {
+    module: 'LOCATIONS',
+    sensitive: false,
+    description: 'Gestionar ubicaciones, sucursales y canales de venta',
+  },
+  // Fase 6.2: vehículos, sus tipos y sus documentos (con archivos privados).
+  'fleet.manage': {
+    module: 'FLEET',
+    sensitive: false,
+    description: 'Gestionar los vehículos y sus documentos',
+  },
+  // Fase 6.3: layouts de los vehículos (diseñar, publicar y asignar).
+  'layouts.manage': {
+    module: 'LAYOUTS',
+    sensitive: false,
+    description: 'Diseñar, publicar y asignar los layouts de los vehículos',
+  },
+  // Fase 6.5: agencias externas (F6-Q2). Sus rutas exigen además el módulo AGENCIES, apagado por defecto.
+  'agencies.manage': {
+    module: 'AGENCIES',
+    sensitive: false,
+    description: 'Gestionar las agencias externas y sus canales de venta',
+  },
 } as const satisfies Record<string, { module: string; sensitive: boolean; description: string }>;
 
 export type PermissionCode = keyof typeof PERMISSION_CATALOG;

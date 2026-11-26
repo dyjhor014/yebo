@@ -160,7 +160,9 @@ export function ScrollRegion({ label, children }: { label: string; children: Rea
       role="region"
       aria-label={label}
       tabIndex={0}
-      className="overflow-x-auto focus-visible:outline-offset-[-2px]"
+      // relative: lo posicionado dentro (como el texto sr-only de una cabecera) queda en la región y no ensancha la
+      // página en móvil.
+      className="relative overflow-x-auto focus-visible:outline-offset-[-2px]"
     >
       {children}
     </div>

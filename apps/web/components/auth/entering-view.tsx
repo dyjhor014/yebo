@@ -22,7 +22,7 @@ export function EnteringView({ company, state }: { company: string | null; state
               El enlace caducó o ya se usó. Vuelve a intentarlo para entrar{company ? ` a ${company}` : ''}.
             </AccessHeading>
             <div className="mt-8">
-              <ButtonLink href="/api/v1/auth/start">Volver a intentar</ButtonLink>
+              <ButtonLink href="/api/v1/auth/start?return=/panel">Volver a intentar</ButtonLink>
             </div>
           </>
         )}

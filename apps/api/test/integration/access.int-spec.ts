@@ -38,9 +38,17 @@ const LATER_SEEDS = [
   resolve(__dirname, '../../prisma/migrations/20261111020000_fase4_5_billing/migration.sql'),
   resolve(__dirname, '../../prisma/migrations/20261111040000_fase4_6_support_access/migration.sql'),
   resolve(__dirname, '../../prisma/migrations/20261112010000_fase5_1_site_versions/migration.sql'),
+  resolve(__dirname, '../../prisma/migrations/20261113010000_fase6_1_locations_branches/migration.sql'),
+  resolve(__dirname, '../../prisma/migrations/20261113020000_fase6_2_fleet/migration.sql'),
+  resolve(__dirname, '../../prisma/migrations/20261113030000_fase6_3_layouts/migration.sql'),
+  resolve(__dirname, '../../prisma/migrations/20261117010000_fase6_5_agencies/migration.sql'),
 ].map((file) => {
   const sql = readFileSync(file, 'utf8');
-  return sql.slice(sql.indexOf('INSERT INTO "permissions"'), sql.indexOf('-- Roles ya creados'));
+  // El bloque de siembra termina donde empieza el recorrido tenant a tenant (cada migración lo anuncia a su manera).
+  const end = ['-- Roles ya creados', '-- Tenant a tenant']
+    .map((marker) => sql.indexOf(marker))
+    .filter((i) => i > 0);
+  return sql.slice(sql.indexOf('INSERT INTO "permissions"'), Math.min(...end));
 });
 
 interface Route {

@@ -16,3 +16,6 @@ tests/e2e/.auth/
 tests/e2e/capturas/
 tests/e2e/results/
 tests/e2e/report/
+
+# Catálogo de ubigeo del INEI, minificado a propósito (6.4b)
+apps/web/public/datos/ubigeo-inei.json

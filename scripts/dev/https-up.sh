@@ -66,7 +66,7 @@ wait_for() { # nombre, url
 }
 wait_for api http://127.0.0.1:4100/api/v1/health/live
 wait_for worker http://127.0.0.1:4101/api/v1/health/live
-wait_for web http://127.0.0.1:3100/
+wait_for web http://127.0.0.1:3100/login # «/» depende de la empresa del host (Fase 5)
 wait_for platform http://127.0.0.1:3101/login
 
 export YEBO_BASE_DOMAIN_RE="${YEBO_BASE_DOMAIN//./\\.}"

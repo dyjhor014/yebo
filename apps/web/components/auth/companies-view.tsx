@@ -91,7 +91,7 @@ export function CompaniesView({
             {state.companies.map((company) => (
               <li key={company.tenantId}>
                 <a
-                  href={`https://${company.host}/api/v1/auth/start`}
+                  href={`https://${company.host}/api/v1/auth/start?return=/panel`}
                   className="group flex min-h-14 items-center justify-between gap-4 px-1 py-3 text-ink hover:bg-ink/[0.03]"
                 >
                   <span className="flex min-w-0 flex-col">

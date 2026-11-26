@@ -14,6 +14,8 @@ export const MemberSchema = z.object({
   displayName: z.string().nullable(),
   status: MembershipStatusSchema,
   roleIds: z.array(z.string()),
+  /** Sucursales a las que accede (Fase 6.1, F6-Q4); vacío = todas. */
+  branchIds: z.array(z.string()),
 });
 export type Member = z.infer<typeof MemberSchema>;
 

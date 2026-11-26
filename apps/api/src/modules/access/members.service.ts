@@ -39,6 +39,7 @@ export class MembersService {
         displayName: true,
         status: true,
         roles: { select: { roleId: true } },
+        branchScopes: { select: { branchId: true } },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -50,6 +51,7 @@ export class MembersService {
       displayName: r.displayName,
       status: r.status,
       roleIds: r.roles.map((x) => x.roleId).sort(),
+      branchIds: r.branchScopes.map((x) => x.branchId).sort(),
     }));
   }
 
